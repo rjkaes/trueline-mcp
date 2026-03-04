@@ -12,8 +12,9 @@ import { createReadStream } from "node:fs";
 import {
   EMPTY_FILE_CHECKSUM,
   FNV_OFFSET_BASIS,
-  FNV_PRIME,
   fnv1aHash,
+  foldHash,
+  formatChecksum,
 } from "../trueline.ts";
 import { validatePath } from "./shared.ts";
 import { type ToolResult } from "./types.ts";
@@ -114,7 +115,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   const outputParts: string[] = [];
   let checksumHash = FNV_OFFSET_BASIS;
   let lineNo = 0;
-  let clampedEnd = 0;
+  let lastLine = 0;
 
   for await (const line of streamLines(resolvedPath)) {
     lineNo++;
@@ -130,16 +131,11 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     if (lineNo < start) continue;
     if (lineNo > end) break;
 
-    clampedEnd = lineNo;
+    lastLine = lineNo;
     const h = fnv1aHash(line);
+    checksumHash = foldHash(checksumHash, h);
 
-    // Update running checksum (same algorithm as rangeChecksum)
-    checksumHash = Math.imul(checksumHash ^ (h & 0xff),          FNV_PRIME) >>> 0;
-    checksumHash = Math.imul(checksumHash ^ ((h >>> 8) & 0xff),  FNV_PRIME) >>> 0;
-    checksumHash = Math.imul(checksumHash ^ ((h >>> 16) & 0xff), FNV_PRIME) >>> 0;
-    checksumHash = Math.imul(checksumHash ^ ((h >>> 24) & 0xff), FNV_PRIME) >>> 0;
-
-    // Format trueline
+    // Format trueline: "lineNo:ab|content"
     const c1 = String.fromCharCode(97 + (h % 26));
     const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
     outputParts.push(`${lineNo}:${c1}${c2}|${line}`);
@@ -158,6 +154,6 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     };
   }
 
-  const checksum = `${start}-${clampedEnd}:${checksumHash.toString(16).padStart(8, "0")}`;
+  const checksum = formatChecksum(start, lastLine, checksumHash);
   return { content: [{ type: "text", text: `${outputParts.join("\n")}\n\nchecksum: ${checksum}` }] };
 }

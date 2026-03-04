@@ -64,6 +64,26 @@ export function fnv1aHash(line: string): number {
 }
 
 /**
+ * Fold a 32-bit line hash into a running checksum accumulator.
+ *
+ * Feeds all 4 bytes of `h` (little-endian) into the FNV-1a accumulator.
+ * This is the core building block for `rangeChecksum` and streaming
+ * checksum computation in `handleRead`.
+ */
+export function foldHash(accumulator: number, h: number): number {
+  accumulator = Math.imul(accumulator ^ (h & 0xff),          FNV_PRIME) >>> 0;
+  accumulator = Math.imul(accumulator ^ ((h >>> 8) & 0xff),  FNV_PRIME) >>> 0;
+  accumulator = Math.imul(accumulator ^ ((h >>> 16) & 0xff), FNV_PRIME) >>> 0;
+  accumulator = Math.imul(accumulator ^ ((h >>> 24) & 0xff), FNV_PRIME) >>> 0;
+  return accumulator;
+}
+
+/** Format a checksum as `"<start>-<end>:<8hex>"`. */
+export function formatChecksum(startLine: number, endLine: number, hash: number): string {
+  return `${startLine}-${endLine}:${hash.toString(16).padStart(8, "0")}`;
+}
+
+/**
  * Compute 2-letter content hash for a line.
  *
  * Maps FNV-1a output to two lowercase ASCII letters (676 possible values).
@@ -104,13 +124,9 @@ export function rangeChecksum(
   let hash = FNV_OFFSET_BASIS;
   const effectiveEnd = Math.min(endLine, lines.length);
   for (let i = startLine - 1; i < effectiveEnd; i++) {
-    const h = fnv1aHash(lines[i]);
-    hash = Math.imul(hash ^ (h & 0xff),          FNV_PRIME) >>> 0;
-    hash = Math.imul(hash ^ ((h >>> 8) & 0xff),  FNV_PRIME) >>> 0;
-    hash = Math.imul(hash ^ ((h >>> 16) & 0xff), FNV_PRIME) >>> 0;
-    hash = Math.imul(hash ^ ((h >>> 24) & 0xff), FNV_PRIME) >>> 0;
+    hash = foldHash(hash, fnv1aHash(lines[i]));
   }
-  return `${startLine}-${effectiveEnd}:${hash.toString(16).padStart(8, "0")}`;
+  return formatChecksum(startLine, effectiveEnd, hash);
 }
 
 /**
@@ -130,12 +146,9 @@ export function rangeChecksumFromHashes(
 ): string {
   let hash = FNV_OFFSET_BASIS;
   for (const h of hashes) {
-    hash = Math.imul(hash ^ (h & 0xff),          FNV_PRIME) >>> 0;
-    hash = Math.imul(hash ^ ((h >>> 8) & 0xff),  FNV_PRIME) >>> 0;
-    hash = Math.imul(hash ^ ((h >>> 16) & 0xff), FNV_PRIME) >>> 0;
-    hash = Math.imul(hash ^ ((h >>> 24) & 0xff), FNV_PRIME) >>> 0;
+    hash = foldHash(hash, h);
   }
-  return `${startLine}-${endLine}:${hash.toString(16).padStart(8, "0")}`;
+  return formatChecksum(startLine, endLine, hash);
 }
 
 // ==============================================================================
