@@ -36,46 +36,53 @@ interface ReadParams {
 async function* streamLines(filePath: string): AsyncGenerator<string> {
   const stream = createReadStream(filePath, { encoding: "utf-8" });
   let partial = "";
-  let skipNextLF = false;
+  let prevChunkEndedWithCR = false;
 
   for await (const chunk of stream) {
     let lineStart = 0;
 
-    // Handle \r\n split across chunks: previous chunk ended with \r,
-    // skip the \n that opens this chunk.
-    if (skipNextLF && chunk.length > 0 && chunk.charCodeAt(0) === 0x0a) {
+    // If the previous chunk ended with \r and this chunk starts with \n,
+    // they form a single \r\n pair — skip the \n.
+    if (prevChunkEndedWithCR && chunk.length > 0 && chunk.charCodeAt(0) === 0x0a) {
       lineStart = 1;
     }
-    skipNextLF = false;
+    prevChunkEndedWithCR = false;
 
     for (let i = lineStart; i < chunk.length; i++) {
       const ch = chunk.charCodeAt(i);
-      if (ch === 0x0d) { // \r
-        if (i + 1 < chunk.length) {
-          yield partial + chunk.slice(lineStart, i);
-          partial = "";
-          if (chunk.charCodeAt(i + 1) === 0x0a) i++; // skip \n of \r\n
-          lineStart = i + 1;
+      const isCR = ch === 0x0d;
+      const isLF = ch === 0x0a;
+
+      if (!isCR && !isLF) continue;
+
+      // ============================================================
+      // Found a line terminator (\r, \n, or \r\n) — emit the line.
+      // ============================================================
+      yield partial + chunk.slice(lineStart, i);
+      partial = "";
+
+      // Consume the \n half of a \r\n pair, if present.
+      if (isCR) {
+        const nextIndex = i + 1;
+        if (nextIndex < chunk.length) {
+          // \r\n within the same chunk — skip the \n.
+          if (chunk.charCodeAt(nextIndex) === 0x0a) i++;
         } else {
-          // \r at end of chunk — might be first half of \r\n
-          yield partial + chunk.slice(lineStart, i);
-          partial = "";
-          lineStart = i + 1;
-          skipNextLF = true;
+          // \r at chunk boundary — the \n may open the next chunk.
+          prevChunkEndedWithCR = true;
         }
-      } else if (ch === 0x0a) { // \n
-        yield partial + chunk.slice(lineStart, i);
-        partial = "";
-        lineStart = i + 1;
       }
+
+      lineStart = i + 1;
     }
 
+    // Accumulate any remaining text after the last terminator.
     if (lineStart < chunk.length) {
       partial += chunk.slice(lineStart);
     }
   }
 
-  // Content after the last line ending (file without trailing newline)
+  // File without a trailing newline — emit the final partial line.
   if (partial.length > 0) {
     yield partial;
   }
