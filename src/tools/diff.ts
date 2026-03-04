@@ -8,6 +8,7 @@ interface DiffParams {
   file_path: string;
   edits: EditInput[];
   projectDir?: string;
+  allowedDirs?: string[];
 }
 
 /**
@@ -35,12 +36,12 @@ function unifiedDiff(
 }
 
 export async function handleDiff(params: DiffParams): Promise<ToolResult> {
-  const { file_path, edits, projectDir } = params;
+  const { file_path, edits, projectDir, allowedDirs } = params;
 
   // Diff intentionally uses Read deny patterns (not a separate "Diff" tool
   // name) since diff is a read-only preview operation and should share the
   // same access restrictions as trueline_read.
-  const prepared = await prepareFile(file_path, "Read", projectDir);
+  const prepared = await prepareFile(file_path, "Read", projectDir, allowedDirs);
   if (!prepared.ok) return prepared.error;
 
   const { fileLines, resolvedPath, hasTrailingNewline } = prepared;

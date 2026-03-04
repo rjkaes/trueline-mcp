@@ -42,6 +42,7 @@ export async function validatePath(
   file_path: string,
   toolName: string,
   projectDir: string | undefined,
+  allowedDirs: string[] = [],
 ): Promise<ValidatePathResult> {
   const resolvedPath = file_path.startsWith("/")
     ? file_path
@@ -90,8 +91,9 @@ export async function validatePath(
     };
   }
 
-  // projectDir is already resolved at server startup. Fall back to
-  // resolving cwd only when projectDir is not provided (e.g., tests).
+  // Build the list of allowed base directories. projectDir (or cwd) is
+  // always included; additional dirs come from the caller (e.g. ~/.claude/,
+  // TRUELINE_ALLOWED_DIRS).
   let realBase: string;
   try {
     realBase = projectDir ? projectDir : await realpath(process.cwd());
@@ -104,7 +106,12 @@ export async function validatePath(
       },
     };
   }
-  if (realPath !== realBase && !realPath.startsWith(realBase + sep)) {
+
+  const allBases = [realBase, ...allowedDirs];
+  const isContained = allBases.some(
+    base => realPath === base || realPath.startsWith(base + sep),
+  );
+  if (!isContained) {
     return {
       ok: false,
       error: {
@@ -152,8 +159,9 @@ export async function prepareFile(
   file_path: string,
   toolName: string,
   projectDir: string | undefined,
+  allowedDirs: string[] = [],
 ): Promise<PrepareFileResult> {
-  const validated = await validatePath(file_path, toolName, projectDir);
+  const validated = await validatePath(file_path, toolName, projectDir, allowedDirs);
   if (!validated.ok) return validated;
 
   const { resolvedPath, mtimeMs } = validated;

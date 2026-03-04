@@ -50,6 +50,14 @@ agent to use the trueline tools instead of the built-in `Read`/`Edit` tools.
 A `PreToolUse` hook blocks the built-in `Edit` tool outright and redirects
 to the trueline workflow.
 
+### Path access
+
+By default, trueline tools can access files inside the project directory
+(`CLAUDE_PROJECT_DIR`) and `~/.claude/` (where Claude Code stores plans,
+memory, and settings). To allow additional directories, set the
+`TRUELINE_ALLOWED_DIRS` environment variable to a colon-separated list of
+paths.
+
 ## Tools
 
 ### `trueline_read`

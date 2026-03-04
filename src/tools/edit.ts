@@ -18,12 +18,13 @@ interface EditParams {
   file_path: string;
   edits: EditInput[];
   projectDir?: string;
+  allowedDirs?: string[];
 }
 
 export async function handleEdit(params: EditParams): Promise<ToolResult> {
-  const { file_path, edits, projectDir } = params;
+  const { file_path, edits, projectDir, allowedDirs } = params;
 
-  const validated = await validatePath(file_path, "Edit", projectDir);
+  const validated = await validatePath(file_path, "Edit", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
   const { resolvedPath, mtimeMs } = validated;

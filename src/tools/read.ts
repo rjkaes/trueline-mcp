@@ -23,6 +23,7 @@ interface ReadParams {
   start_line?: number;
   end_line?: number;
   projectDir?: string;
+  allowedDirs?: string[];
 }
 
 /**
@@ -81,9 +82,9 @@ async function* streamLines(filePath: string): AsyncGenerator<string> {
 }
 
 export async function handleRead(params: ReadParams): Promise<ToolResult> {
-  const { file_path, start_line, end_line, projectDir } = params;
+  const { file_path, start_line, end_line, projectDir, allowedDirs } = params;
 
-  const validated = await validatePath(file_path, "Read", projectDir);
+  const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
   const { resolvedPath } = validated;

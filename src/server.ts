@@ -1,4 +1,6 @@
-import { realpath } from "node:fs/promises";
+import { realpath, mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -17,6 +19,32 @@ const server = new McpServer({
 const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
 const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
 
+// Build the list of additional allowed directories beyond projectDir.
+// ~/.claude/ is always allowed — Claude Code stores plans, memory, and
+// settings there.  TRUELINE_ALLOWED_DIRS adds arbitrary extras.
+async function resolveAllowedDirs(): Promise<string[]> {
+  const dirs: string[] = [];
+
+  // ~/.claude/ — ensure it exists so realpath doesn't fail
+  const claudeDir = join(homedir(), ".claude");
+  await mkdir(claudeDir, { recursive: true }).catch(() => {});
+  const realClaudeDir = await realpath(claudeDir).catch(() => null);
+  if (realClaudeDir) dirs.push(realClaudeDir);
+
+  // TRUELINE_ALLOWED_DIRS — colon-separated additional paths
+  const extra = process.env.TRUELINE_ALLOWED_DIRS;
+  if (extra) {
+    for (const raw of extra.split(":").filter(Boolean)) {
+      const resolved = await realpath(raw).catch(() => null);
+      if (resolved) dirs.push(resolved);
+    }
+  }
+
+  return dirs;
+}
+
+const allowedDirs = await resolveAllowedDirs();
+
 server.registerTool(
   "trueline_read",
   {
@@ -28,7 +56,7 @@ server.registerTool(
     }),
   },
   async (params) => {
-    return handleRead({ ...params, projectDir });
+    return handleRead({ ...params, projectDir, allowedDirs });
   },
 );
 
@@ -49,7 +77,7 @@ server.registerTool(
     }),
   },
   async (params) => {
-    return handleEdit({ ...params, projectDir });
+    return handleEdit({ ...params, projectDir, allowedDirs });
   },
 );
 
@@ -70,7 +98,7 @@ server.registerTool(
     }),
   },
   async (params) => {
-    return handleDiff({ ...params, projectDir });
+    return handleDiff({ ...params, projectDir, allowedDirs });
   },
 );
 

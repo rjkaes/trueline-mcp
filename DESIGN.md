@@ -241,8 +241,13 @@ followed by a gitignore-style glob. Files matching any deny pattern are
 blocked before content is read.
 
 Additional protections:
-- **Path traversal:** files must resolve (after symlink resolution)
-  to within the project directory.
+- **Path containment:** files must resolve (after symlink resolution)
+  to within one of the allowed base directories. By default the
+  allowed bases are the project directory (`CLAUDE_PROJECT_DIR` or
+  cwd) and `~/.claude/` (where Claude Code stores plans, memory,
+  and settings). Additional directories can be added via the
+  `TRUELINE_ALLOWED_DIRS` environment variable (colon-separated
+  paths).
 - **Binary files:** null bytes in content trigger rejection.
 - **Size limit:** files over 10 MB are rejected.
 - **Regular files only:** directories, devices, FIFOs, and sockets
