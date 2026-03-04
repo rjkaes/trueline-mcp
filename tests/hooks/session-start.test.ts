@@ -1,0 +1,41 @@
+import { describe, expect, test } from "bun:test";
+import { getInstructions, getSessionStartInstructions } from "../../hooks/session-start.js";
+
+describe("getInstructions", () => {
+  test("wraps output in trueline_mcp_instructions tag", () => {
+    const out = getInstructions();
+    expect(out).toContain("<trueline_mcp_instructions>");
+    expect(out).toContain("</trueline_mcp_instructions>");
+  });
+
+  test("documents all three trueline tools", () => {
+    const out = getInstructions();
+    expect(out).toContain("trueline_read");
+    expect(out).toContain("trueline_edit");
+    expect(out).toContain("trueline_diff");
+  });
+
+  test("includes a workflow element", () => {
+    const out = getInstructions();
+    expect(out).toContain("<workflow>");
+  });
+
+  test("instructs agent that Edit is blocked", () => {
+    const out = getInstructions();
+    expect(out).toContain("blocked");
+  });
+
+  test("instructs agent to relay instructions to subagents", () => {
+    const out = getInstructions();
+    expect(out).toContain("subagents");
+  });
+
+  test("mentions multi-edit support", () => {
+    const out = getInstructions();
+    expect(out).toContain("multiple edits in one call");
+  });
+
+  test("getSessionStartInstructions is a backwards-compatible alias", () => {
+    expect(getSessionStartInstructions).toBe(getInstructions);
+  });
+});

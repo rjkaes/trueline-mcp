@@ -1,0 +1,16 @@
+{
+  "name": "trueline",
+  "version": "0.1.0",
+  "description": "Truth-verified file editing for Claude Code agents",
+  "author": {
+    "name": "rjk"
+  },
+  "license": "Apache-2.0",
+  "keywords": ["mcp", "trueline", "editing", "verification"],
+  "mcpServers": {
+    "mcp": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/resolve-binary.cjs"]
+    }
+  }
+}

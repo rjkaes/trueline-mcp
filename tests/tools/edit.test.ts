@@ -1,0 +1,393 @@
+import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { mkdtempSync, realpathSync, writeFileSync, readFileSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { handleEdit } from "../../src/tools/edit.ts";
+import { lineHash, rangeChecksum } from "../../src/trueline.ts";
+
+let testDir: string;
+let testFile: string;
+
+// Fresh file before each test
+beforeEach(() => {
+  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-edit-test-")));
+  testFile = join(testDir, "target.ts");
+  writeFileSync(testFile, "line 1\nline 2\nline 3\nline 4\n");
+});
+
+afterEach(() => {
+  rmSync(testDir, { recursive: true, force: true });
+});
+
+describe("handleEdit", () => {
+  test("replaces a range of lines", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const cs = rangeChecksum(lines, 1, 4);
+    const h2 = lineHash("line 2");
+    const h3 = lineHash("line 3");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        {
+          range: `2:${h2}..3:${h3}`,
+          content: ["replaced 2", "replaced 3"],
+          checksum: cs,
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(testFile, "utf-8");
+    expect(written).toBe("line 1\nreplaced 2\nreplaced 3\nline 4\n");
+  });
+
+  test("inserts after a line", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const cs = rangeChecksum(lines, 1, 4);
+    const h1 = lineHash("line 1");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        {
+          range: `1:${h1}..1:${h1}`,
+          content: ["inserted"],
+          checksum: cs,
+          insert_after: true,
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(testFile, "utf-8");
+    expect(written).toBe("line 1\ninserted\nline 2\nline 3\nline 4\n");
+  });
+
+  test("rejects stale checksum", async () => {
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        {
+          range: "1:aa..1:aa",
+          content: ["nope"],
+          checksum: "1-4:00000000", // wrong checksum
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("mismatch");
+  });
+
+  test("rejects wrong line hash", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const cs = rangeChecksum(lines, 1, 4);
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        {
+          range: "1:zz..1:zz", // wrong hash
+          content: ["nope"],
+          checksum: cs,
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("mismatch");
+  });
+
+  test("preserves CRLF line endings after edit", async () => {
+    const crlfFile = join(testDir, "crlf.ts");
+    writeFileSync(crlfFile, "line 1\r\nline 2\r\nline 3\r\n");
+
+    const lines = ["line 1", "line 2", "line 3"];
+    const cs = rangeChecksum(lines, 1, 3);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: crlfFile,
+      edits: [{ range: `2:${h2}..2:${h2}`, content: ["replaced"], checksum: cs }],
+      projectDir: testDir,
+    });
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(crlfFile, "utf-8");
+    // All line endings must be \r\n
+    expect(written).toBe("line 1\r\nreplaced\r\nline 3\r\n");
+    expect(written).not.toMatch(/(?<!\r)\n/);
+  });
+
+  test("mixed endings: majority LF preserves LF", async () => {
+    const mixedFile = join(testDir, "mixed-lf.ts");
+    // 2 LF, 1 CRLF → LF wins
+    writeFileSync(mixedFile, "line 1\nline 2\r\nline 3\n");
+
+    const lines = ["line 1", "line 2", "line 3"];
+    const cs = rangeChecksum(lines, 1, 3);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: mixedFile,
+      edits: [{ range: `2:${h2}..2:${h2}`, content: ["replaced"], checksum: cs }],
+      projectDir: testDir,
+    });
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(mixedFile, "utf-8");
+    expect(written).toBe("line 1\nreplaced\nline 3\n");
+    expect(written).not.toContain("\r\n");
+  });
+
+  test("mixed endings: majority CRLF preserves CRLF", async () => {
+    const mixedFile = join(testDir, "mixed-crlf.ts");
+    // 2 CRLF, 1 LF → CRLF wins
+    writeFileSync(mixedFile, "line 1\r\nline 2\nline 3\r\n");
+
+    const lines = ["line 1", "line 2", "line 3"];
+    const cs = rangeChecksum(lines, 1, 3);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: mixedFile,
+      edits: [{ range: `2:${h2}..2:${h2}`, content: ["replaced"], checksum: cs }],
+      projectDir: testDir,
+    });
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(mixedFile, "utf-8");
+    expect(written).toBe("line 1\r\nreplaced\r\nline 3\r\n");
+    expect(written).not.toMatch(/(?<!\r)\n/);
+  });
+
+  test("preserves LF line endings after edit (no CRLF introduced)", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const cs = rangeChecksum(lines, 1, 4);
+    const h2 = lineHash("line 2");
+
+    await handleEdit({
+      file_path: testFile,
+      edits: [{ range: `2:${h2}..2:${h2}`, content: ["replaced"], checksum: cs }],
+      projectDir: testDir,
+    });
+    const written = readFileSync(testFile, "utf-8");
+    expect(written).not.toContain("\r\n");
+  });
+
+  test("rejects directory path", async () => {
+    const result = await handleEdit({
+      file_path: testDir,
+      edits: [{ range: "1:aa..1:aa", content: ["x"], checksum: "1-1:00000000" }],
+      projectDir: testDir,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("not a regular file");
+  });
+
+  test("rejects binary files", async () => {
+    const binFile = join(testDir, "binary.bin");
+    writeFileSync(binFile, Buffer.from([0x00, 0x01, 0x02, 0x03]));
+    const result = await handleEdit({
+      file_path: binFile,
+      edits: [{ range: "1:aa..1:aa", content: ["x"], checksum: "1-1:00000000" }],
+      projectDir: testDir,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("binary");
+  });
+
+  test("rejects nonexistent projectDir", async () => {
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ range: "1:aa..1:aa", content: ["x"], checksum: "1-1:0000" }],
+      projectDir: "/nonexistent/does/not/exist",
+    });
+    expect(result.isError).toBe(true);
+    // With projectDir already resolved at startup, a nonexistent dir is
+    // used as-is and the file falls outside it.
+    expect(result.content[0].text).toContain("outside the project directory");
+  });
+
+  test("rejects overlapping ranges", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const cs = rangeChecksum(lines, 1, 4);
+    const h1 = lineHash("line 1");
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        { range: `1:${h1}..2:${h2}`, content: ["A"], checksum: cs },
+        { range: `2:${h2}..2:${h2}`, content: ["B"], checksum: cs },
+      ],
+      projectDir: testDir,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Overlapping");
+  });
+
+  test("rejects checksum that does not cover edit range", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const partialCs = rangeChecksum(lines, 1, 2);
+    const h4 = lineHash("line 4");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        {
+          range: `4:${h4}..4:${h4}`,
+          content: ["replaced"],
+          checksum: partialCs,
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("does not cover");
+  });
+
+  test("preserves absence of trailing newline", async () => {
+    const noTrailingFile = join(testDir, "no-trailing.ts");
+    writeFileSync(noTrailingFile, "line 1\nline 2");
+
+    const lines = ["line 1", "line 2"];
+    const cs = rangeChecksum(lines, 1, 2);
+    const h1 = lineHash("line 1");
+
+    const result = await handleEdit({
+      file_path: noTrailingFile,
+      edits: [{ range: `1:${h1}..1:${h1}`, content: ["replaced"], checksum: cs }],
+      projectDir: testDir,
+    });
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(noTrailingFile, "utf-8");
+    expect(written).toBe("replaced\nline 2");
+  });
+
+  test("edits an empty file via insert_after with empty-file sentinel", async () => {
+    const emptyFile = join(testDir, "empty.ts");
+    writeFileSync(emptyFile, "");
+
+    const result = await handleEdit({
+      file_path: emptyFile,
+      edits: [{
+        range: "0:",
+        content: ["new content"],
+        checksum: "0-0:00000000",
+        insert_after: true,
+      }],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(emptyFile, "utf-8");
+    expect(written).toContain("new content");
+  });
+
+  test("skips write and reports no changes for no-op edit", async () => {
+    const filePath = join(testDir, "noop.txt");
+    writeFileSync(filePath, "aaa\nbbb\nccc\n");
+    const { mtimeMs: before } = statSync(filePath);
+
+    const lines = ["aaa", "bbb", "ccc"];
+    const cs = rangeChecksum(lines, 1, 3);
+
+    const result = await handleEdit({
+      file_path: filePath,
+      edits: [{
+        range: `2:${lineHash("bbb")}`,
+        content: ["bbb"],  // same content
+        checksum: cs,
+      }],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain("no changes");
+    const { mtimeMs: after } = statSync(filePath);
+    expect(after).toBe(before);
+  });
+
+  test("checksum failure suggests narrow re-read when edit-target lines are unchanged", async () => {
+    const filePath = join(testDir, "stale-broad.txt");
+    writeFileSync(filePath, "aaa\nbbb\nccc\nddd\neee\n");
+
+    const original = ["aaa", "bbb", "ccc", "ddd", "eee"];
+    const cs = rangeChecksum(original, 1, 5);
+
+    // Externally modify line 4, outside our edit target
+    writeFileSync(filePath, "aaa\nbbb\nccc\nDDD\neee\n");
+
+    // Attempt to edit line 2, which hasn't changed
+    const result = await handleEdit({
+      file_path: filePath,
+      edits: [{
+        range: `2:${lineHash("bbb")}`,
+        content: ["BBB"],
+        checksum: cs,
+      }],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0].text;
+    expect(text).toContain("start_line");  // suggests narrow re-read
+    expect(text).toContain("end_line");
+  });
+
+  test("checksum failure with changed edit-target lines gives standard error", async () => {
+    const filePath = join(testDir, "stale-target.txt");
+    writeFileSync(filePath, "aaa\nbbb\nccc\n");
+
+    const original = ["aaa", "bbb", "ccc"];
+    const cs = rangeChecksum(original, 1, 3);
+
+    // Externally modify line 2, which IS our edit target
+    writeFileSync(filePath, "aaa\nBBB\nccc\n");
+
+    const result = await handleEdit({
+      file_path: filePath,
+      edits: [{
+        range: `2:${lineHash("bbb")}`,
+        content: ["xxx"],
+        checksum: cs,
+      }],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0].text;
+    // Should NOT suggest narrow re-read since target lines changed too
+    expect(text).not.toContain("start_line");
+  });
+
+  test("denies editing .env file", async () => {
+    const claudeDir = join(testDir, ".claude");
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(
+      join(claudeDir, "settings.json"),
+      JSON.stringify({
+        permissions: { deny: ["Edit(.env)", "Edit(**/.env)"] },
+      }),
+    );
+    const envFile = join(testDir, ".env");
+    writeFileSync(envFile, "SECRET=x\n");
+
+    const lines = ["SECRET=x"];
+    const cs = rangeChecksum(lines, 1, 1);
+    const h = lineHash("SECRET=x");
+
+    const result = await handleEdit({
+      file_path: envFile,
+      edits: [{ range: `1:${h}..1:${h}`, content: ["hacked"], checksum: cs }],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("denied");
+  });
+});

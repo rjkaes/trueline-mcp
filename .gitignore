@@ -1,0 +1,8 @@
+node_modules/
+build/
+bin/
+dist/
+*.tgz
+.DS_Store
+.worktrees/
+.claude/settings.local.json

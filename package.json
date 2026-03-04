@@ -1,0 +1,24 @@
+{
+  "name": "trueline",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Truth-verified file editing for Claude Code agents",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "build": "bun build src/server.ts --target=node --outfile dist/server.js",
+    "typecheck": "bun x tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "diff": "^8.0.3",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^8.0.0",
+    "@types/node": "^22.19.0",
+    "bun-types": "^1.3.10",
+    "typescript": "^5.7.0"
+  }
+}
