@@ -11,7 +11,7 @@
 // ==============================================================================
 
 import { type ToolResult, errorResult, textResult } from "./types.ts";
-import { validatePath, validateEdits, type EditInput } from "./shared.ts";
+import { validatePath, validateEdits, type EditInput, type StreamEditOp } from "./shared.ts";
 import { streamingEdit } from "../streaming-edit.ts";
 
 interface EditParams {
@@ -40,9 +40,41 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     return errorResult(result.error);
   }
 
+  const summary = editSummary(built.ops);
+
   if (!result.changed) {
-    return textResult(`Edit produced no changes \u2014 file not written.\n\nchecksum: ${result.newChecksum}`);
+    return textResult(`Edit produced no changes \u2014 file not written.\n\n${summary}\nchecksum: ${result.newChecksum}`);
   }
 
-  return textResult(`Edit applied successfully. (${(performance.now() - t0).toFixed(0)}ms)\n\nchecksum: ${result.newChecksum}`);
+  return textResult(`Edit applied successfully. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nchecksum: ${result.newChecksum}`);
+}
+
+// ==============================================================================
+// Per-edit summary for operator visibility
+// ==============================================================================
+
+function editSummary(ops: StreamEditOp[]): string {
+  return ops.map(op => {
+    const lines = op.content.length;
+
+    if (op.insertAfter) {
+      const location = op.startLine === 0
+        ? "at start of file"
+        : `after line ${op.startLine}`;
+      return `inserted ${lines} line${lines !== 1 ? "s" : ""} ${location}`;
+    }
+
+    const span = op.endLine - op.startLine + 1;
+    const rangeStr = op.startLine === op.endLine
+      ? `line ${op.startLine}`
+      : `lines ${op.startLine}\u2013${op.endLine}`;
+
+    if (lines === 0) {
+      return `deleted ${rangeStr} (${span} line${span !== 1 ? "s" : ""})`;
+    }
+
+    const delta = lines - span;
+    const sign = delta > 0 ? "+" : delta < 0 ? "" : "\u00b1";
+    return `replaced ${rangeStr} (${span} \u2192 ${lines} line${lines !== 1 ? "s" : ""}, ${sign}${delta})`;
+  }).join("\n");
 }
