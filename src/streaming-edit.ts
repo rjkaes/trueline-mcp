@@ -24,7 +24,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { stat, rename, chmod, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import { FNV_OFFSET_BASIS, FNV_PRIME, EMPTY_FILE_CHECKSUM } from "./trueline.ts";
+import { FNV_OFFSET_BASIS, FNV_PRIME, EMPTY_FILE_CHECKSUM, foldHash, formatChecksum } from "./trueline.ts";
 import type { ChecksumRef } from "./trueline.ts";
 import type { StreamEditOp } from "./tools/shared.ts";
 
@@ -76,111 +76,86 @@ export async function* streamByteLines(filePath: string): AsyncGenerator<ByteLin
   let partials: Buffer[] = [];
   let partialsLen = 0;
   let lineNumber = 0;
-  let pendingCR = false;
+  let prevChunkEndedWithCR = false;
 
   for await (const rawChunk of stream) {
     const buf: Buffer = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk);
     let lineStart = 0;
 
-    // Handle \r at end of previous chunk
-    if (pendingCR) {
-      pendingCR = false;
-      if (buf.length > 0 && buf[0] === 0x0a) {
-        // \r\n split across chunks
-        lineNumber++;
-        yield {
-          lineBytes: flushPartials(partials, partialsLen),
-          eolBytes: CRLF_BUF,
-          lineNumber,
-        };
-        partials = [];
-        partialsLen = 0;
-        lineStart = 1;
-      } else {
-        // Bare \r at end of previous chunk
-        lineNumber++;
-        yield {
-          lineBytes: flushPartials(partials, partialsLen),
-          eolBytes: CR_BUF,
-          lineNumber,
-        };
-        partials = [];
-        partialsLen = 0;
-      }
+    // If the previous chunk ended with \r, resolve whether it's \r\n or bare \r.
+    if (prevChunkEndedWithCR) {
+      prevChunkEndedWithCR = false;
+      const eol = (buf.length > 0 && buf[0] === 0x0a) ? CRLF_BUF : CR_BUF;
+      if (eol === CRLF_BUF) lineStart = 1;
+      lineNumber++;
+      yield { lineBytes: flushPartials(partials, partialsLen), eolBytes: eol, lineNumber };
+      partials = [];
+      partialsLen = 0;
     }
 
     for (let i = lineStart; i < buf.length; i++) {
-      if (buf[i] === 0x0d) {
-        // Accumulate bytes before \r
-        const slice = buf.subarray(lineStart, i);
-        partials.push(slice);
-        partialsLen += slice.length;
+      const byte = buf[i];
+      const isCR = byte === 0x0d;
+      const isLF = byte === 0x0a;
 
-        if (i + 1 < buf.length) {
-          lineNumber++;
-          if (buf[i + 1] === 0x0a) {
-            // \r\n within same chunk
-            yield {
-              lineBytes: flushPartials(partials, partialsLen),
-              eolBytes: CRLF_BUF,
-              lineNumber,
-            };
-            i++; // skip \n
+      if (!isCR && !isLF) continue;
+
+      // ============================================================
+      // Found a line terminator — accumulate content and emit.
+      // ============================================================
+      const slice = buf.subarray(lineStart, i);
+
+      // Determine EOL type.
+      let eol: Buffer;
+      if (isCR) {
+        const nextIndex = i + 1;
+        if (nextIndex < buf.length) {
+          // \r\n within the same chunk — skip the \n.
+          if (buf[nextIndex] === 0x0a) {
+            eol = CRLF_BUF;
+            i++;
           } else {
-            // Bare \r
-            yield {
-              lineBytes: flushPartials(partials, partialsLen),
-              eolBytes: CR_BUF,
-              lineNumber,
-            };
+            eol = CR_BUF;
           }
-          partials = [];
-          partialsLen = 0;
         } else {
-          // \r at end of chunk — defer until next chunk
-          pendingCR = true;
-        }
-        lineStart = i + 1;
-      } else if (buf[i] === 0x0a) {
-        lineNumber++;
-        const slice = buf.subarray(lineStart, i);
-        if (partialsLen > 0) {
+          // \r at chunk boundary — defer until next chunk.
           partials.push(slice);
-          yield {
-            lineBytes: flushPartials(partials, partialsLen + slice.length),
-            eolBytes: LF_BUF,
-            lineNumber,
-          };
-          partials = [];
-          partialsLen = 0;
-        } else {
-          yield { lineBytes: slice, eolBytes: LF_BUF, lineNumber };
+          partialsLen += slice.length;
+          prevChunkEndedWithCR = true;
+          lineStart = i + 1;
+          continue;
         }
-        lineStart = i + 1;
+      } else {
+        eol = LF_BUF;
       }
+
+      // Emit the line.
+      lineNumber++;
+      if (partialsLen > 0) {
+        partials.push(slice);
+        yield { lineBytes: flushPartials(partials, partialsLen + slice.length), eolBytes: eol, lineNumber };
+        partials = [];
+        partialsLen = 0;
+      } else {
+        yield { lineBytes: slice, eolBytes: eol, lineNumber };
+      }
+
+      lineStart = i + 1;
     }
 
-    // Remaining bytes from this chunk become partial
+    // Remaining bytes from this chunk become partial.
     if (lineStart < buf.length) {
       partials.push(buf.subarray(lineStart));
       partialsLen += buf.length - lineStart;
     }
   }
 
-  // Handle pending \r at end of file
-  if (pendingCR) {
+  // Final content: pending CR at EOF or leftover partials (no trailing newline).
+  if (prevChunkEndedWithCR || partialsLen > 0) {
     lineNumber++;
     yield {
       lineBytes: flushPartials(partials, partialsLen),
-      eolBytes: CR_BUF,
-      lineNumber,
-    };
-  } else if (partialsLen > 0) {
-    // Content after last line ending (no trailing newline)
-    lineNumber++;
-    yield {
-      lineBytes: flushPartials(partials, partialsLen),
-      eolBytes: EMPTY_BUF,
+      eolBytes: prevChunkEndedWithCR ? CR_BUF : EMPTY_BUF,
       lineNumber,
     };
   }
@@ -210,20 +185,6 @@ function hashToLetters(h: number): string {
   const c1 = String.fromCharCode(97 + (h % 26));
   const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
   return c1 + c2;
-}
-
-/**
- * Feed a 32-bit FNV-1a line hash into a checksum accumulator.
- *
- * Feeds 4 little-endian bytes of the line hash into the running
- * FNV-1a accumulator, matching `rangeChecksum` in trueline.ts.
- */
-function feedHashToAccumulator(acc: number, lineHash: number): number {
-  acc = Math.imul(acc ^ (lineHash & 0xff),          FNV_PRIME) >>> 0;
-  acc = Math.imul(acc ^ ((lineHash >>> 8) & 0xff),  FNV_PRIME) >>> 0;
-  acc = Math.imul(acc ^ ((lineHash >>> 16) & 0xff), FNV_PRIME) >>> 0;
-  acc = Math.imul(acc ^ ((lineHash >>> 24) & 0xff), FNV_PRIME) >>> 0;
-  return acc;
 }
 
 /**
@@ -317,7 +278,7 @@ export async function streamingEdit(
     pendingWrite = buf;
     // Hash the output line for full-file checksum
     const lineH = fnv1aHashBytes(buf, 0, buf.length);
-    outputChecksumAcc = feedHashToAccumulator(outputChecksumAcc, lineH);
+    outputChecksumAcc = foldHash(outputChecksumAcc, lineH);
     outputLineCount++;
   }
 
@@ -365,7 +326,7 @@ export async function streamingEdit(
       // Feed into checksum accumulators
       for (const acc of csAccs) {
         if (lineNumber >= acc.ref.startLine && lineNumber <= acc.ref.endLine) {
-          acc.hash = feedHashToAccumulator(acc.hash, lineH);
+          acc.hash = foldHash(acc.hash, lineH);
         }
       }
 
@@ -614,7 +575,7 @@ export async function streamingEdit(
   if (!contentChanged) {
     try { await unlink(tmpPath); } catch { /* best-effort */ }
     const checksumStr = outputLineCount > 0
-      ? `1-${outputLineCount}:${outputChecksumAcc.toString(16).padStart(8, "0")}`
+      ? formatChecksum(1, outputLineCount, outputChecksumAcc)
       : EMPTY_FILE_CHECKSUM;
     return { ok: true, newChecksum: checksumStr, changed: false };
   }
@@ -646,7 +607,7 @@ export async function streamingEdit(
   }
 
   const checksumStr = outputLineCount > 0
-    ? `1-${outputLineCount}:${outputChecksumAcc.toString(16).padStart(8, "0")}`
+    ? formatChecksum(1, outputLineCount, outputChecksumAcc)
     : EMPTY_FILE_CHECKSUM;
   return { ok: true, newChecksum: checksumStr, changed: true };
 }
