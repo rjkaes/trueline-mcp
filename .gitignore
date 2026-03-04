@@ -7,3 +7,4 @@ dist/
 .worktrees/
 .claude/settings.local.json
 SESSION.md
+docs/plans/
