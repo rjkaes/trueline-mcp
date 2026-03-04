@@ -152,65 +152,6 @@ export function rangeChecksumFromHashes(
 }
 
 // ==============================================================================
-// Line Ending Detection & Splitting
-// ==============================================================================
-
-export interface ParsedContent {
-  lines: string[];
-  eol: "\r\n" | "\n";
-  hasTrailingNewline: boolean;
-}
-
-/**
- * Parse raw file content into normalized lines and detected EOL in one pass.
- *
- * Combines EOL detection, CRLF/CR normalization, and line splitting into a
- * single charCode scan — avoids reading the content three times.  The lines
- * contain no `\r` or `\n` characters.  A trailing newline produces no extra
- * empty element (standard text files end with `\n`).
- */
-export function parseContent(content: string): ParsedContent {
-  if (content === "") return { lines: [], eol: "\n", hasTrailingNewline: false };
-
-  const lines: string[] = [];
-  let crlf = 0;
-  let lf = 0;
-  let lineStart = 0;
-
-  for (let i = 0, len = content.length; i < len; i++) {
-    const ch = content.charCodeAt(i);
-    if (ch === 0x0d /* \r */) {
-      lines.push(content.slice(lineStart, i));
-      if (i + 1 < len && content.charCodeAt(i + 1) === 0x0a /* \n */) {
-        crlf++;
-        i++; // skip \n half of \r\n pair
-      } else {
-        lf++; // bare \r counts toward LF
-      }
-      lineStart = i + 1;
-    } else if (ch === 0x0a /* \n */) {
-      lines.push(content.slice(lineStart, i));
-      lf++;
-      lineStart = i + 1;
-    }
-  }
-
-  // Content after the last line ending (or the entire string if no endings).
-  // An empty tail means the file ended with a newline — don't push, matching
-  // the trailing-newline convention (no phantom empty last element).
-  const tail = content.slice(lineStart);
-  if (tail !== "") {
-    lines.push(tail);
-  }
-
-  // A file has a trailing newline if its last character was a line ending.
-  // Empty files have no trailing newline by definition.
-  const hasTrailingNewline = content.length > 0 && lineStart === content.length;
-
-  return { lines, eol: crlf > lf ? "\r\n" : "\n", hasTrailingNewline };
-}
-
-// ==============================================================================
 // Line Formatting
 // ==============================================================================
 

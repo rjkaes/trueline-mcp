@@ -6,7 +6,6 @@ import {
   formatTruelinesFromArray,
   formatTruelinesWithHashes,
   rangeChecksumFromHashes,
-  parseContent,
   parseLineHash,
   parseRange,
   parseChecksum,
@@ -94,47 +93,6 @@ describe("formatTruelinesFromArray", () => {
 
   test("returns empty for empty array", () => {
     expect(formatTruelinesFromArray([])).toBe("");
-  });
-});
-
-describe("parseContent", () => {
-  test("empty string → empty lines, LF default", () => {
-    expect(parseContent("")).toEqual({ lines: [], eol: "\n", hasTrailingNewline: false });
-  });
-
-  test("LF-only content", () => {
-    expect(parseContent("a\nb\nc\n")).toEqual({ lines: ["a", "b", "c"], eol: "\n", hasTrailingNewline: true });
-  });
-
-  test("CRLF-only content", () => {
-    expect(parseContent("a\r\nb\r\nc\r\n")).toEqual({ lines: ["a", "b", "c"], eol: "\r\n", hasTrailingNewline: true });
-  });
-
-  test("no trailing newline preserves last line", () => {
-    expect(parseContent("a\nb")).toEqual({ lines: ["a", "b"], eol: "\n", hasTrailingNewline: false });
-  });
-
-  test("majority wins: more LF than CRLF → LF", () => {
-    // 1 CRLF, 2 LF → LF
-    expect(parseContent("a\r\nb\nc\n")).toEqual({ lines: ["a", "b", "c"], eol: "\n", hasTrailingNewline: true });
-  });
-
-  test("majority wins: more CRLF than LF → CRLF", () => {
-    // 2 CRLF, 1 LF → CRLF
-    expect(parseContent("a\r\nb\r\nc\n")).toEqual({ lines: ["a", "b", "c"], eol: "\r\n", hasTrailingNewline: true });
-  });
-
-  test("bare \\r splits lines and counts toward LF", () => {
-    // 1 bare \r + 1 CRLF → tie → LF
-    expect(parseContent("a\rb\r\n")).toEqual({ lines: ["a", "b"], eol: "\n", hasTrailingNewline: true });
-  });
-
-  test("no line endings → single-element array, LF default", () => {
-    expect(parseContent("hello")).toEqual({ lines: ["hello"], eol: "\n", hasTrailingNewline: false });
-  });
-
-  test("single newline → one empty line", () => {
-    expect(parseContent("\n")).toEqual({ lines: [""], eol: "\n", hasTrailingNewline: true });
   });
 });
 

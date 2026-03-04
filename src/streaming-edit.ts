@@ -14,8 +14,8 @@
 //    had no trailing newline.
 //  - Backpressure: `outStream.write()` return values are checked and `drain`
 //    events are awaited to prevent unbounded buffering.
-//  - EOL detection from first line ending (not majority-wins like `parseContent`)
-//    since we cannot rescan during a single pass.
+//  - EOL detection from first line ending since we cannot rescan during a
+//    single pass.
 //  - No-op detection: byte-compares replacement content against original lines
 //    to skip the atomic rename when nothing actually changed.
 // ==============================================================================

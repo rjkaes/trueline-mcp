@@ -28,7 +28,7 @@ interface ReadParams {
 }
 
 /**
- * Stream lines from a file, matching `parseContent` line-ending behaviour
+ * Stream lines from a file, treating \r\n, \r, and \n as line endings.
  * (\r\n, \r, and \n are all line endings).
  *
  * Yields one string per line with no trailing EOL characters.  Handles
