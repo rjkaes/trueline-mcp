@@ -1,11 +1,8 @@
-import { realpath, stat, readFile } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import {
   parseRange,
   parseChecksum,
-  verifyChecksum,
-  verifyHashes,
-  parseContent,
   type EditOp,
   type ChecksumRef,
 } from "../trueline.ts";
@@ -35,8 +32,7 @@ export type ValidatePathResult = ValidatePathOk | ValidatePathErr;
  * Validate and resolve a file path without reading its content.
  *
  * Performs symlink resolution, containment checks, deny-pattern evaluation,
- * regular-file and size-limit verification.  Used directly by the streaming
- * edit handler and read handler, and indirectly by diff via `prepareFile`.
+ * edit handler, read handler, and diff handler.
  */
 export async function validatePath(
   file_path: string,
@@ -147,185 +143,6 @@ export async function validatePath(
   return { ok: true, resolvedPath: realPath, size: fileStat.size, mtimeMs: fileStat.mtimeMs };
 }
 
-// ==============================================================================
-// File preparation: validate + read + parse (used by diff)
-// ==============================================================================
-
-type PrepareFileOk = { ok: true; resolvedPath: string; fileLines: string[]; hasCRLF: boolean; hasTrailingNewline: boolean; mtimeMs: number };
-type PrepareFileErr = { ok: false; error: ToolResult };
-type PrepareFileResult = PrepareFileOk | PrepareFileErr;
-
-export async function prepareFile(
-  file_path: string,
-  toolName: string,
-  projectDir: string | undefined,
-  allowedDirs: string[] = [],
-): Promise<PrepareFileResult> {
-  const validated = await validatePath(file_path, toolName, projectDir, allowedDirs);
-  if (!validated.ok) return validated;
-
-  const { resolvedPath, mtimeMs } = validated;
-
-  let content: string;
-  try {
-    content = await readFile(resolvedPath, "utf-8");
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      ok: false,
-      error: {
-        content: [{ type: "text", text: `Error reading file: ${msg}` }],
-        isError: true,
-      },
-    };
-  }
-
-  // Reject binary files: null bytes indicate non-text content that would be
-  // silently corrupted by line-oriented editing.
-  if (content.includes("\0")) {
-    return {
-      ok: false,
-      error: {
-        content: [{ type: "text", text: `"${file_path}" appears to be a binary file` }],
-        isError: true,
-      },
-    };
-  }
-
-  // Single-pass EOL detection + normalization + line splitting.  Determines
-  // the dominant line ending (majority wins) while building the lines array,
-  // avoiding three separate scans of the content.
-  const { lines: fileLines, eol, hasTrailingNewline } = parseContent(content);
-  const hasCRLF = eol === "\r\n";
-
-  return { ok: true, resolvedPath, fileLines, hasCRLF, hasTrailingNewline, mtimeMs };
-}
-
-// ==============================================================================
-// Edit op construction: checksum verification, hash verification, ref building
-// ==============================================================================
-
-type BuildOpsOk = { ok: true; ops: EditOp[] };
-type BuildOpsErr = { ok: false; error: ToolResult };
-type BuildOpsResult = BuildOpsOk | BuildOpsErr;
-
-export function buildOps(
-  fileLines: string[],
-  edits: EditInput[],
-): BuildOpsResult {
-  const ops: EditOp[] = [];
-
-  for (const edit of edits) {
-    const checksumErr = verifyChecksum(fileLines, edit.checksum);
-
-    const rangeRef = parseRange(edit.range);
-
-    // line 0 is only valid as the anchor for insert_after (prepend to file).
-    // A replace starting at line 0 makes no sense and would corrupt the file.
-    if (rangeRef.start.line === 0 && !edit.insert_after) {
-      return {
-        ok: false,
-        error: {
-          content: [{ type: "text", text: "range starting at line 0 requires insert_after: true" }],
-          isError: true,
-        },
-      };
-    }
-
-    if (checksumErr) {
-      // Checksum failed, but check if the edit-target lines are still valid.
-      // This gives the agent actionable guidance for recovery: re-read just
-      // the target lines instead of the whole file.
-      if (rangeRef.start.line > 0) {
-        const hashErr = verifyHashes(fileLines, [rangeRef.start, rangeRef.end]);
-        if (!hashErr) {
-          const s = rangeRef.start.line;
-          const e = rangeRef.end.line;
-          return {
-            ok: false,
-            error: {
-              content: [{
-                type: "text",
-                text:
-                  `${checksumErr}\n\n` +
-                  `However, lines ${s}-${e} appear unchanged. ` +
-                  `Re-read with trueline_read(start_line=${s}, end_line=${e}) ` +
-                  `to get a narrow checksum, then retry the edit.`,
-              }],
-              isError: true,
-            },
-          };
-        }
-      }
-      // Edit-target lines also changed (or line-0 insert) — standard error
-      return {
-        ok: false,
-        error: { content: [{ type: "text", text: checksumErr }], isError: true },
-      };
-    }
-
-    // Only the range endpoints are explicitly hash-verified per the protocol —
-    // the agent provides start/end hashes, not interior line hashes. Interior
-    // lines are implicitly covered by the range checksum, which is verified above.
-    const hashErr = verifyHashes(fileLines, [rangeRef.start, rangeRef.end]);
-    if (hashErr) {
-      return {
-        ok: false,
-        error: { content: [{ type: "text", text: hashErr }], isError: true },
-      };
-    }
-
-    // Verify checksum range covers the edit target. Without this, an agent
-    // could pass a valid checksum for lines 1-2 while editing line 50,
-    // bypassing the staleness check on the target lines.
-    if (rangeRef.start.line > 0) {
-      const csRef = parseChecksum(edit.checksum);
-      if (csRef.startLine > rangeRef.start.line || csRef.endLine < rangeRef.end.line) {
-        return {
-          ok: false,
-          error: {
-            content: [{
-              type: "text",
-              text: `Checksum range ${csRef.startLine}-${csRef.endLine} does not cover ` +
-                `edit range ${rangeRef.start.line}-${rangeRef.end.line}. ` +
-                `Re-read with trueline_read to get a checksum covering the target lines.`,
-            }],
-            isError: true,
-          },
-        };
-      }
-    }
-
-    ops.push({
-      startLine: rangeRef.start.line,
-      endLine: rangeRef.end.line,
-      content: edit.content,
-      insertAfter: edit.insert_after ?? false,
-    });
-  }
-
-  // Validate that no two non-insertAfter ops target the same line. Overlapping
-  // replace ranges would produce undefined output because the back-to-front
-  // application in applyEdits assumes each line is covered by at most one op.
-  const touchedLines = new Set<number>();
-  for (const op of ops) {
-    if (op.insertAfter) continue;
-    for (let l = op.startLine; l <= op.endLine; l++) {
-      if (touchedLines.has(l)) {
-        return {
-          ok: false,
-          error: {
-            content: [{ type: "text", text: `Overlapping ranges: line ${l} targeted by multiple edits` }],
-            isError: true,
-          },
-        };
-      }
-      touchedLines.add(l);
-    }
-  }
-
-  return { ok: true, ops };
-}
 
 // ==============================================================================
 // Content-free edit validation (for streaming pipeline)
@@ -410,7 +227,7 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
     });
   }
 
-  // Overlap detection (same logic as buildOps)
+  // Overlap detection
   const touchedLines = new Set<number>();
   for (const op of ops) {
     if (op.insertAfter) continue;

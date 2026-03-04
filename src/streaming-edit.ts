@@ -172,7 +172,7 @@ function flushPartials(partials: Buffer[], totalLen: number): Buffer {
 // ==============================================================================
 
 export type StreamingEditResult =
-  | { ok: true; newChecksum: string; changed: boolean }
+  | { ok: true; newChecksum: string; changed: boolean; tmpPath?: string }
   | { ok: false; error: string };
 
 /**
@@ -207,6 +207,7 @@ export async function streamingEdit(
   ops: StreamEditOp[],
   checksumRefs: ChecksumRef[],
   mtimeMs: number,
+  dryRun = false,
 ): Promise<StreamingEditResult> {
   // ---- Sort ops ascending by startLine, insert_after after replace at same line ----
   const indexed = ops.map((op, i) => ({ op, i }));
@@ -550,31 +551,41 @@ export async function streamingEdit(
 
   // ---- No-op: skip write if nothing changed ----
   if (!contentChanged) {
-    await cleanupTmp();
-    return { ok: true, newChecksum: outputChecksumStr(), changed: false };
+    if (!dryRun) {
+      await cleanupTmp();
+      return { ok: true, newChecksum: outputChecksumStr(), changed: false };
+    }
+    return { ok: true, newChecksum: outputChecksumStr(), changed: false, tmpPath };
   }
 
   // ---- Atomic rename with mtime check ----
-  let originalMode: number | undefined;
-  try {
-    const fileStat = await stat(resolvedPath);
-    originalMode = fileStat.mode;
-    if (fileStat.mtimeMs !== mtimeMs) {
-      return await fail("File was modified by another process. Re-read with trueline_read.");
+  if (!dryRun) {
+    let originalMode: number | undefined;
+    try {
+      const fileStat = await stat(resolvedPath);
+      originalMode = fileStat.mode;
+      if (fileStat.mtimeMs !== mtimeMs) {
+        return await fail("File was modified by another process. Re-read with trueline_read.");
+      }
+    } catch {
+      // stat failed (file deleted?) — proceed with rename
     }
-  } catch {
-    // stat failed (file deleted?) — proceed with rename
+
+    try {
+      if (originalMode !== undefined) {
+        await chmod(tmpPath, originalMode);
+      }
+      await rename(tmpPath, resolvedPath);
+    } catch (err) {
+      await cleanupTmp();
+      throw err;
+    }
   }
 
-  try {
-    if (originalMode !== undefined) {
-      await chmod(tmpPath, originalMode);
-    }
-    await rename(tmpPath, resolvedPath);
-  } catch (err) {
-    await cleanupTmp();
-    throw err;
-  }
-
-  return { ok: true, newChecksum: outputChecksumStr(), changed: true };
+  return {
+    ok: true,
+    newChecksum: outputChecksumStr(),
+    changed: true,
+    ...(dryRun ? { tmpPath } : {}),
+  };
 }
