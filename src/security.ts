@@ -56,37 +56,21 @@ export function fileGlobToRegex(
   // regex, and multiple adjacent groups cause catastrophic backtracking.
   glob = glob.replace(/(\*\*\/)+/g, "**/");
 
-  let regexStr = "";
-  let i = 0;
-
-  while (i < glob.length) {
-    // Handle ** (globstar): only treat as globstar when at a path boundary
-    // (position 0 or immediately after a "/"). Otherwise the first "*" is a
-    // single-segment wildcard and the second is processed on the next iteration.
-    const atBoundary = i === 0 || glob[i - 1] === "/";
-    if (glob[i] === "*" && glob[i + 1] === "*" && atBoundary) {
-      // **/ at the start or after a slash means "zero or more directories"
-      if (i + 2 < glob.length && glob[i + 2] === "/") {
-        regexStr += "(.*/)?";
-        i += 3; // skip "*" "*" "/"
-      } else {
-        // Trailing ** matches everything
-        regexStr += ".*";
-        i += 2;
+  // Tokenize the glob: match globstar+slash, globstar, single-star, question
+  // mark, or a run of literal characters — then map each token to its regex.
+  const regexStr = glob.replace(
+    /\*\*\/|\*\*|\*|\?|[^*?]+/g,
+    (token, offset) => {
+      const atBoundary = offset === 0 || glob[offset - 1] === "/";
+      switch (token) {
+        case "**/": return atBoundary ? "(.*/)?" : "[^/]*/";
+        case "**":  return atBoundary ? ".*" : "[^/]*";
+        case "*":   return "[^/]*";
+        case "?":   return "[^/]";
+        default:    return token.replace(/[.+^${}()|[\]\\\/-]/g, "\\$&");
       }
-    } else if (glob[i] === "*") {
-      // Single * matches anything except /
-      regexStr += "[^/]*";
-      i++;
-    } else if (glob[i] === "?") {
-      regexStr += "[^/]";
-      i++;
-    } else {
-      // Escape regex-special characters
-      regexStr += glob[i].replace(/[.+^${}()|[\]\\\/\-]/g, "\\$&");
-      i++;
-    }
-  }
+    },
+  );
 
   const re = new RegExp(`^${regexStr}$`, caseInsensitive ? "i" : "");
   regexCache.set(cacheKey, re);
