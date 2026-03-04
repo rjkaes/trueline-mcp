@@ -92,8 +92,7 @@ Each edit:
 
 ### `trueline_diff`
 
-Preview edits as a unified diff without writing to disk. Takes the same
-parameters as `trueline_edit`.
+Preview edits as a unified diff. Takes the same parameters as `trueline_edit`.
 
 ## Development
 
