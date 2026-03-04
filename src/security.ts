@@ -97,16 +97,12 @@ export async function readToolDenyPatterns(
   projectDir?: string,
   globalSettingsPath?: string,
 ): Promise<string[][]> {
-  const result: string[][] = [];
-
   const extractGlobs = async (path: string): Promise<string[] | null> => {
-    // Check mtime before reading. If the file hasn't changed since the last
-    // call, return the cached result without reading from disk.
+    // Check mtime — if unchanged since last call, return cached result.
     let mtime: number;
     try {
       mtime = (await stat(path)).mtimeMs;
     } catch {
-      // File doesn't exist — cache a miss so we don't re-stat on every call
       settingsCache.set(path, { mtime: -1, globs: null });
       return null;
     }
@@ -114,35 +110,23 @@ export async function readToolDenyPatterns(
     const cached = settingsCache.get(path);
     if (cached && cached.mtime === mtime) return cached.globs;
 
-    let raw: string;
-    try {
-      raw = await readFile(path, "utf-8");
-    } catch {
-      settingsCache.set(path, { mtime, globs: null });
-      return null;
-    }
-
+    // Read and parse in one step — both failures mean "no usable data".
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(await readFile(path, "utf-8"));
     } catch {
       settingsCache.set(path, { mtime, globs: null });
       return null;
     }
 
-    const deny = (parsed as Record<string, unknown>)?.permissions as Record<string, unknown>;
-    const denyArr = deny?.deny;
-    if (!Array.isArray(denyArr)) {
-      settingsCache.set(path, { mtime, globs: [] });
-      return [];
-    }
-
+    // Extract globs for the target tool from permissions.deny.
+    const denyArr = (parsed as any)?.permissions?.deny;
     const globs: string[] = [];
-    for (const entry of denyArr) {
-      if (typeof entry !== "string") continue;
-      const tp = parseToolPattern(entry);
-      if (tp && tp.tool === toolName) {
-        globs.push(tp.glob);
+    if (Array.isArray(denyArr)) {
+      for (const entry of denyArr) {
+        if (typeof entry !== "string") continue;
+        const tp = parseToolPattern(entry);
+        if (tp?.tool === toolName) globs.push(tp.glob);
       }
     }
     settingsCache.set(path, { mtime, globs });
@@ -160,11 +144,7 @@ export async function readToolDenyPatterns(
 
   // Read all settings files in parallel — they're independent.
   const allGlobs = await Promise.all(paths.map(extractGlobs));
-  for (const globs of allGlobs) {
-    if (globs !== null) result.push(globs);
-  }
-
-  return result;
+  return allGlobs.filter((g): g is string[] => g !== null);
 }
 
 // ==============================================================================
