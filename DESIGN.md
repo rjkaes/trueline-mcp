@@ -100,10 +100,10 @@ an empty file without special-casing.
 ```
 trueline_edit({
   file_path: "src/main.ts",
+  checksum: "10-25:f7e2a1b0",
   edits: [{
     range: "12:mp..14:qk",
     content: ["  const x = 1;", "  const y = 2;"],
-    checksum: "10-25:f7e2a1b0",
   }]
 })
 ```
@@ -112,15 +112,16 @@ Each edit specifies:
 
 - **`range`** — which lines to replace, as `startLine:hash..endLine:hash`.
   A single-line shorthand `12:mp` is equivalent to `12:mp..12:mp`.
+  Prefix `+` for insert-after: `+5:ab` inserts content after line 5.
+  Use `+0:` to prepend to the file.
 - **`content`** — the replacement lines. One string per line, no
   newline characters. The array can be shorter or longer than the range
   (shrinking or growing the file).
-- **`checksum`** — the range checksum from a prior `trueline_read`.
-  Must be the full string including the range prefix
-  (e.g. `"10-25:f7e2a1b0"`, not just `"f7e2a1b0"`).
-- **`insert_after`** (optional) — when true, inserts `content` after
-  the anchor line instead of replacing the range. Use `range: "0:"` with
-  `insert_after: true` to prepend to the file.
+
+The top-level **`checksum`** is the range checksum from a prior
+`trueline_read`. Must be the full string including the range prefix
+(e.g. `"10-25:f7e2a1b0"`, not just `"f7e2a1b0"`). All edits in a
+batch must come from the same `trueline_read` call.
 
 ### Verification
 
@@ -129,8 +130,8 @@ and streaming application (single pass through the file). Structural
 validation catches malformed inputs before the file is opened:
 
 ```
-1. parseRange      — range string is well-formed?
-2. line-0 check    — line 0 only allowed with insert_after?
+1. parseRange      — range string well-formed? + prefix valid?
+2. line-0 check    — line 0 only allowed with + prefix?
 3. coverage check  — checksum range covers the edit range?
 4. overlap check   — no two edits target the same line?
 ```
@@ -154,7 +155,7 @@ file is never loaded into memory as a whole.
    c. If the line falls in a replace range, buffer it for no-op
       detection but don't write it to the temp file.
    d. At the end of a replace range, write replacement content.
-   e. After insert_after anchors, write insert content.
+   e. After insert-after (+) anchors, write insert content.
    f. Unchanged lines are written as raw bytes — zero string
       allocation.
    g. Feed every output line's hash into an output checksum
@@ -203,9 +204,10 @@ the TOCTOU window but doesn't eliminate it.
 ### Multi-edit batches
 
 A single `trueline_edit` call can carry multiple edits. All edits share
-the same file and are verified together before any are applied. This is
-useful for making several changes in one atomic operation. Edits must
-not overlap — if two edits target the same line, the call is rejected.
+the same file and top-level checksum, and are verified together before
+any are applied. This is useful for making several changes in one atomic
+operation. Edits must not overlap — if two edits target the same line,
+the call is rejected.
 
 ### Return value
 

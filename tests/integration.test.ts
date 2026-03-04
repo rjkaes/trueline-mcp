@@ -45,11 +45,11 @@ describe("read → diff → edit roundtrip", () => {
     // Step 2: Preview the edit with diff
     const diffResult = await handleDiff({
       file_path: testFile,
+      checksum,
       edits: [
         {
           range: `2:${line2Hash}..2:${line2Hash}`,
           content: ['  return `Hello, ${name}!`;'],
-          checksum,
         },
       ],
       projectDir: testDir,
@@ -66,11 +66,11 @@ describe("read → diff → edit roundtrip", () => {
     // Step 3: Apply the edit
     const editResult = await handleEdit({
       file_path: testFile,
+      checksum,
       edits: [
         {
           range: `2:${line2Hash}..2:${line2Hash}`,
           content: ['  return `Hello, ${name}!`;'],
-          checksum,
         },
       ],
       projectDir: testDir,

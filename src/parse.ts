@@ -51,26 +51,44 @@ function parseLineHash(ref: string): LineRef {
 interface RangeRef {
   start: LineRef;
   end: LineRef;
+  insertAfter: boolean;
 }
 
 /**
  * Parse a range string into start/end LineRefs.
  *
- * Accepts two forms:
- *   - "12:gh..21:yz"  — explicit start..end range
+ * Accepts three forms:
+ *   - "12:gh..21:yz"  — explicit start..end range (replace)
  *   - "5:ab"          — single-line shorthand, equivalent to "5:ab..5:ab"
+ *   - "+5:ab"         — insert-after line 5 (single-line only)
  *
- * Throws on invalid format or if start line > end line.
+ * The `+` prefix signals insert-after and is only valid on single-line
+ * ranges (no `..`). Throws on invalid format or if start line > end line.
  */
 export function parseRange(range: string): RangeRef {
-  const dotIdx = range.indexOf("..");
-  if (dotIdx === -1) {
-    const ref = parseLineHash(range);
-    return { start: ref, end: { ...ref } };
+  // Detect and strip insert-after prefix
+  let insertAfter = false;
+  let raw = range;
+  if (raw.startsWith("+")) {
+    insertAfter = true;
+    raw = raw.slice(1);
   }
 
-  const start = parseLineHash(range.slice(0, dotIdx));
-  const end = parseLineHash(range.slice(dotIdx + 2));
+  const dotIdx = raw.indexOf("..");
+
+  if (insertAfter && dotIdx !== -1) {
+    throw new Error(
+      `Invalid range "${range}" — insert-after (+) cannot be used with a multi-line range`,
+    );
+  }
+
+  if (dotIdx === -1) {
+    const ref = parseLineHash(raw);
+    return { start: ref, end: { ...ref }, insertAfter };
+  }
+
+  const start = parseLineHash(raw.slice(0, dotIdx));
+  const end = parseLineHash(raw.slice(dotIdx + 2));
 
   if (start.line > end.line) {
     throw new Error(
@@ -78,7 +96,7 @@ export function parseRange(range: string): RangeRef {
     );
   }
 
-  return { start, end };
+  return { start, end, insertAfter };
 }
 
 export interface ChecksumRef {

@@ -4,7 +4,7 @@ export function getInstructions() {
   return `<trueline_mcp_instructions>
   <tools>
     <tool name="trueline_read">Read a file; returns content with per-line hashes and a checksum. Call before editing.</tool>
-    <tool name="trueline_edit">Edit a file with hash verification. Replaces the built-in Edit tool, which is blocked. Each edit needs: range (startLine:hash..endLine:hash), content (array of replacement lines \u2014 one string per line, no newline characters), and checksum from trueline_read output. Supports multiple edits in one call \u2014 pass all changes to the same file in the edits array.</tool>
+    <tool name="trueline_edit">Edit a file with hash verification. Replaces the built-in Edit tool, which is blocked. Each edit needs: range (startLine:hash..endLine:hash or +startLine:hash for insert-after), content (array of replacement lines — one string per line, no newline characters). Checksum from trueline_read goes at the top level, not per-edit. Supports multiple edits in one call — pass all changes to the same file in the edits array.</tool>
     <tool name="trueline_diff">Preview edits as a unified diff without writing to disk.</tool>
   </tools>
   <workflow>trueline_read \u2192 trueline_diff (optional) \u2192 trueline_edit</workflow>

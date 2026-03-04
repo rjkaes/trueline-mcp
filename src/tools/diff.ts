@@ -7,13 +7,14 @@ import { streamingEdit } from "../streaming-edit.ts";
 
 interface DiffParams {
   file_path: string;
+  checksum: string;
   edits: EditInput[];
   projectDir?: string;
   allowedDirs?: string[];
 }
 
 export async function handleDiff(params: DiffParams): Promise<ToolResult> {
-  const { file_path, edits, projectDir, allowedDirs } = params;
+  const { file_path, checksum, edits, projectDir, allowedDirs } = params;
 
   // Diff intentionally uses Read deny patterns (not a separate "Diff" tool
   // name) since diff is a read-only preview operation and should share the
@@ -23,10 +24,10 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 
   const { resolvedPath, mtimeMs } = validated;
 
-  const built = validateEdits(edits);
+  const built = validateEdits(edits, checksum);
   if (!built.ok) return built.error;
 
-  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true);
+  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRef, mtimeMs, true);
 
   if (!result.ok) {
     return errorResult(result.error);

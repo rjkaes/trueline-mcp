@@ -63,15 +63,14 @@ server.registerTool(
 server.registerTool(
   "trueline_edit",
   {
-    description: "Apply hash-verified edits to a file. Supports multiple edits in one call — pass all changes to the same file in the `edits` array rather than making separate calls.",
+    description: "Apply hash-verified edits to a file. Pass all changes in `edits` array.",
     inputSchema: z.object({
       file_path: z.string(),
+      checksum: z.string().describe("Checksum from trueline_read (e.g. 1-50:ab12cd34)"),
       edits: z.array(
         z.object({
-          range: z.string().describe("startLine:hash..endLine:hash, or just startLine:hash for a single line"),
-          content: z.array(z.string()).describe("Replacement lines (one string per line, no newline characters)"),
-          checksum: z.string().describe('Full checksum string from trueline_read, e.g. "1-50:ab12cd34". Must include the range prefix — do not pass just the hex hash.'),
-          insert_after: z.boolean().optional(),
+          range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
+          content: z.array(z.string()).describe("Replacement lines (one string per line, no \\n chars)"),
         }),
       ).min(1),
     }),
@@ -84,15 +83,14 @@ server.registerTool(
 server.registerTool(
   "trueline_diff",
   {
-    description: "Preview edits as a unified diff without writing to disk. Supports multiple edits in one call — pass all changes in the `edits` array.",
+    description: "Preview edits as a unified diff without writing to disk.",
     inputSchema: z.object({
       file_path: z.string(),
+      checksum: z.string().describe("Checksum from trueline_read (e.g. 1-50:ab12cd34)"),
       edits: z.array(
         z.object({
-          range: z.string().describe("startLine:hash..endLine:hash, or just startLine:hash for a single line"),
-          content: z.array(z.string()).describe("Replacement lines (one string per line, no newline characters)"),
-          checksum: z.string().describe('Full checksum string from trueline_read, e.g. "1-50:ab12cd34". Must include the range prefix — do not pass just the hex hash.'),
-          insert_after: z.boolean().optional(),
+          range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
+          content: z.array(z.string()).describe("Replacement lines (one string per line, no \\n chars)"),
         }),
       ).min(1),
     }),

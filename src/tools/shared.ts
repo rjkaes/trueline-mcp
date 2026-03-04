@@ -15,8 +15,6 @@ import { type ToolResult, errorResult } from "./types.ts";
 export interface EditInput {
   range: string;
   content: string[];
-  checksum: string;
-  insert_after?: boolean;
 }
 
 // ==============================================================================
@@ -107,13 +105,12 @@ export interface StreamEditOp {
   insertAfter: boolean;
   startHash: string;
   endHash: string;
-  checksum: string;
 }
 
 type ValidateEditsOk = {
   ok: true;
   ops: StreamEditOp[];
-  checksumRefs: ChecksumRef[];
+  checksumRef: ChecksumRef;
 };
 type ValidateEditsErr = { ok: false; error: ToolResult };
 type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
@@ -125,28 +122,27 @@ type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
  * and overlap detection. File-content verification (checksum match,
  * boundary hash match) is deferred to the streaming pass.
  */
-export function validateEdits(edits: EditInput[]): ValidateEditsResult {
+export function validateEdits(edits: EditInput[], checksum: string): ValidateEditsResult {
   const ops: StreamEditOp[] = [];
-  const checksumRefs: ChecksumRef[] = [];
-  const seenChecksums = new Set<string>();
+
+  // Parse the single top-level checksum once
+  const checksumRef = parseChecksum(checksum);
 
   for (const edit of edits) {
     const rangeRef = parseRange(edit.range);
 
-    // line 0 only valid for insert_after
-    if (rangeRef.start.line === 0 && !edit.insert_after) {
-      return { ok: false, error: errorResult("range starting at line 0 requires insert_after: true") };
+    // line 0 only valid for insert-after (encoded as + prefix in range)
+    if (rangeRef.start.line === 0 && !rangeRef.insertAfter) {
+      return { ok: false, error: errorResult("range starting at line 0 requires insert-after (use +0: prefix)") };
     }
-    // Parse checksum (validates format)
-    const csRef = parseChecksum(edit.checksum);
 
     // Verify checksum range covers edit target
     if (rangeRef.start.line > 0) {
-      if (csRef.startLine > rangeRef.start.line || csRef.endLine < rangeRef.end.line) {
+      if (checksumRef.startLine > rangeRef.start.line || checksumRef.endLine < rangeRef.end.line) {
         return {
           ok: false,
           error: errorResult(
-            `Checksum range ${csRef.startLine}-${csRef.endLine} does not cover ` +
+            `Checksum range ${checksumRef.startLine}-${checksumRef.endLine} does not cover ` +
             `edit range ${rangeRef.start.line}-${rangeRef.end.line}. ` +
             `Re-read with trueline_read to get a checksum covering the target lines.`,
           ),
@@ -154,20 +150,13 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
       }
     }
 
-    // Collect unique checksum refs for streaming verification
-    if (!seenChecksums.has(edit.checksum)) {
-      seenChecksums.add(edit.checksum);
-      checksumRefs.push(csRef);
-    }
-
     ops.push({
       startLine: rangeRef.start.line,
       endLine: rangeRef.end.line,
       content: edit.content,
-      insertAfter: edit.insert_after ?? false,
+      insertAfter: rangeRef.insertAfter,
       startHash: rangeRef.start.hash,
       endHash: rangeRef.end.hash,
-      checksum: edit.checksum,
     });
   }
 
@@ -183,5 +172,5 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
     }
   }
 
-  return { ok: true, ops, checksumRefs };
+  return { ok: true, ops, checksumRef };
 }
