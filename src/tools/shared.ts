@@ -75,17 +75,19 @@ export async function validatePath(
   }
   // Build the list of allowed base directories. projectDir (or cwd) is
   // always included; additional dirs come from the caller (e.g. ~/.claude/,
-  // TRUELINE_ALLOWED_DIRS).
+  // TRUELINE_ALLOWED_DIRS).  All bases are resolved through realpath so that
+  // short 8.3 names on Windows (e.g. RUNNER~1) match the realpath of the file.
   let realBase: string;
   try {
-    realBase = projectDir ? projectDir : await realpath(process.cwd());
+    realBase = await realpath(projectDir ? projectDir : process.cwd());
   } catch {
     return {
       ok: false,
       error: errorResult("Project directory not found or inaccessible"),
     };
   }
-  const allBases = [realBase, ...allowedDirs];
+  const resolvedAllowed = await Promise.all(allowedDirs.map((d) => realpath(d).catch(() => d)));
+  const allBases = [realBase, ...resolvedAllowed];
   const isContained = allBases.some((base) => realPath === base || realPath.startsWith(base + sep));
   if (!isContained) {
     return {

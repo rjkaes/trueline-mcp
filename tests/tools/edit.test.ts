@@ -205,9 +205,8 @@ describe("handleEdit", () => {
       projectDir: "/nonexistent/does/not/exist",
     });
     expect(result.isError).toBe(true);
-    // With projectDir already resolved at startup, a nonexistent dir is
-    // used as-is and the file falls outside it.
-    expect(result.content[0].text).toContain("outside the project directory");
+    // realpath on a nonexistent dir throws, caught as inaccessible.
+    expect(result.content[0].text).toContain("Project directory not found or inaccessible");
   });
 
   test("rejects overlapping ranges", async () => {
