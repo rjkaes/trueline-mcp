@@ -50,6 +50,19 @@ export async function* splitLines(filePath: string, opts?: { detectBinary?: bool
   let lineNumber = 0;
   let prevChunkEndedWithCR = false;
 
+  /** Concatenate accumulated partials into a single buffer and reset. */
+  function flushPartials(tail?: Buffer): Buffer {
+    if (tail && tail.length > 0) {
+      partials.push(tail);
+      partialsLen += tail.length;
+    }
+    if (partialsLen === 0) return EMPTY_BUF;
+    const result = partials.length === 1 ? partials[0] : Buffer.concat(partials, partialsLen);
+    partials = [];
+    partialsLen = 0;
+    return result;
+  }
+
   for await (const rawChunk of stream) {
     const buf: Buffer = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk);
     let lineStart = 0;
@@ -59,49 +72,33 @@ export async function* splitLines(filePath: string, opts?: { detectBinary?: bool
       prevChunkEndedWithCR = false;
       const eol = buf.length > 0 && buf[0] === 0x0a ? CRLF_BUF : CR_BUF;
       if (eol === CRLF_BUF) lineStart = 1;
-      lineNumber++;
-      yield {
-        lineBytes: flushPartials(partials, partialsLen),
-        eolBytes: eol,
-        lineNumber,
-      };
-      partials = [];
-      partialsLen = 0;
+      yield { lineBytes: flushPartials(), eolBytes: eol, lineNumber: ++lineNumber };
     }
 
     for (let i = lineStart; i < buf.length; i++) {
       const byte = buf[i];
 
-      // Binary detection: null bytes have no place in a text file.
       if (detectBinary && byte === 0x00) {
         stream.destroy();
         throw new Error("File appears to be binary (contains null bytes)");
       }
 
-      const isCR = byte === 0x0d;
-      const isLF = byte === 0x0a;
+      if (byte !== 0x0d && byte !== 0x0a) continue;
 
-      if (!isCR && !isLF) continue;
-
-      // ============================================================
-      // Found a line terminator — accumulate content and emit.
-      // ============================================================
+      // Found a line terminator — extract content and determine EOL type.
       const slice = buf.subarray(lineStart, i);
 
-      // Determine EOL type.
       let eol: Buffer;
-      if (isCR) {
-        const nextIndex = i + 1;
-        if (nextIndex < buf.length) {
-          // \r\n within the same chunk — skip the \n.
-          if (buf[nextIndex] === 0x0a) {
+      if (byte === 0x0d) {
+        if (i + 1 < buf.length) {
+          if (buf[i + 1] === 0x0a) {
             eol = CRLF_BUF;
             i++;
           } else {
             eol = CR_BUF;
           }
         } else {
-          // \r at chunk boundary — defer until next chunk.
+          // \r at chunk boundary — defer until next chunk to check for \r\n.
           partials.push(slice);
           partialsLen += slice.length;
           prevChunkEndedWithCR = true;
@@ -112,44 +109,24 @@ export async function* splitLines(filePath: string, opts?: { detectBinary?: bool
         eol = LF_BUF;
       }
 
-      // Emit the line.
-      lineNumber++;
-      if (partialsLen > 0) {
-        partials.push(slice);
-        yield {
-          lineBytes: flushPartials(partials, partialsLen + slice.length),
-          eolBytes: eol,
-          lineNumber,
-        };
-        partials = [];
-        partialsLen = 0;
-      } else {
-        yield { lineBytes: slice, eolBytes: eol, lineNumber };
-      }
-
+      yield { lineBytes: flushPartials(slice), eolBytes: eol, lineNumber: ++lineNumber };
       lineStart = i + 1;
     }
 
-    // Remaining bytes from this chunk become partial.
+    // Remaining bytes from this chunk become partial for the next chunk.
     if (lineStart < buf.length) {
-      partials.push(buf.subarray(lineStart));
-      partialsLen += buf.length - lineStart;
+      const remainder = buf.subarray(lineStart);
+      partials.push(remainder);
+      partialsLen += remainder.length;
     }
   }
 
-  // Final content: pending CR at EOF or leftover partials (no trailing newline).
+  // Final content: pending CR at EOF or leftover content (no trailing newline).
   if (prevChunkEndedWithCR || partialsLen > 0) {
-    lineNumber++;
     yield {
-      lineBytes: flushPartials(partials, partialsLen),
+      lineBytes: flushPartials(),
       eolBytes: prevChunkEndedWithCR ? CR_BUF : EMPTY_BUF,
-      lineNumber,
+      lineNumber: ++lineNumber,
     };
   }
-}
-
-function flushPartials(partials: Buffer[], totalLen: number): Buffer {
-  if (partials.length === 0) return EMPTY_BUF;
-  if (partials.length === 1) return partials[0];
-  return Buffer.concat(partials, totalLen);
 }
