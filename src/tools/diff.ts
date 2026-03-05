@@ -2,11 +2,12 @@ import { readFile, unlink } from "node:fs/promises";
 import { relative } from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { streamingEdit } from "../streaming-edit.ts";
-import { type EditInput, validateEdits, validatePath } from "./shared.ts";
+import { type EditInput, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 interface DiffParams {
   file_path: string;
+  encoding?: string;
   edits: EditInput[];
   projectDir?: string;
   allowedDirs?: string[];
@@ -22,12 +23,19 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
+  let enc: BufferEncoding;
+  try {
+    enc = validateEncoding(params.encoding);
+  } catch (err: unknown) {
+    return errorResult((err as Error).message);
+  }
+
   const { resolvedPath, mtimeMs } = validated;
 
   const built = validateEdits(edits);
   if (!built.ok) return built.error;
 
-  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true);
+  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true, enc);
 
   if (!result.ok) {
     return errorResult(result.error);
@@ -43,7 +51,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const relPath = file_path.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : file_path;
 
   try {
-    const [oldStr, newStr] = await Promise.all([readFile(resolvedPath, "utf-8"), readFile(tmpPath, "utf-8")]);
+    const [oldStr, newStr] = await Promise.all([readFile(resolvedPath, enc), readFile(tmpPath, enc)]);
 
     const diff = createTwoFilesPatch(`a/${relPath}`, `b/${relPath}`, oldStr, newStr);
 

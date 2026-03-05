@@ -3,8 +3,21 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleDiff } from "../../src/tools/diff.ts";
-import { lineHash } from "../helpers.ts";
-import { rangeChecksum } from "../helpers.ts";
+import { fnv1aHashBytes, FNV_OFFSET_BASIS, foldHash, formatChecksum, hashToLetters } from "../../src/hash.ts";
+import { lineHash, rangeChecksum } from "../helpers.ts";
+
+function rawLineHash(buf: Buffer): string {
+  const h = fnv1aHashBytes(buf, 0, buf.length);
+  return hashToLetters(h);
+}
+
+function rawRangeChecksum(bufs: Buffer[], startLine: number, endLine: number): string {
+  let hash = FNV_OFFSET_BASIS;
+  for (let i = 0; i < bufs.length; i++) {
+    hash = foldHash(hash, fnv1aHashBytes(bufs[i], 0, bufs[i].length));
+  }
+  return formatChecksum(startLine, endLine, hash);
+}
 
 let testDir: string;
 let testFile: string;
@@ -297,5 +310,34 @@ describe("handleDiff", () => {
       .split("\n")
       .filter((l) => !l.startsWith("---") && !l.startsWith("+++") && !l.startsWith("@@") && !l.startsWith("==="));
     expect(contentLines.some((l) => l.startsWith("+"))).toBe(false);
+  });
+
+  test("diffs a latin1 file correctly", async () => {
+    const line1 = Buffer.from([0x63, 0x61, 0x66, 0xe9]); // café
+    const line2 = Buffer.from([0x6e, 0x61, 0xef, 0x76, 0x65]); // naïve
+    const fileBytes = Buffer.concat([line1, Buffer.from("\n"), line2, Buffer.from("\n")]);
+    const latin1File = join(testDir, "latin1.txt");
+    writeFileSync(latin1File, fileBytes);
+
+    const cs = rawRangeChecksum([line1, line2], 1, 2);
+    const h1 = rawLineHash(line1);
+
+    const result = await handleDiff({
+      file_path: latin1File,
+      encoding: "latin1",
+      edits: [
+        {
+          checksum: cs,
+          range: `1:${h1}..1:${h1}`,
+          content: "résumé",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("-café");
+    expect(text).toContain("+résumé");
   });
 });
