@@ -9,6 +9,7 @@ import { errorResult, type ToolResult } from "./types.ts";
 // ==============================================================================
 
 export interface EditInput {
+  checksum: string;
   range: string;
   content: string;
 }
@@ -122,7 +123,7 @@ export type { StreamEditOp } from "../streaming-edit.ts";
 type ValidateEditsOk = {
   ok: true;
   ops: StreamEditOp[];
-  checksumRef: ChecksumRef;
+  checksumRefs: ChecksumRef[];
 };
 type ValidateEditsErr = { ok: false; error: ToolResult };
 type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
@@ -134,13 +135,14 @@ type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
  * and overlap detection. File-content verification (checksum match,
  * boundary hash match) is deferred to the streaming pass.
  */
-export function validateEdits(edits: EditInput[], checksum: string): ValidateEditsResult {
+export function validateEdits(edits: EditInput[]): ValidateEditsResult {
   const ops: StreamEditOp[] = [];
-
-  // Parse the single top-level checksum once
-  const checksumRef = parseChecksum(checksum);
+  const checksumRefMap = new Map<string, ChecksumRef>();
 
   for (const edit of edits) {
+    const checksumRef = parseChecksum(edit.checksum);
+    checksumRefMap.set(edit.checksum, checksumRef);
+
     const rangeRef = parseRange(edit.range);
 
     // line 0 only valid for insert-after (encoded as + prefix in range)
@@ -175,6 +177,9 @@ export function validateEdits(edits: EditInput[], checksum: string): ValidateEdi
     });
   }
 
+  const checksumRefs = [...checksumRefMap.values()];
+  checksumRefs.sort((a, b) => a.startLine - b.startLine);
+
   // Overlap detection: sort by startLine, then scan for overlapping ranges.
   // O(m log m) where m = number of replace ops (insert-after ops are excluded
   // since they don't consume source lines).
@@ -207,5 +212,5 @@ export function validateEdits(edits: EditInput[], checksum: string): ValidateEdi
     }
   }
 
-  return { ok: true, ops, checksumRef };
+  return { ok: true, ops, checksumRefs };
 }

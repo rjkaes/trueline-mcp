@@ -16,7 +16,6 @@ import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 interface EditParams {
   file_path: string;
-  checksum: string;
   edits: EditInput[];
   projectDir?: string;
   allowedDirs?: string[];
@@ -24,17 +23,17 @@ interface EditParams {
 
 export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const t0 = performance.now();
-  const { file_path, checksum, edits, projectDir, allowedDirs } = params;
+  const { file_path, edits, projectDir, allowedDirs } = params;
 
   const validated = await validatePath(file_path, "Edit", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
   const { resolvedPath, mtimeMs } = validated;
 
-  const built = validateEdits(edits, checksum);
+  const built = validateEdits(edits);
   if (!built.ok) return built.error;
 
-  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRef, mtimeMs);
+  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs);
 
   if (!result.ok) {
     return errorResult(result.error);

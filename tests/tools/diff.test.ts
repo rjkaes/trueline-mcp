@@ -27,9 +27,9 @@ describe("handleDiff", () => {
 
     const result = await handleDiff({
       file_path: testFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${h2}..2:${h2}`,
           content: "CHANGED",
         },
@@ -52,9 +52,9 @@ describe("handleDiff", () => {
 
     await handleDiff({
       file_path: testFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${h1}..1:${h1}`,
           content: "CHANGED",
         },
@@ -71,9 +71,9 @@ describe("handleDiff", () => {
   test("rejects stale checksum", async () => {
     const result = await handleDiff({
       file_path: testFile,
-      checksum: "1-3:00000000",
       edits: [
         {
+          checksum: "1-3:00000000",
           range: "1:zz..1:zz",
           content: "nope",
         },
@@ -95,9 +95,9 @@ describe("handleDiff", () => {
 
     const result = await handleDiff({
       file_path: testFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `+1:${h1}`,
           content: "line 1",
         },
@@ -122,9 +122,9 @@ describe("handleDiff", () => {
 
     const result = await handleDiff({
       file_path: testFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${h2}..2:${h2}`,
           content: "",
         },
@@ -145,9 +145,9 @@ describe("handleDiff", () => {
 
     const result = await handleDiff({
       file_path: testFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${h2}..2:${h2}`,
           content: "line 2",
         },
@@ -177,8 +177,7 @@ describe("handleDiff", () => {
 
     const result = await handleDiff({
       file_path: swapFile,
-      checksum: cs,
-      edits: [{ range: `1:${ha}..2:${hb}`, content: "b\na" }],
+      edits: [{ checksum: cs, range: `1:${ha}..2:${hb}`, content: "b\na" }],
       projectDir: testDir,
     });
 
@@ -204,9 +203,9 @@ describe("handleDiff", () => {
 
     const result = await handleDiff({
       file_path: bigFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${ha}..8:${hh}`,
           content: "A\nB\nC\nD\nE\nF\nG\nH",
         },
@@ -235,9 +234,9 @@ describe("handleDiff", () => {
 
     const result = await handleDiff({
       file_path: emptyFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${h}..1:${h}`,
           content: "line 1\nadded",
         },
@@ -260,8 +259,7 @@ describe("handleDiff", () => {
 
     const result = await handleDiff({
       file_path: crlfFile,
-      checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: "CHANGED" }],
+      edits: [{ checksum: cs, range: `2:${h2}..2:${h2}`, content: "CHANGED" }],
       projectDir: testDir,
     });
 
@@ -279,9 +277,9 @@ describe("handleDiff", () => {
 
     const result = await handleDiff({
       file_path: testFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${h1}..3:${h3}`,
           content: "",
         },

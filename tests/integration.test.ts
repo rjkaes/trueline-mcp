@@ -42,9 +42,9 @@ describe("read → diff → edit roundtrip", () => {
     // Step 2: Preview the edit with diff
     const diffResult = await handleDiff({
       file_path: testFile,
-      checksum,
       edits: [
         {
+          checksum,
           range: `2:${line2Hash}..2:${line2Hash}`,
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: "  return `Hello, ${name}!`;",
@@ -64,9 +64,9 @@ describe("read → diff → edit roundtrip", () => {
     // Step 3: Apply the edit
     const editResult = await handleEdit({
       file_path: testFile,
-      checksum,
       edits: [
         {
+          checksum,
           range: `2:${line2Hash}..2:${line2Hash}`,
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: "  return `Hello, ${name}!`;",

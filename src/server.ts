@@ -49,11 +49,17 @@ const allowedDirs = await resolveAllowedDirs();
 server.registerTool(
   "trueline_read",
   {
-    description: "Read a file; returns N:hash|content per line plus a range checksum.",
+    description: "Read a file; returns N:hash|content per line plus a checksum per range.",
     inputSchema: z.object({
       file_path: z.string(),
-      start_line: z.number().int().positive().optional(),
-      end_line: z.number().int().positive().optional(),
+      ranges: z
+        .array(
+          z.object({
+            start: z.number().int().positive().optional(),
+            end: z.number().int().positive().optional(),
+          }),
+        )
+        .optional(),
     }),
   },
   async (params) => {
@@ -64,13 +70,13 @@ server.registerTool(
 server.registerTool(
   "trueline_edit",
   {
-    description: "Apply hash-verified edits to a file. Pass all changes in `edits` array.",
+    description: "Apply hash-verified edits to a file. Each edit carries its own checksum.",
     inputSchema: z.object({
       file_path: z.string(),
-      checksum: z.string().describe("Checksum from trueline_read (e.g. 1-50:ab12cd34)"),
       edits: z
         .array(
           z.object({
+            checksum: z.string().describe("Checksum from trueline_read for the covering range"),
             range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
             content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
           }),
@@ -86,13 +92,13 @@ server.registerTool(
 server.registerTool(
   "trueline_diff",
   {
-    description: "Preview edits as a unified diff without writing to disk.",
+    description: "Preview edits as a unified diff without writing to disk. Each edit carries its own checksum.",
     inputSchema: z.object({
       file_path: z.string(),
-      checksum: z.string().describe("Checksum from trueline_read (e.g. 1-50:ab12cd34)"),
       edits: z
         .array(
           z.object({
+            checksum: z.string().describe("Checksum from trueline_read for the covering range"),
             range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
             content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
           }),

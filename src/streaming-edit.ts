@@ -84,7 +84,7 @@ function buffersEqual(a: Buffer[], b: Buffer[]): boolean {
 export async function streamingEdit(
   resolvedPath: string,
   ops: StreamEditOp[],
-  checksumRef: ChecksumRef,
+  checksumRefs: ChecksumRef[],
   mtimeMs: number,
   dryRun = false,
 ): Promise<StreamingEditResult> {
@@ -109,8 +109,13 @@ export async function streamingEdit(
     opsByStartLine.set(op.startLine, list);
   }
 
-  // Checksum accumulator for the single top-level checksum
-  let csHash = FNV_OFFSET_BASIS;
+  // Per-checksum-ref accumulators (sorted by startLine from validateEdits)
+  const csAccumulators = checksumRefs.map((ref) => ({
+    ref,
+    hash: FNV_OFFSET_BASIS,
+    verified: false,
+  }));
+  let csIdx = 0;
 
   // ---- Temp file setup ----
   const dir = dirname(resolvedPath);
@@ -249,9 +254,18 @@ export async function streamingEdit(
       const lineH = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
       const letters = hashToLetters(lineH);
 
-      // Feed into checksum accumulator
-      if (lineNumber >= checksumRef.startLine && lineNumber <= checksumRef.endLine) {
-        csHash = foldHash(csHash, lineH);
+      // Feed into checksum accumulators
+      while (csIdx < csAccumulators.length) {
+        const acc = csAccumulators[csIdx];
+        if (lineNumber < acc.ref.startLine) break;
+        if (lineNumber > acc.ref.endLine) {
+          acc.verified = true;
+          csIdx++;
+          continue;
+        }
+        // Within this accumulator's range
+        acc.hash = foldHash(acc.hash, lineH);
+        break;
       }
 
       // Check if we're inside an active replace range (skipping lines)
@@ -384,22 +398,27 @@ export async function streamingEdit(
     throw err;
   }
 
-  // ---- Verify checksum ----
-  // Skip empty-file sentinel
-  if (checksumRef.startLine === 0 && checksumRef.endLine === 0) {
-    if (totalLines !== 0) {
-      return await fail(`Checksum mismatch: expected empty file but file has ${totalLines} lines`);
+  // ---- Verify checksums ----
+  for (const acc of csAccumulators) {
+    const ref = acc.ref;
+
+    // Skip empty-file sentinel
+    if (ref.startLine === 0 && ref.endLine === 0) {
+      if (totalLines !== 0) {
+        return await fail(`Checksum mismatch: expected empty file but file has ${totalLines} lines`);
+      }
+      continue;
     }
-  } else {
+
     // Check if checksum range exceeds file length
-    if (checksumRef.endLine > totalLines) {
+    if (ref.endLine > totalLines) {
       return await fail(
-        `Checksum range ${checksumRef.startLine}-${checksumRef.endLine} exceeds ` + `file length (${totalLines} lines)`,
+        `Checksum range ${ref.startLine}-${ref.endLine} exceeds ` + `file length (${totalLines} lines)`,
       );
     }
 
-    const expected = checksumRef.hash;
-    const actual = csHash.toString(16).padStart(8, "0");
+    const expected = ref.hash;
+    const actual = acc.hash.toString(16).padStart(8, "0");
     if (actual !== expected) {
       await cleanupTmp();
 
@@ -417,7 +436,7 @@ export async function streamingEdit(
       }
 
       const base =
-        `${resolvedPath}: checksum mismatch for lines ${checksumRef.startLine}\u2013${checksumRef.endLine}: ` +
+        `${resolvedPath}: checksum mismatch for lines ${ref.startLine}\u2013${ref.endLine}: ` +
         `expected ${expected}, got ${actual}. File changed since last read.`;
 
       if (minLine !== Infinity) {
@@ -427,7 +446,7 @@ export async function streamingEdit(
             base +
             `\n\n` +
             `However, lines ${minLine}\u2013${maxLine} appear unchanged. ` +
-            `Re-read with trueline_read(start_line=${minLine}, end_line=${maxLine}) ` +
+            `Re-read with trueline_read(ranges=[{start: ${minLine}, end: ${maxLine}}]) ` +
             `to get a narrow checksum, then retry the edit.`,
         };
       }

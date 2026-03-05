@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe("validateEdits", () => {
   test("accepts valid single replace edit", () => {
-    const result = validateEdits([{ range: "2:ab..3:cd", content: "x\ny" }], "1-4:abcdef01");
+    const result = validateEdits([{ checksum: "1-4:abcdef01", range: "2:ab..3:cd", content: "x\ny" }]);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.ops).toHaveLength(1);
@@ -26,18 +26,18 @@ describe("validateEdits", () => {
       expect(result.ops[0].endLine).toBe(3);
       expect(result.ops[0].startHash).toBe("ab");
       expect(result.ops[0].endHash).toBe("cd");
-      expect(result.checksumRef.startLine).toBe(1);
-      expect(result.checksumRef.endLine).toBe(4);
+      expect(result.checksumRefs[0].startLine).toBe(1);
+      expect(result.checksumRefs[0].endLine).toBe(4);
     }
   });
 
   test("accepts valid insert_after at line 0", () => {
-    const result = validateEdits([{ range: "+0:", content: "new" }], "0-0:00000000");
+    const result = validateEdits([{ checksum: "0-0:00000000", range: "+0:", content: "new" }]);
     expect(result.ok).toBe(true);
   });
 
   test("rejects line 0 without insert_after", () => {
-    const result = validateEdits([{ range: "0:", content: "x" }], "0-0:00000000");
+    const result = validateEdits([{ checksum: "0-0:00000000", range: "0:", content: "x" }]);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.content[0].text).toContain("insert-after (use +0: prefix)");
@@ -45,7 +45,7 @@ describe("validateEdits", () => {
   });
 
   test("rejects checksum that does not cover edit range", () => {
-    const result = validateEdits([{ range: "4:ab..4:ab", content: "x" }], "1-2:abcdef01");
+    const result = validateEdits([{ checksum: "1-2:abcdef01", range: "4:ab..4:ab", content: "x" }]);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.content[0].text).toContain("does not cover");
@@ -53,13 +53,10 @@ describe("validateEdits", () => {
   });
 
   test("rejects overlapping replace ranges", () => {
-    const result = validateEdits(
-      [
-        { range: "1:aa..2:bb", content: "A" },
-        { range: "2:bb..2:bb", content: "B" },
-      ],
-      "1-4:abcdef01",
-    );
+    const result = validateEdits([
+      { checksum: "1-4:abcdef01", range: "1:aa..2:bb", content: "A" },
+      { checksum: "1-4:abcdef01", range: "2:bb..2:bb", content: "B" },
+    ]);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.content[0].text).toContain("Overlapping");
@@ -67,13 +64,10 @@ describe("validateEdits", () => {
   });
 
   test("allows insert_after ops at same anchor (no overlap)", () => {
-    const result = validateEdits(
-      [
-        { range: "+1:aa", content: "A" },
-        { range: "+1:aa", content: "B" },
-      ],
-      "1-4:abcdef01",
-    );
+    const result = validateEdits([
+      { checksum: "1-4:abcdef01", range: "+1:aa", content: "A" },
+      { checksum: "1-4:abcdef01", range: "+1:aa", content: "B" },
+    ]);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.ops).toHaveLength(2);
@@ -82,13 +76,10 @@ describe("validateEdits", () => {
 
   test("rejects insert-after inside a replace range", () => {
     // Replace covers lines 2-4, insert-after at line 3 is ambiguous
-    const result = validateEdits(
-      [
-        { range: "2:aa..4:bb", content: "A\nB\nC" },
-        { range: "+3:cc", content: "inserted" },
-      ],
-      "1-5:abcdef01",
-    );
+    const result = validateEdits([
+      { checksum: "1-5:abcdef01", range: "2:aa..4:bb", content: "A\nB\nC" },
+      { checksum: "1-5:abcdef01", range: "+3:cc", content: "inserted" },
+    ]);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.content[0].text).toContain("Insert-after at line 3 conflicts with replace range");
@@ -97,13 +88,10 @@ describe("validateEdits", () => {
 
   test("allows insert-after at end of replace range (not inside)", () => {
     // Replace covers lines 2-4, insert-after at line 4 is at the boundary
-    const result = validateEdits(
-      [
-        { range: "2:aa..4:bb", content: "A\nB\nC" },
-        { range: "+4:bb", content: "after replace" },
-      ],
-      "1-5:abcdef01",
-    );
+    const result = validateEdits([
+      { checksum: "1-5:abcdef01", range: "2:aa..4:bb", content: "A\nB\nC" },
+      { checksum: "1-5:abcdef01", range: "+4:bb", content: "after replace" },
+    ]);
     expect(result.ok).toBe(true);
   });
 });
@@ -116,9 +104,10 @@ describe("streamingEdit", () => {
   // Helper to run streamingEdit with proper setup
   async function runEdit(filePath: string, edits: any[], checksum: string) {
     const { mtimeMs } = statSync(filePath);
-    const validated = validateEdits(edits, checksum);
+    const editsWithChecksum = edits.map((e: any) => ({ checksum, ...e }));
+    const validated = validateEdits(editsWithChecksum);
     if (!validated.ok) throw new Error("validateEdits failed: " + validated.error.content[0].text);
-    return streamingEdit(filePath, validated.ops, validated.checksumRef, mtimeMs);
+    return streamingEdit(filePath, validated.ops, validated.checksumRefs, mtimeMs);
   }
 
   // --------------------------------------------------------------------------
@@ -278,10 +267,10 @@ describe("streamingEdit", () => {
     writeFileSync(f, "line 1\nline 2\nline 3\n");
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ range: "1:aa..1:aa", content: "nope" }], "1-3:00000000");
+    const validated = validateEdits([{ checksum: "1-3:00000000", range: "1:aa..1:aa", content: "nope" }]);
     if (!validated.ok) return;
 
-    const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
+    const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("mismatch");
   });
@@ -293,10 +282,10 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ range: "1:zz..1:zz", content: "nope" }], cs);
+    const validated = validateEdits([{ checksum: cs, range: "1:zz..1:zz", content: "nope" }]);
     if (!validated.ok) return;
 
-    const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
+    const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("mismatch");
   });
@@ -307,10 +296,10 @@ describe("streamingEdit", () => {
     const { mtimeMs } = statSync(f);
     const h = lineHash("only");
 
-    const validated = validateEdits([{ range: `1:${h}..1:${h}`, content: "x" }], "1-5:abcdef01");
+    const validated = validateEdits([{ checksum: "1-5:abcdef01", range: `1:${h}..1:${h}`, content: "x" }]);
     if (!validated.ok) return;
 
-    const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
+    const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("exceeds");
   });
@@ -350,10 +339,10 @@ describe("streamingEdit", () => {
     writeFileSync(f, Buffer.from([0x68, 0x65, 0x00, 0x6c, 0x6f]));
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ range: "1:aa", content: "x" }], "1-1:abcdef01");
+    const validated = validateEdits([{ checksum: "1-1:abcdef01", range: "1:aa", content: "x" }]);
     if (!validated.ok) return;
 
-    const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
+    const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("binary");
   });
@@ -363,10 +352,10 @@ describe("streamingEdit", () => {
     writeFileSync(f, "");
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ range: "+0:", content: "new content" }], "0-0:00000000");
+    const validated = validateEdits([{ checksum: "0-0:00000000", range: "+0:", content: "new content" }]);
     if (!validated.ok) return;
 
-    const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
+    const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toContain("new content");
   });
@@ -398,10 +387,10 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 2);
     const h1 = lineHash("line 1");
 
-    const validated = validateEdits([{ range: `1:${h1}`, content: "changed" }], cs);
+    const validated = validateEdits([{ checksum: cs, range: `1:${h1}`, content: "changed" }]);
     if (!validated.ok) return;
 
-    const result = await streamingEdit(f, validated.ops, validated.checksumRef, oldMtime);
+    const result = await streamingEdit(f, validated.ops, validated.checksumRefs, oldMtime);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("modified by another process");
   });
@@ -412,10 +401,10 @@ describe("streamingEdit", () => {
     const { mtimeMs } = statSync(f);
 
     // Wrong checksum to trigger a mismatch error
-    const validated = validateEdits([{ range: "1:aa..1:aa", content: "x" }], "1-2:00000000");
+    const validated = validateEdits([{ checksum: "1-2:00000000", range: "1:aa..1:aa", content: "x" }]);
     if (!validated.ok) return;
 
-    const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
+    const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain(f);
@@ -427,10 +416,10 @@ describe("streamingEdit", () => {
     writeFileSync(f, Buffer.from([0x68, 0x65, 0x00, 0x6c, 0x6f]));
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ range: "1:aa", content: "x" }], "1-1:abcdef01");
+    const validated = validateEdits([{ checksum: "1-1:abcdef01", range: "1:aa", content: "x" }]);
     if (!validated.ok) return;
 
-    const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
+    const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain(f);

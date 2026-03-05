@@ -29,9 +29,9 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${h2}..3:${h3}`,
           content: "replaced 2\nreplaced 3",
         },
@@ -51,9 +51,9 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `+1:${h1}`,
           content: "inserted",
         },
@@ -69,9 +69,9 @@ describe("handleEdit", () => {
   test("rejects stale checksum", async () => {
     const result = await handleEdit({
       file_path: testFile,
-      checksum: "1-4:00000000",
       edits: [
         {
+          checksum: "1-4:00000000",
           range: "1:aa..1:aa",
           content: "nope",
         },
@@ -89,9 +89,9 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: "1:zz..1:zz",
           content: "nope",
         },
@@ -113,8 +113,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: crlfFile,
-      checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: "replaced" }],
+      edits: [{ checksum: cs, range: `2:${h2}..2:${h2}`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -135,8 +134,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: mixedFile,
-      checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: "replaced" }],
+      edits: [{ checksum: cs, range: `2:${h2}..2:${h2}`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -156,8 +154,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: mixedFile,
-      checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: "replaced" }],
+      edits: [{ checksum: cs, range: `2:${h2}..2:${h2}`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -173,8 +170,7 @@ describe("handleEdit", () => {
 
     await handleEdit({
       file_path: testFile,
-      checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: "replaced" }],
+      edits: [{ checksum: cs, range: `2:${h2}..2:${h2}`, content: "replaced" }],
       projectDir: testDir,
     });
     const written = readFileSync(testFile, "utf-8");
@@ -184,8 +180,7 @@ describe("handleEdit", () => {
   test("rejects directory path", async () => {
     const result = await handleEdit({
       file_path: testDir,
-      checksum: "1-1:00000000",
-      edits: [{ range: "1:aa..1:aa", content: "x" }],
+      edits: [{ checksum: "1-1:00000000", range: "1:aa..1:aa", content: "x" }],
       projectDir: testDir,
     });
     expect(result.isError).toBe(true);
@@ -197,8 +192,7 @@ describe("handleEdit", () => {
     writeFileSync(binFile, Buffer.from([0x00, 0x01, 0x02, 0x03]));
     const result = await handleEdit({
       file_path: binFile,
-      checksum: "1-1:00000000",
-      edits: [{ range: "1:aa..1:aa", content: "x" }],
+      edits: [{ checksum: "1-1:00000000", range: "1:aa..1:aa", content: "x" }],
       projectDir: testDir,
     });
     expect(result.isError).toBe(true);
@@ -208,8 +202,7 @@ describe("handleEdit", () => {
   test("rejects nonexistent projectDir", async () => {
     const result = await handleEdit({
       file_path: testFile,
-      checksum: "1-1:0000",
-      edits: [{ range: "1:aa..1:aa", content: "x" }],
+      edits: [{ checksum: "1-1:0000", range: "1:aa..1:aa", content: "x" }],
       projectDir: "/nonexistent/does/not/exist",
     });
     expect(result.isError).toBe(true);
@@ -226,10 +219,9 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      checksum: cs,
       edits: [
-        { range: `1:${h1}..2:${h2}`, content: "A" },
-        { range: `2:${h2}..2:${h2}`, content: "B" },
+        { checksum: cs, range: `1:${h1}..2:${h2}`, content: "A" },
+        { checksum: cs, range: `2:${h2}..2:${h2}`, content: "B" },
       ],
       projectDir: testDir,
     });
@@ -244,9 +236,9 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      checksum: partialCs,
       edits: [
         {
+          checksum: partialCs,
           range: `4:${h4}..4:${h4}`,
           content: "replaced",
         },
@@ -268,8 +260,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: noTrailingFile,
-      checksum: cs,
-      edits: [{ range: `1:${h1}..1:${h1}`, content: "replaced" }],
+      edits: [{ checksum: cs, range: `1:${h1}..1:${h1}`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -283,9 +274,9 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: emptyFile,
-      checksum: "0-0:00000000",
       edits: [
         {
+          checksum: "0-0:00000000",
           range: "+0:",
           content: "new content",
         },
@@ -308,9 +299,9 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: filePath,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "bbb", // same content
         },
@@ -337,9 +328,9 @@ describe("handleEdit", () => {
     // Attempt to edit line 2, which hasn't changed
     const result = await handleEdit({
       file_path: filePath,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "BBB",
         },
@@ -349,8 +340,8 @@ describe("handleEdit", () => {
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    expect(text).toContain("start_line"); // suggests narrow re-read
-    expect(text).toContain("end_line");
+    expect(text).toContain("ranges="); // suggests narrow re-read
+    expect(text).toContain("end:");
   });
 
   test("checksum failure with changed edit-target lines gives standard error", async () => {
@@ -365,9 +356,9 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: filePath,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "xxx",
         },
@@ -378,7 +369,7 @@ describe("handleEdit", () => {
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
     // Should NOT suggest narrow re-read since target lines changed too
-    expect(text).not.toContain("start_line");
+    expect(text).not.toContain("ranges=");
   });
 
   test("denies editing .env file", async () => {
@@ -399,8 +390,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: envFile,
-      checksum: cs,
-      edits: [{ range: `1:${h}..1:${h}`, content: "hacked" }],
+      edits: [{ checksum: cs, range: `1:${h}..1:${h}`, content: "hacked" }],
       projectDir: testDir,
     });
 

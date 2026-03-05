@@ -38,9 +38,9 @@ describe("single-line file edits", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("only")}`,
           content: "replaced",
         },
@@ -57,9 +57,9 @@ describe("single-line file edits", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("only")}`,
           content: "replaced",
         },
@@ -77,9 +77,9 @@ describe("single-line file edits", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "x1\nx2\nx3",
         },
@@ -96,9 +96,9 @@ describe("single-line file edits", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}..3:${lineHash("ccc")}`,
           content: "merged",
         },
@@ -115,9 +115,9 @@ describe("single-line file edits", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "",
         },
@@ -140,9 +140,9 @@ describe("empty file operations", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: EMPTY_FILE_CHECKSUM,
       edits: [
         {
+          checksum: EMPTY_FILE_CHECKSUM,
           range: "+0:",
           content: "first\nsecond",
         },
@@ -161,9 +161,9 @@ describe("empty file operations", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: EMPTY_FILE_CHECKSUM,
       edits: [
         {
+          checksum: EMPTY_FILE_CHECKSUM,
           range: "0:",
           content: "nope",
         },
@@ -180,9 +180,9 @@ describe("empty file operations", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: EMPTY_FILE_CHECKSUM,
       edits: [
         {
+          checksum: EMPTY_FILE_CHECKSUM,
           range: "+0:",
           content: "prepend",
         },
@@ -204,9 +204,9 @@ describe("insert-after (+ prefix)", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `+2:${lineHash("bbb")}`,
           content: "appended",
         },
@@ -223,9 +223,9 @@ describe("insert-after (+ prefix)", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `+1:${lineHash("aaa")}`,
           content: "inserted",
         },
@@ -242,9 +242,9 @@ describe("insert-after (+ prefix)", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: "+0:",
           content: "prepended",
         },
@@ -262,13 +262,14 @@ describe("insert-after (+ prefix)", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `+1:${lineHash("aaa")}`,
           content: "after-1",
         },
         {
+          checksum: cs,
           range: `+3:${lineHash("ccc")}`,
           content: "after-3",
         },
@@ -285,13 +286,14 @@ describe("insert-after (+ prefix)", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "BBB",
         },
         {
+          checksum: cs,
           range: `+2:${lineHash("bbb")}`,
           content: "inserted",
         },
@@ -314,9 +316,9 @@ describe("multi-line replacements", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
           content: "entirely\nnew",
         },
@@ -333,13 +335,14 @@ describe("multi-line replacements", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("aaa")}`,
           content: "AAA",
         },
         {
+          checksum: cs,
           range: `3:${lineHash("ccc")}`,
           content: "CCC",
         },
@@ -356,9 +359,9 @@ describe("multi-line replacements", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
           content: "",
         },
@@ -383,9 +386,9 @@ describe("no-op detection", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "bbb",
         },
@@ -403,9 +406,9 @@ describe("no-op detection", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
           content: "aaa\nbbb\nccc",
         },
@@ -429,9 +432,9 @@ describe("checksum validation", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: narrowCs,
       edits: [
         {
+          checksum: narrowCs,
           range: `3:${lineHash("ccc")}`,
           content: "CCC",
         },
@@ -449,9 +452,9 @@ describe("checksum validation", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: narrowCs,
       edits: [
         {
+          checksum: narrowCs,
           range: `4:${lineHash("ddd")}`,
           content: "DDD",
         },
@@ -468,13 +471,14 @@ describe("checksum validation", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("aaa")}`,
           content: "AAA",
         },
         {
+          checksum: cs,
           range: `4:${lineHash("ddd")}`,
           content: "DDD",
         },
@@ -493,9 +497,9 @@ describe("checksum validation", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: fakeCs,
       edits: [
         {
+          checksum: fakeCs,
           range: `1:${lineHash("aaa")}`,
           content: "AAA",
         },
@@ -522,9 +526,9 @@ describe("line ending preservation", () => {
 
     const result = await handleEdit({
       file_path: f,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "BBB",
         },
@@ -547,9 +551,9 @@ describe("line ending preservation", () => {
 
     const result = await handleEdit({
       file_path: f,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("aaa")}..2:${lineHash("bbb")}`,
           content: "XXX\nYYY\nZZZ",
         },
@@ -571,9 +575,9 @@ describe("line ending preservation", () => {
 
     const result = await handleEdit({
       file_path: f,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `+2:${lineHash("bbb")}`,
           content: "appended",
         },
@@ -599,9 +603,9 @@ describe("unicode in edits", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("hello")}`,
           content: "🎉 héllo 𝕳",
         },
@@ -618,9 +622,9 @@ describe("unicode in edits", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("中文")}`,
           content: "中文（修正済み）",
         },
@@ -660,9 +664,9 @@ describe("read-then-edit round-trip", () => {
     // Edit using the extracted values
     const editResult = await handleEdit({
       file_path: f,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lh}`,
           content: "BETA",
         },
@@ -695,9 +699,9 @@ describe("read-then-edit round-trip", () => {
 
     const editResult = await handleEdit({
       file_path: f,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `3:${lh}`,
           content: "CCC",
         },
@@ -717,9 +721,9 @@ describe("read-then-edit round-trip", () => {
     const { cs } = setupFile("chain.txt", "aaa\nbbb\nccc\n");
     const edit1 = await handleEdit({
       file_path: f,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "BBB",
         },
@@ -739,9 +743,9 @@ describe("read-then-edit round-trip", () => {
     // Second edit using new checksum
     const edit2 = await handleEdit({
       file_path: f,
-      checksum: newCs,
       edits: [
         {
+          checksum: newCs,
           range: `3:${lh}`,
           content: "CCC",
         },
@@ -764,10 +768,9 @@ describe("overlap detection", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
-        { range: `2:${lineHash("bbb")}`, content: "X" },
-        { range: `2:${lineHash("bbb")}`, content: "Y" },
+        { checksum: cs, range: `2:${lineHash("bbb")}`, content: "X" },
+        { checksum: cs, range: `2:${lineHash("bbb")}`, content: "Y" },
       ],
       projectDir: testDir,
     });
@@ -781,10 +784,9 @@ describe("overlap detection", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
-        { range: `1:${lineHash("aaa")}..2:${lineHash("bbb")}`, content: "AB" },
-        { range: `3:${lineHash("ccc")}..4:${lineHash("ddd")}`, content: "CD" },
+        { checksum: cs, range: `1:${lineHash("aaa")}..2:${lineHash("bbb")}`, content: "AB" },
+        { checksum: cs, range: `3:${lineHash("ccc")}..4:${lineHash("ddd")}`, content: "CD" },
       ],
       projectDir: testDir,
     });
@@ -798,13 +800,14 @@ describe("overlap detection", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `+1:${lineHash("aaa")}`,
           content: "ins1",
         },
         {
+          checksum: cs,
           range: `+1:${lineHash("aaa")}`,
           content: "ins2",
         },
@@ -829,9 +832,9 @@ describe("hash verification", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:zz..3:${lineHash("ccc")}`,
           content: "new",
         },
@@ -848,9 +851,9 @@ describe("hash verification", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("aaa")}..3:zz`,
           content: "new",
         },
@@ -867,9 +870,9 @@ describe("hash verification", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
           content: "only",
         },
@@ -895,9 +898,9 @@ describe("stale file detection", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "BBB",
         },
@@ -921,9 +924,9 @@ describe("special content", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("a|b|c")}`,
           content: "x|y|z",
         },
@@ -940,9 +943,9 @@ describe("special content", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("key: value")}`,
           content: "key: new_value",
         },
@@ -959,9 +962,9 @@ describe("special content", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("  indented  ")}`,
           content: "    more indented    ",
         },
@@ -978,9 +981,9 @@ describe("special content", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `2:${lineHash("bbb")}`,
           content: "\n\n",
         },
@@ -1009,9 +1012,9 @@ describe("file metadata", () => {
 
     const result = await handleEdit({
       file_path: path,
-      checksum: cs,
       edits: [
         {
+          checksum: cs,
           range: `1:${lineHash("aaa")}`,
           content: "AAA",
         },

@@ -7,14 +7,13 @@ import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 interface DiffParams {
   file_path: string;
-  checksum: string;
   edits: EditInput[];
   projectDir?: string;
   allowedDirs?: string[];
 }
 
 export async function handleDiff(params: DiffParams): Promise<ToolResult> {
-  const { file_path, checksum, edits, projectDir, allowedDirs } = params;
+  const { file_path, edits, projectDir, allowedDirs } = params;
 
   // Diff uses Read deny patterns (not Edit) because diff is a read-only preview
   // operation — if you cannot read a file, you should not be able to diff it either.
@@ -25,10 +24,10 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 
   const { resolvedPath, mtimeMs } = validated;
 
-  const built = validateEdits(edits, checksum);
+  const built = validateEdits(edits);
   if (!built.ok) return built.error;
 
-  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRef, mtimeMs, true);
+  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true);
 
   if (!result.ok) {
     return errorResult(result.error);
