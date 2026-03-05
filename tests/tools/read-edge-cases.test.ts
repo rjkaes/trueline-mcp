@@ -288,7 +288,7 @@ describe("range parameters", () => {
   test("reading a middle range produces correct checksum", async () => {
     const f = join(testDir, "range-checksum.txt");
     const fileLines = ["aaa", "bbb", "ccc", "ddd", "eee"];
-    writeFileSync(f, fileLines.join("\n") + "\n");
+    writeFileSync(f, `${fileLines.join("\n")}\n`);
 
     const result = await handleRead({ file_path: f, start_line: 2, end_line: 4, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -306,7 +306,7 @@ describe("checksum consistency", () => {
   test("full-file read checksum matches rangeChecksum helper", async () => {
     const f = join(testDir, "cs-full.txt");
     const fileLines = ["alpha", "beta", "gamma"];
-    writeFileSync(f, fileLines.join("\n") + "\n");
+    writeFileSync(f, `${fileLines.join("\n")}\n`);
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     const expectedCs = rangeChecksum(fileLines, 1, 3);
@@ -361,7 +361,7 @@ describe("long lines", () => {
   test("very long line (10KB)", async () => {
     const f = join(testDir, "long-line.txt");
     const longLine = "x".repeat(10_000);
-    writeFileSync(f, longLine + "\n");
+    writeFileSync(f, `${longLine}\n`);
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -371,7 +371,7 @@ describe("long lines", () => {
   test("many short lines (1000)", async () => {
     const f = join(testDir, "many-lines.txt");
     const lines = Array.from({ length: 1000 }, (_, i) => `line ${i + 1}`);
-    writeFileSync(f, lines.join("\n") + "\n");
+    writeFileSync(f, `${lines.join("\n")}\n`);
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();

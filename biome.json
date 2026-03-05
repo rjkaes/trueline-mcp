@@ -29,10 +29,11 @@
       "recommended": true,
       "style": {
         "noNonNullAssertion": "off",
-        "useTemplate": "off"
+        "useImportType": "error",
+        "useTemplate": "warn"
       },
       "suspicious": {
-        "noExplicitAny": "off",
+        "noExplicitAny": "warn",
         "useBiomeIgnoreFolder": "off"
       }
     }

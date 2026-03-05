@@ -177,7 +177,7 @@ export function evaluateFilePath(
     // Relative glob with "/" — treat as a suffix match via globstar prefix.
     // e.g. deny pattern "src/.env" should match "/project/src/.env".
     if (!glob.startsWith("/") && !glob.startsWith("*")) {
-      return fileGlobToRegex("**/" + glob, caseInsensitive).test(normalized);
+      return fileGlobToRegex(`**/${glob}`, caseInsensitive).test(normalized);
     }
 
     return false;

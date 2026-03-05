@@ -88,7 +88,7 @@ describe("handleRead", () => {
   test("reads multiple disjoint ranges with separate checksums", async () => {
     const lines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
     const multiFile = join(testDir, "multi.txt");
-    writeFileSync(multiFile, lines.join("\n") + "\n");
+    writeFileSync(multiFile, `${lines.join("\n")}\n`);
 
     const result = await handleRead({
       file_path: multiFile,

@@ -191,7 +191,7 @@ export function parseRanges(ranges: RangeInput[] | undefined): ReadRange[] {
     }
     if (curr.start === prev.end + 1) {
       throw new Error(
-        `Ranges are adjacent: ${prev.start}-${prev.end} and ${curr.start}-${curr.end}. ` + `Merge into a single range.`,
+        `Ranges are adjacent: ${prev.start}-${prev.end} and ${curr.start}-${curr.end}. Merge into a single range.`,
       );
     }
   }

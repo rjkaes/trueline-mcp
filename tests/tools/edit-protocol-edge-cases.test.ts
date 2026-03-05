@@ -834,7 +834,7 @@ describe("boundary hash verification", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: "1:zz..2:" + lineHash("bbb"), content: "x\ny" }],
+      edits: [{ checksum: cs, range: `1:zz..2:${lineHash("bbb")}`, content: "x\ny" }],
     });
 
     expect(result.isError).toBe(true);
@@ -994,7 +994,7 @@ describe("large file edits", () => {
   test("edit line in a 1000-line file", async () => {
     const lines: string[] = [];
     for (let i = 0; i < 1000; i++) lines.push(`line ${i + 1}`);
-    const content = lines.join("\n") + "\n";
+    const content = `${lines.join("\n")}\n`;
     const { path } = setupFile("large.txt", content);
 
     const target = "line 500";
@@ -1016,7 +1016,7 @@ describe("large file edits", () => {
   test("multiple scattered edits in a large file", async () => {
     const lines: string[] = [];
     for (let i = 0; i < 500; i++) lines.push(`line ${i + 1}`);
-    const content = lines.join("\n") + "\n";
+    const content = `${lines.join("\n")}\n`;
     const { path } = setupFile("scatter.txt", content);
 
     const cs = rangeChecksum(lines, 1, 500);

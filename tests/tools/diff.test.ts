@@ -194,7 +194,7 @@ describe("handleDiff", () => {
     // more than 5 lines were handled incorrectly.
     const bigFile = join(testDir, "big.ts");
     const original = ["a", "b", "c", "d", "e", "f", "g", "h"];
-    writeFileSync(bigFile, original.join("\n") + "\n");
+    writeFileSync(bigFile, `${original.join("\n")}\n`);
 
     const cs = rangeChecksum(original, 1, 8);
     const ha = lineHash("a");

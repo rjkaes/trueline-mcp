@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, statSyn
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { lineHash, rangeChecksum } from "./helpers.ts";
-import { validateEdits } from "../src/tools/shared.ts";
+import { type EditInput, validateEdits } from "../src/tools/shared.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
 
 let testDir: string;
@@ -102,11 +102,11 @@ describe("validateEdits", () => {
 
 describe("streamingEdit", () => {
   // Helper to run streamingEdit with proper setup
-  async function runEdit(filePath: string, edits: any[], checksum: string) {
+  async function runEdit(filePath: string, edits: Omit<EditInput, "checksum">[], checksum: string) {
     const { mtimeMs } = statSync(filePath);
-    const editsWithChecksum = edits.map((e: any) => ({ checksum, ...e }));
+    const editsWithChecksum = edits.map((e) => ({ checksum, ...e }));
     const validated = validateEdits(editsWithChecksum);
-    if (!validated.ok) throw new Error("validateEdits failed: " + validated.error.content[0].text);
+    if (!validated.ok) throw new Error(`validateEdits failed: ${validated.error.content[0].text}`);
     return streamingEdit(filePath, validated.ops, validated.checksumRefs, mtimeMs);
   }
 
