@@ -74,7 +74,7 @@ jq --arg v "$new_version" '.version = $v' .claude-plugin/plugin.json > "$tmp" &&
 
 # Commit and tag
 git add package.json .claude-plugin/plugin.json
-git commit -m "chore: release v${new_version}"
+LEFTHOOK=0 git commit -m "chore: release v${new_version}"
 git tag "$tag"
 
 # Push
