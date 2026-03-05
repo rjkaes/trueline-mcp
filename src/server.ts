@@ -60,6 +60,7 @@ server.registerTool(
           }),
         )
         .optional(),
+      encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
     }),
   },
   async (params) => {
@@ -82,6 +83,7 @@ server.registerTool(
           }),
         )
         .min(1),
+      encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
     }),
   },
   async (params) => {
@@ -104,6 +106,7 @@ server.registerTool(
           }),
         )
         .min(1),
+      encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
     }),
   },
   async (params) => {
