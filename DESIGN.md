@@ -103,7 +103,7 @@ trueline_edit({
   checksum: "10-25:f7e2a1b0",
   edits: [{
     range: "12:mp..14:qk",
-    content: ["  const x = 1;", "  const y = 2;"],
+    content: "  const x = 1;\\n  const y = 2;",
   }]
 })
 ```
@@ -114,9 +114,9 @@ Each edit specifies:
   A single-line shorthand `12:mp` is equivalent to `12:mp..12:mp`.
   Prefix `+` for insert-after: `+5:ab` inserts content after line 5.
   Use `+0:` to prepend to the file.
-- **`content`** — the replacement lines. One string per line, no
-  newline characters. The array can be shorter or longer than the range
-  (shrinking or growing the file).
+- **`content`** — the replacement lines as a single newline-separated
+  string. The resulting lines can be fewer or more than the range
+  (shrinking or growing the file). An empty string deletes the range.
 
 The top-level **`checksum`** is the range checksum from a prior
 `trueline_read`. Must be the full string including the range prefix

@@ -44,7 +44,7 @@ trueline_edit(
   checksum: "1-112:a509e33a",
   edits: [{
     range: "+56:dd",
-    content: ["", "this is awesome", ""]
+    content: "\\nthis is awesome\\n"
   }]
 )
 ```
@@ -107,7 +107,7 @@ Each edit:
 | Field     | Type     | Description                                                                          |
 |-----------|----------|--------------------------------------------------------------------------------------|
 | `range`   | string   | `startLine:hash..endLine:hash` or `startLine:hash`; prefix `+` for insert-after     |
-| `content` | string[] | Replacement lines (one string per line, no `\n` chars). Empty array to delete range. |
+| `content` | string   | Replacement lines, newline-separated. Empty string to delete range.                  |
 
 ### `trueline_diff`
 

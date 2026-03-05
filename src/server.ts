@@ -72,7 +72,7 @@ server.registerTool(
         .array(
           z.object({
             range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
-            content: z.array(z.string()).describe("Replacement lines (one string per line, no \\n chars)"),
+            content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
           }),
         )
         .min(1),
@@ -94,7 +94,7 @@ server.registerTool(
         .array(
           z.object({
             range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
-            content: z.array(z.string()).describe("Replacement lines (one string per line, no \\n chars)"),
+            content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
           }),
         )
         .min(1),

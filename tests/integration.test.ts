@@ -47,7 +47,7 @@ describe("read → diff → edit roundtrip", () => {
         {
           range: `2:${line2Hash}..2:${line2Hash}`,
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
-          content: ["  return `Hello, ${name}!`;"],
+          content: "  return `Hello, ${name}!`;",
         },
       ],
       projectDir: testDir,
@@ -69,7 +69,7 @@ describe("read → diff → edit roundtrip", () => {
         {
           range: `2:${line2Hash}..2:${line2Hash}`,
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
-          content: ["  return `Hello, ${name}!`;"],
+          content: "  return `Hello, ${name}!`;",
         },
       ],
       projectDir: testDir,

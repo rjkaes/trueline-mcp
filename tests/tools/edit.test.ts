@@ -33,7 +33,7 @@ describe("handleEdit", () => {
       edits: [
         {
           range: `2:${h2}..3:${h3}`,
-          content: ["replaced 2", "replaced 3"],
+          content: "replaced 2\nreplaced 3",
         },
       ],
       projectDir: testDir,
@@ -55,7 +55,7 @@ describe("handleEdit", () => {
       edits: [
         {
           range: `+1:${h1}`,
-          content: ["inserted"],
+          content: "inserted",
         },
       ],
       projectDir: testDir,
@@ -73,7 +73,7 @@ describe("handleEdit", () => {
       edits: [
         {
           range: "1:aa..1:aa",
-          content: ["nope"],
+          content: "nope",
         },
       ],
       projectDir: testDir,
@@ -93,7 +93,7 @@ describe("handleEdit", () => {
       edits: [
         {
           range: "1:zz..1:zz",
-          content: ["nope"],
+          content: "nope",
         },
       ],
       projectDir: testDir,
@@ -114,7 +114,7 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: crlfFile,
       checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: ["replaced"] }],
+      edits: [{ range: `2:${h2}..2:${h2}`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -136,7 +136,7 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: mixedFile,
       checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: ["replaced"] }],
+      edits: [{ range: `2:${h2}..2:${h2}`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -157,7 +157,7 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: mixedFile,
       checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: ["replaced"] }],
+      edits: [{ range: `2:${h2}..2:${h2}`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -174,7 +174,7 @@ describe("handleEdit", () => {
     await handleEdit({
       file_path: testFile,
       checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: ["replaced"] }],
+      edits: [{ range: `2:${h2}..2:${h2}`, content: "replaced" }],
       projectDir: testDir,
     });
     const written = readFileSync(testFile, "utf-8");
@@ -185,7 +185,7 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: testDir,
       checksum: "1-1:00000000",
-      edits: [{ range: "1:aa..1:aa", content: ["x"] }],
+      edits: [{ range: "1:aa..1:aa", content: "x" }],
       projectDir: testDir,
     });
     expect(result.isError).toBe(true);
@@ -198,7 +198,7 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: binFile,
       checksum: "1-1:00000000",
-      edits: [{ range: "1:aa..1:aa", content: ["x"] }],
+      edits: [{ range: "1:aa..1:aa", content: "x" }],
       projectDir: testDir,
     });
     expect(result.isError).toBe(true);
@@ -209,7 +209,7 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: testFile,
       checksum: "1-1:0000",
-      edits: [{ range: "1:aa..1:aa", content: ["x"] }],
+      edits: [{ range: "1:aa..1:aa", content: "x" }],
       projectDir: "/nonexistent/does/not/exist",
     });
     expect(result.isError).toBe(true);
@@ -228,8 +228,8 @@ describe("handleEdit", () => {
       file_path: testFile,
       checksum: cs,
       edits: [
-        { range: `1:${h1}..2:${h2}`, content: ["A"] },
-        { range: `2:${h2}..2:${h2}`, content: ["B"] },
+        { range: `1:${h1}..2:${h2}`, content: "A" },
+        { range: `2:${h2}..2:${h2}`, content: "B" },
       ],
       projectDir: testDir,
     });
@@ -248,7 +248,7 @@ describe("handleEdit", () => {
       edits: [
         {
           range: `4:${h4}..4:${h4}`,
-          content: ["replaced"],
+          content: "replaced",
         },
       ],
       projectDir: testDir,
@@ -269,7 +269,7 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: noTrailingFile,
       checksum: cs,
-      edits: [{ range: `1:${h1}..1:${h1}`, content: ["replaced"] }],
+      edits: [{ range: `1:${h1}..1:${h1}`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -287,7 +287,7 @@ describe("handleEdit", () => {
       edits: [
         {
           range: "+0:",
-          content: ["new content"],
+          content: "new content",
         },
       ],
       projectDir: testDir,
@@ -312,7 +312,7 @@ describe("handleEdit", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["bbb"], // same content
+          content: "bbb", // same content
         },
       ],
       projectDir: testDir,
@@ -341,7 +341,7 @@ describe("handleEdit", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["BBB"],
+          content: "BBB",
         },
       ],
       projectDir: testDir,
@@ -369,7 +369,7 @@ describe("handleEdit", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["xxx"],
+          content: "xxx",
         },
       ],
       projectDir: testDir,
@@ -400,7 +400,7 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: envFile,
       checksum: cs,
-      edits: [{ range: `1:${h}..1:${h}`, content: ["hacked"] }],
+      edits: [{ range: `1:${h}..1:${h}`, content: "hacked" }],
       projectDir: testDir,
     });
 

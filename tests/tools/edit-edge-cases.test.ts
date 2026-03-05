@@ -42,7 +42,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           range: `1:${lineHash("only")}`,
-          content: ["replaced"],
+          content: "replaced",
         },
       ],
       projectDir: testDir,
@@ -61,7 +61,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           range: `1:${lineHash("only")}`,
-          content: ["replaced"],
+          content: "replaced",
         },
       ],
       projectDir: testDir,
@@ -81,7 +81,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["x1", "x2", "x3"],
+          content: "x1\nx2\nx3",
         },
       ],
       projectDir: testDir,
@@ -100,7 +100,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}..3:${lineHash("ccc")}`,
-          content: ["merged"],
+          content: "merged",
         },
       ],
       projectDir: testDir,
@@ -119,7 +119,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: [],
+          content: "",
         },
       ],
       projectDir: testDir,
@@ -144,7 +144,7 @@ describe("empty file operations", () => {
       edits: [
         {
           range: "+0:",
-          content: ["first", "second"],
+          content: "first\nsecond",
         },
       ],
       projectDir: testDir,
@@ -165,7 +165,7 @@ describe("empty file operations", () => {
       edits: [
         {
           range: "0:",
-          content: ["nope"],
+          content: "nope",
         },
       ],
       projectDir: testDir,
@@ -184,7 +184,7 @@ describe("empty file operations", () => {
       edits: [
         {
           range: "+0:",
-          content: ["prepend"],
+          content: "prepend",
         },
       ],
       projectDir: testDir,
@@ -208,7 +208,7 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           range: `+2:${lineHash("bbb")}`,
-          content: ["appended"],
+          content: "appended",
         },
       ],
       projectDir: testDir,
@@ -227,7 +227,7 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           range: `+1:${lineHash("aaa")}`,
-          content: ["inserted"],
+          content: "inserted",
         },
       ],
       projectDir: testDir,
@@ -246,7 +246,7 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           range: "+0:",
-          content: ["prepended"],
+          content: "prepended",
         },
       ],
       projectDir: testDir,
@@ -266,11 +266,11 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           range: `+1:${lineHash("aaa")}`,
-          content: ["after-1"],
+          content: "after-1",
         },
         {
           range: `+3:${lineHash("ccc")}`,
-          content: ["after-3"],
+          content: "after-3",
         },
       ],
       projectDir: testDir,
@@ -289,11 +289,11 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["BBB"],
+          content: "BBB",
         },
         {
           range: `+2:${lineHash("bbb")}`,
-          content: ["inserted"],
+          content: "inserted",
         },
       ],
       projectDir: testDir,
@@ -318,7 +318,7 @@ describe("multi-line replacements", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
-          content: ["entirely", "new"],
+          content: "entirely\nnew",
         },
       ],
       projectDir: testDir,
@@ -337,11 +337,11 @@ describe("multi-line replacements", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}`,
-          content: ["AAA"],
+          content: "AAA",
         },
         {
           range: `3:${lineHash("ccc")}`,
-          content: ["CCC"],
+          content: "CCC",
         },
       ],
       projectDir: testDir,
@@ -360,7 +360,7 @@ describe("multi-line replacements", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
-          content: [],
+          content: "",
         },
       ],
       projectDir: testDir,
@@ -387,7 +387,7 @@ describe("no-op detection", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["bbb"],
+          content: "bbb",
         },
       ],
       projectDir: testDir,
@@ -407,7 +407,7 @@ describe("no-op detection", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
-          content: ["aaa", "bbb", "ccc"],
+          content: "aaa\nbbb\nccc",
         },
       ],
       projectDir: testDir,
@@ -433,7 +433,7 @@ describe("checksum validation", () => {
       edits: [
         {
           range: `3:${lineHash("ccc")}`,
-          content: ["CCC"],
+          content: "CCC",
         },
       ],
       projectDir: testDir,
@@ -453,7 +453,7 @@ describe("checksum validation", () => {
       edits: [
         {
           range: `4:${lineHash("ddd")}`,
-          content: ["DDD"],
+          content: "DDD",
         },
       ],
       projectDir: testDir,
@@ -472,11 +472,11 @@ describe("checksum validation", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}`,
-          content: ["AAA"],
+          content: "AAA",
         },
         {
           range: `4:${lineHash("ddd")}`,
-          content: ["DDD"],
+          content: "DDD",
         },
       ],
       projectDir: testDir,
@@ -497,7 +497,7 @@ describe("checksum validation", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}`,
-          content: ["AAA"],
+          content: "AAA",
         },
       ],
       projectDir: testDir,
@@ -526,7 +526,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["BBB"],
+          content: "BBB",
         },
       ],
       projectDir: testDir,
@@ -551,7 +551,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}..2:${lineHash("bbb")}`,
-          content: ["XXX", "YYY", "ZZZ"],
+          content: "XXX\nYYY\nZZZ",
         },
       ],
       projectDir: testDir,
@@ -575,7 +575,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           range: `+2:${lineHash("bbb")}`,
-          content: ["appended"],
+          content: "appended",
         },
       ],
       projectDir: testDir,
@@ -603,7 +603,7 @@ describe("unicode in edits", () => {
       edits: [
         {
           range: `1:${lineHash("hello")}`,
-          content: ["🎉 héllo 𝕳"],
+          content: "🎉 héllo 𝕳",
         },
       ],
       projectDir: testDir,
@@ -622,7 +622,7 @@ describe("unicode in edits", () => {
       edits: [
         {
           range: `2:${lineHash("中文")}`,
-          content: ["中文（修正済み）"],
+          content: "中文（修正済み）",
         },
       ],
       projectDir: testDir,
@@ -664,7 +664,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           range: `2:${lh}`,
-          content: ["BETA"],
+          content: "BETA",
         },
       ],
       projectDir: testDir,
@@ -699,7 +699,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           range: `3:${lh}`,
-          content: ["CCC"],
+          content: "CCC",
         },
       ],
       projectDir: testDir,
@@ -721,7 +721,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["BBB"],
+          content: "BBB",
         },
       ],
       projectDir: testDir,
@@ -743,7 +743,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           range: `3:${lh}`,
-          content: ["CCC"],
+          content: "CCC",
         },
       ],
       projectDir: testDir,
@@ -766,8 +766,8 @@ describe("overlap detection", () => {
       file_path: path,
       checksum: cs,
       edits: [
-        { range: `2:${lineHash("bbb")}`, content: ["X"] },
-        { range: `2:${lineHash("bbb")}`, content: ["Y"] },
+        { range: `2:${lineHash("bbb")}`, content: "X" },
+        { range: `2:${lineHash("bbb")}`, content: "Y" },
       ],
       projectDir: testDir,
     });
@@ -783,8 +783,8 @@ describe("overlap detection", () => {
       file_path: path,
       checksum: cs,
       edits: [
-        { range: `1:${lineHash("aaa")}..2:${lineHash("bbb")}`, content: ["AB"] },
-        { range: `3:${lineHash("ccc")}..4:${lineHash("ddd")}`, content: ["CD"] },
+        { range: `1:${lineHash("aaa")}..2:${lineHash("bbb")}`, content: "AB" },
+        { range: `3:${lineHash("ccc")}..4:${lineHash("ddd")}`, content: "CD" },
       ],
       projectDir: testDir,
     });
@@ -802,11 +802,11 @@ describe("overlap detection", () => {
       edits: [
         {
           range: `+1:${lineHash("aaa")}`,
-          content: ["ins1"],
+          content: "ins1",
         },
         {
           range: `+1:${lineHash("aaa")}`,
-          content: ["ins2"],
+          content: "ins2",
         },
       ],
       projectDir: testDir,
@@ -833,7 +833,7 @@ describe("hash verification", () => {
       edits: [
         {
           range: `1:zz..3:${lineHash("ccc")}`,
-          content: ["new"],
+          content: "new",
         },
       ],
       projectDir: testDir,
@@ -852,7 +852,7 @@ describe("hash verification", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}..3:zz`,
-          content: ["new"],
+          content: "new",
         },
       ],
       projectDir: testDir,
@@ -871,7 +871,7 @@ describe("hash verification", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
-          content: ["only"],
+          content: "only",
         },
       ],
       projectDir: testDir,
@@ -899,7 +899,7 @@ describe("stale file detection", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["BBB"],
+          content: "BBB",
         },
       ],
       projectDir: testDir,
@@ -925,7 +925,7 @@ describe("special content", () => {
       edits: [
         {
           range: `1:${lineHash("a|b|c")}`,
-          content: ["x|y|z"],
+          content: "x|y|z",
         },
       ],
       projectDir: testDir,
@@ -944,7 +944,7 @@ describe("special content", () => {
       edits: [
         {
           range: `1:${lineHash("key: value")}`,
-          content: ["key: new_value"],
+          content: "key: new_value",
         },
       ],
       projectDir: testDir,
@@ -963,7 +963,7 @@ describe("special content", () => {
       edits: [
         {
           range: `1:${lineHash("  indented  ")}`,
-          content: ["    more indented    "],
+          content: "    more indented    ",
         },
       ],
       projectDir: testDir,
@@ -982,7 +982,7 @@ describe("special content", () => {
       edits: [
         {
           range: `2:${lineHash("bbb")}`,
-          content: ["", "", ""],
+          content: "\n\n",
         },
       ],
       projectDir: testDir,
@@ -1013,7 +1013,7 @@ describe("file metadata", () => {
       edits: [
         {
           range: `1:${lineHash("aaa")}`,
-          content: ["AAA"],
+          content: "AAA",
         },
       ],
       projectDir: testDir,

@@ -10,7 +10,7 @@ import { errorResult, type ToolResult } from "./types.ts";
 
 export interface EditInput {
   range: string;
-  content: string[];
+  content: string;
 }
 
 // ==============================================================================
@@ -168,7 +168,7 @@ export function validateEdits(edits: EditInput[], checksum: string): ValidateEdi
     ops.push({
       startLine: rangeRef.start.line,
       endLine: rangeRef.end.line,
-      content: edit.content,
+      content: edit.content === "" ? [] : edit.content.split("\n"),
       insertAfter: rangeRef.insertAfter,
       startHash: rangeRef.start.hash,
       endHash: rangeRef.end.hash,

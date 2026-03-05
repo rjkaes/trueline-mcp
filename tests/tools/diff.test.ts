@@ -31,7 +31,7 @@ describe("handleDiff", () => {
       edits: [
         {
           range: `2:${h2}..2:${h2}`,
-          content: ["CHANGED"],
+          content: "CHANGED",
         },
       ],
       projectDir: testDir,
@@ -56,7 +56,7 @@ describe("handleDiff", () => {
       edits: [
         {
           range: `1:${h1}..1:${h1}`,
-          content: ["CHANGED"],
+          content: "CHANGED",
         },
       ],
       projectDir: testDir,
@@ -75,7 +75,7 @@ describe("handleDiff", () => {
       edits: [
         {
           range: "1:zz..1:zz",
-          content: ["nope"],
+          content: "nope",
         },
       ],
       projectDir: testDir,
@@ -99,7 +99,7 @@ describe("handleDiff", () => {
       edits: [
         {
           range: `+1:${h1}`,
-          content: ["line 1"],
+          content: "line 1",
         },
       ],
       projectDir: testDir,
@@ -126,7 +126,7 @@ describe("handleDiff", () => {
       edits: [
         {
           range: `2:${h2}..2:${h2}`,
-          content: [],
+          content: "",
         },
       ],
       projectDir: testDir,
@@ -149,7 +149,7 @@ describe("handleDiff", () => {
       edits: [
         {
           range: `2:${h2}..2:${h2}`,
-          content: ["line 2"],
+          content: "line 2",
         },
       ],
       projectDir: testDir,
@@ -178,7 +178,7 @@ describe("handleDiff", () => {
     const result = await handleDiff({
       file_path: swapFile,
       checksum: cs,
-      edits: [{ range: `1:${ha}..2:${hb}`, content: ["b", "a"] }],
+      edits: [{ range: `1:${ha}..2:${hb}`, content: "b\na" }],
       projectDir: testDir,
     });
 
@@ -208,7 +208,7 @@ describe("handleDiff", () => {
       edits: [
         {
           range: `1:${ha}..8:${hh}`,
-          content: ["A", "B", "C", "D", "E", "F", "G", "H"],
+          content: "A\nB\nC\nD\nE\nF\nG\nH",
         },
       ],
       projectDir: testDir,
@@ -239,7 +239,7 @@ describe("handleDiff", () => {
       edits: [
         {
           range: `1:${h}..1:${h}`,
-          content: ["line 1", "added"],
+          content: "line 1\nadded",
         },
       ],
       projectDir: testDir,
@@ -261,7 +261,7 @@ describe("handleDiff", () => {
     const result = await handleDiff({
       file_path: crlfFile,
       checksum: cs,
-      edits: [{ range: `2:${h2}..2:${h2}`, content: ["CHANGED"] }],
+      edits: [{ range: `2:${h2}..2:${h2}`, content: "CHANGED" }],
       projectDir: testDir,
     });
 
@@ -283,7 +283,7 @@ describe("handleDiff", () => {
       edits: [
         {
           range: `1:${h1}..3:${h3}`,
-          content: [],
+          content: "",
         },
       ],
       projectDir: testDir,
