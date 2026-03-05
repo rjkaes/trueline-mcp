@@ -38,7 +38,7 @@ describe("empty and minimal files", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^1:[a-z]{2}\|hello$/);
   });
@@ -50,7 +50,7 @@ describe("empty and minimal files", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^1:[a-z]{2}\|hello$/);
   });
@@ -62,7 +62,7 @@ describe("empty and minimal files", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
     // The line content is empty — so it should be "1:XX|" with nothing after the pipe
     expect(lines[0]).toMatch(/^1:[a-z]{2}\|$/);
@@ -75,7 +75,7 @@ describe("empty and minimal files", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(3);
   });
 });
@@ -92,7 +92,7 @@ describe("line endings", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(3);
     expect(lines[0]).toMatch(/^1:[a-z]{2}\|aaa$/);
     expect(lines[1]).toMatch(/^2:[a-z]{2}\|bbb$/);
@@ -105,7 +105,7 @@ describe("line endings", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(3);
     // Content should not contain \r
     for (const l of lines) {
@@ -120,7 +120,7 @@ describe("line endings", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(4);
   });
 
@@ -130,7 +130,7 @@ describe("line endings", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^1:[a-z]{2}\|aaa$/);
   });
@@ -147,7 +147,7 @@ describe("unicode content", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(3);
     expect(lines[0]).toContain("日本語");
     expect(lines[1]).toContain("ΣΩΔ");
@@ -160,7 +160,7 @@ describe("unicode content", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain("𝕳ello 🎉");
     expect(lines[1]).toContain("world 𝄞");
@@ -172,7 +172,7 @@ describe("unicode content", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("  \t  ");
   });
@@ -270,7 +270,7 @@ describe("range parameters", () => {
 
     const result = await handleRead({ file_path: f, start_line: 1, end_line: 999, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(2);
   });
 
@@ -280,7 +280,7 @@ describe("range parameters", () => {
 
     const result = await handleRead({ file_path: f, start_line: 2, end_line: 2, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter(l => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^2:[a-z]{2}\|bbb$/);
   });
@@ -322,8 +322,8 @@ describe("checksum consistency", () => {
     const r1 = await handleRead({ file_path: f1, projectDir: testDir });
     const r2 = await handleRead({ file_path: f2, projectDir: testDir });
     // Extract checksum lines
-    const cs1 = r1.content[0].text.split("\n").find(l => l.startsWith("checksum:"));
-    const cs2 = r2.content[0].text.split("\n").find(l => l.startsWith("checksum:"));
+    const cs1 = r1.content[0].text.split("\n").find((l) => l.startsWith("checksum:"));
+    const cs2 = r2.content[0].text.split("\n").find((l) => l.startsWith("checksum:"));
     expect(cs1).toBe(cs2);
   });
 
@@ -335,8 +335,8 @@ describe("checksum consistency", () => {
 
     const r1 = await handleRead({ file_path: f1, projectDir: testDir });
     const r2 = await handleRead({ file_path: f2, projectDir: testDir });
-    const cs1 = r1.content[0].text.split("\n").find(l => l.startsWith("checksum:"));
-    const cs2 = r2.content[0].text.split("\n").find(l => l.startsWith("checksum:"));
+    const cs1 = r1.content[0].text.split("\n").find((l) => l.startsWith("checksum:"));
+    const cs2 = r2.content[0].text.split("\n").find((l) => l.startsWith("checksum:"));
     expect(cs1).not.toBe(cs2);
   });
 
@@ -375,7 +375,7 @@ describe("long lines", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const contentLines = result.content[0].text.split("\n").filter(l => l.match(/^\d+:/));
+    const contentLines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(contentLines).toHaveLength(1000);
     // Verify line numbering at boundaries
     expect(contentLines[0]).toMatch(/^1:/);
@@ -392,7 +392,11 @@ describe("filesystem edge cases", () => {
     const target = join(testDir, "symlink-target.txt");
     const link = join(testDir, "symlink-link.txt");
     writeFileSync(target, "target content\n");
-    try { symlinkSync(target, link); } catch { /* may fail on some OS */ }
+    try {
+      symlinkSync(target, link);
+    } catch {
+      /* may fail on some OS */
+    }
 
     const result = await handleRead({ file_path: link, projectDir: testDir });
     // Should succeed and read the target content

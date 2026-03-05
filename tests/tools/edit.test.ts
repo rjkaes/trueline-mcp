@@ -284,10 +284,12 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: emptyFile,
       checksum: "0-0:00000000",
-      edits: [{
-        range: "+0:",
-        content: ["new content"],
-      }],
+      edits: [
+        {
+          range: "+0:",
+          content: ["new content"],
+        },
+      ],
       projectDir: testDir,
     });
 
@@ -307,10 +309,12 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: filePath,
       checksum: cs,
-      edits: [{
-        range: `2:${lineHash("bbb")}`,
-        content: ["bbb"],  // same content
-      }],
+      edits: [
+        {
+          range: `2:${lineHash("bbb")}`,
+          content: ["bbb"], // same content
+        },
+      ],
       projectDir: testDir,
     });
 
@@ -334,16 +338,18 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: filePath,
       checksum: cs,
-      edits: [{
-        range: `2:${lineHash("bbb")}`,
-        content: ["BBB"],
-      }],
+      edits: [
+        {
+          range: `2:${lineHash("bbb")}`,
+          content: ["BBB"],
+        },
+      ],
       projectDir: testDir,
     });
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    expect(text).toContain("start_line");  // suggests narrow re-read
+    expect(text).toContain("start_line"); // suggests narrow re-read
     expect(text).toContain("end_line");
   });
 
@@ -360,10 +366,12 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: filePath,
       checksum: cs,
-      edits: [{
-        range: `2:${lineHash("bbb")}`,
-        content: ["xxx"],
-      }],
+      edits: [
+        {
+          range: `2:${lineHash("bbb")}`,
+          content: ["xxx"],
+        },
+      ],
       projectDir: testDir,
     });
 

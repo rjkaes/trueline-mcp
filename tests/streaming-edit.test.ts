@@ -7,7 +7,6 @@ import { lineHash, rangeChecksum } from "./helpers.ts";
 import { validateEdits } from "../src/tools/shared.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
 
-
 let testDir: string;
 
 beforeEach(() => {
@@ -18,12 +17,9 @@ afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
-
 describe("validateEdits", () => {
   test("accepts valid single replace edit", () => {
-    const result = validateEdits([
-      { range: "2:ab..3:cd", content: ["x", "y"] },
-    ], "1-4:abcdef01");
+    const result = validateEdits([{ range: "2:ab..3:cd", content: ["x", "y"] }], "1-4:abcdef01");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.ops).toHaveLength(1);
@@ -37,16 +33,12 @@ describe("validateEdits", () => {
   });
 
   test("accepts valid insert_after at line 0", () => {
-    const result = validateEdits([
-      { range: "+0:", content: ["new"] },
-    ], "0-0:00000000");
+    const result = validateEdits([{ range: "+0:", content: ["new"] }], "0-0:00000000");
     expect(result.ok).toBe(true);
   });
 
   test("rejects line 0 without insert_after", () => {
-    const result = validateEdits([
-      { range: "0:", content: ["x"] },
-    ], "0-0:00000000");
+    const result = validateEdits([{ range: "0:", content: ["x"] }], "0-0:00000000");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.content[0].text).toContain("insert-after (use +0: prefix)");
@@ -54,9 +46,7 @@ describe("validateEdits", () => {
   });
 
   test("rejects checksum that does not cover edit range", () => {
-    const result = validateEdits([
-      { range: "4:ab..4:ab", content: ["x"] },
-    ], "1-2:abcdef01");
+    const result = validateEdits([{ range: "4:ab..4:ab", content: ["x"] }], "1-2:abcdef01");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.content[0].text).toContain("does not cover");
@@ -64,10 +54,13 @@ describe("validateEdits", () => {
   });
 
   test("rejects overlapping replace ranges", () => {
-    const result = validateEdits([
-      { range: "1:aa..2:bb", content: ["A"] },
-      { range: "2:bb..2:bb", content: ["B"] },
-    ], "1-4:abcdef01");
+    const result = validateEdits(
+      [
+        { range: "1:aa..2:bb", content: ["A"] },
+        { range: "2:bb..2:bb", content: ["B"] },
+      ],
+      "1-4:abcdef01",
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.content[0].text).toContain("Overlapping");
@@ -75,10 +68,13 @@ describe("validateEdits", () => {
   });
 
   test("allows insert_after ops at same anchor (no overlap)", () => {
-    const result = validateEdits([
-      { range: "+1:aa", content: ["A"] },
-      { range: "+1:aa", content: ["B"] },
-    ], "1-4:abcdef01");
+    const result = validateEdits(
+      [
+        { range: "+1:aa", content: ["A"] },
+        { range: "+1:aa", content: ["B"] },
+      ],
+      "1-4:abcdef01",
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.ops).toHaveLength(2);
@@ -110,9 +106,7 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
 
-    const result = await runEdit(f, [
-      { range: `2:${h2}`, content: ["replaced"] },
-    ], cs);
+    const result = await runEdit(f, [{ range: `2:${h2}`, content: ["replaced"] }], cs);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.changed).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("line 1\nreplaced\nline 3\n");
@@ -126,9 +120,7 @@ describe("streamingEdit", () => {
     const h2 = lineHash("line 2");
     const h3 = lineHash("line 3");
 
-    const result = await runEdit(f, [
-      { range: `2:${h2}..3:${h3}`, content: ["replaced 2", "replaced 3"] },
-    ], cs);
+    const result = await runEdit(f, [{ range: `2:${h2}..3:${h3}`, content: ["replaced 2", "replaced 3"] }], cs);
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("line 1\nreplaced 2\nreplaced 3\nline 4\n");
   });
@@ -140,9 +132,7 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
 
-    const result = await runEdit(f, [
-      { range: `2:${h2}`, content: [] },
-    ], cs);
+    const result = await runEdit(f, [{ range: `2:${h2}`, content: [] }], cs);
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("line 1\nline 3\n");
   });
@@ -154,9 +144,7 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
 
-    const result = await runEdit(f, [
-      { range: `2:${h2}`, content: ["replaced"] },
-    ], cs);
+    const result = await runEdit(f, [{ range: `2:${h2}`, content: ["replaced"] }], cs);
     if (!result.ok) return;
 
     const newLines = ["line 1", "replaced", "line 3"];
@@ -175,9 +163,7 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h1 = lineHash("line 1");
 
-    const result = await runEdit(f, [
-      { range: `+1:${h1}`, content: ["inserted"] },
-    ], cs);
+    const result = await runEdit(f, [{ range: `+1:${h1}`, content: ["inserted"] }], cs);
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("line 1\ninserted\nline 2\nline 3\n");
   });
@@ -189,11 +175,15 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 2);
     const h = lineHash("anchor");
 
-    const result = await runEdit(f, [
-      { range: `+1:${h}`, content: ["first"] },
-      { range: `+1:${h}`, content: ["second"] },
-      { range: `+1:${h}`, content: ["third"] },
-    ], cs);
+    const result = await runEdit(
+      f,
+      [
+        { range: `+1:${h}`, content: ["first"] },
+        { range: `+1:${h}`, content: ["second"] },
+        { range: `+1:${h}`, content: ["third"] },
+      ],
+      cs,
+    );
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("anchor\nfirst\nsecond\nthird\nnext\n");
   });
@@ -204,9 +194,7 @@ describe("streamingEdit", () => {
     const lines = ["existing"];
     const cs = rangeChecksum(lines, 1, 1);
 
-    const result = await runEdit(f, [
-      { range: "+0:", content: ["prepended"] },
-    ], cs);
+    const result = await runEdit(f, [{ range: "+0:", content: ["prepended"] }], cs);
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("prepended\nexisting\n");
   });
@@ -223,10 +211,14 @@ describe("streamingEdit", () => {
     const h1 = lineHash("line 1");
     const h4 = lineHash("line 4");
 
-    const result = await runEdit(f, [
-      { range: `1:${h1}`, content: ["A"] },
-      { range: `4:${h4}`, content: ["D"] },
-    ], cs);
+    const result = await runEdit(
+      f,
+      [
+        { range: `1:${h1}`, content: ["A"] },
+        { range: `4:${h4}`, content: ["D"] },
+      ],
+      cs,
+    );
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("A\nline 2\nline 3\nD\n");
   });
@@ -239,10 +231,14 @@ describe("streamingEdit", () => {
     const h1 = lineHash("line 1");
     const h3 = lineHash("line 3");
 
-    const result = await runEdit(f, [
-      { range: `1:${h1}`, content: ["A"] },
-      { range: `+3:${h3}`, content: ["inserted"] },
-    ], cs);
+    const result = await runEdit(
+      f,
+      [
+        { range: `1:${h1}`, content: ["A"] },
+        { range: `+3:${h3}`, content: ["inserted"] },
+      ],
+      cs,
+    );
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("A\nline 2\nline 3\ninserted\n");
   });
@@ -256,9 +252,7 @@ describe("streamingEdit", () => {
     writeFileSync(f, "line 1\nline 2\nline 3\n");
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([
-      { range: "1:aa..1:aa", content: ["nope"] },
-    ], "1-3:00000000");
+    const validated = validateEdits([{ range: "1:aa..1:aa", content: ["nope"] }], "1-3:00000000");
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
@@ -273,9 +267,7 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([
-      { range: "1:zz..1:zz", content: ["nope"] },
-    ], cs);
+    const validated = validateEdits([{ range: "1:zz..1:zz", content: ["nope"] }], cs);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
@@ -289,9 +281,7 @@ describe("streamingEdit", () => {
     const { mtimeMs } = statSync(f);
     const h = lineHash("only");
 
-    const validated = validateEdits([
-      { range: `1:${h}..1:${h}`, content: ["x"] },
-    ], "1-5:abcdef01");
+    const validated = validateEdits([{ range: `1:${h}..1:${h}`, content: ["x"] }], "1-5:abcdef01");
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
@@ -310,9 +300,7 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
 
-    const result = await runEdit(f, [
-      { range: `2:${h2}`, content: ["replaced"] },
-    ], cs);
+    const result = await runEdit(f, [{ range: `2:${h2}`, content: ["replaced"] }], cs);
     expect(result.ok).toBe(true);
     const written = readFileSync(f, "utf-8");
     expect(written).toBe("line 1\r\nreplaced\r\nline 3\r\n");
@@ -326,9 +314,7 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 2);
     const h1 = lineHash("line 1");
 
-    const result = await runEdit(f, [
-      { range: `1:${h1}`, content: ["replaced"] },
-    ], cs);
+    const result = await runEdit(f, [{ range: `1:${h1}`, content: ["replaced"] }], cs);
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("replaced\nline 2");
   });
@@ -338,9 +324,7 @@ describe("streamingEdit", () => {
     writeFileSync(f, Buffer.from([0x68, 0x65, 0x00, 0x6c, 0x6f]));
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([
-      { range: "1:aa", content: ["x"] },
-    ], "1-1:abcdef01");
+    const validated = validateEdits([{ range: "1:aa", content: ["x"] }], "1-1:abcdef01");
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
@@ -353,9 +337,7 @@ describe("streamingEdit", () => {
     writeFileSync(f, "");
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([
-      { range: "+0:", content: ["new content"] },
-    ], "0-0:00000000");
+    const validated = validateEdits([{ range: "+0:", content: ["new content"] }], "0-0:00000000");
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
@@ -370,9 +352,7 @@ describe("streamingEdit", () => {
     const lines = ["aaa", "bbb", "ccc"];
     const cs = rangeChecksum(lines, 1, 3);
 
-    const result = await runEdit(f, [
-      { range: `2:${lineHash("bbb")}`, content: ["bbb"] },
-    ], cs);
+    const result = await runEdit(f, [{ range: `2:${lineHash("bbb")}`, content: ["bbb"] }], cs);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.changed).toBe(false);
     expect(statSync(f).mtimeMs).toBe(before);
@@ -383,7 +363,7 @@ describe("streamingEdit", () => {
     writeFileSync(f, "line 1\nline 2\n");
     const { mtimeMs: oldMtime } = statSync(f);
 
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
     writeFileSync(f, "line 1\nline 2\n");
     const { mtimeMs: newMtime } = statSync(f);
     expect(newMtime).not.toBe(oldMtime);
@@ -392,9 +372,7 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 2);
     const h1 = lineHash("line 1");
 
-    const validated = validateEdits([
-      { range: `1:${h1}`, content: ["changed"] },
-    ], cs);
+    const validated = validateEdits([{ range: `1:${h1}`, content: ["changed"] }], cs);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRef, oldMtime);

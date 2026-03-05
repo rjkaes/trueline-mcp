@@ -109,9 +109,9 @@ describe("handleDiff", () => {
     const text = result.content[0].text;
     // Should show inserted line and no deletions (exclude all diff headers)
     expect(text).toContain("+line 1");
-    const contentLines = text.split("\n").filter((l) =>
-      !l.startsWith("---") && !l.startsWith("+++") && !l.startsWith("@@") && !l.startsWith("==="),
-    );
+    const contentLines = text
+      .split("\n")
+      .filter((l) => !l.startsWith("---") && !l.startsWith("+++") && !l.startsWith("@@") && !l.startsWith("==="));
     expect(contentLines.some((l) => l.startsWith("-"))).toBe(false);
   });
 
@@ -158,9 +158,9 @@ describe("handleDiff", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     // No + or - lines for content (only diff headers)
-    const contentLines = text.split("\n").filter((l) =>
-      !l.startsWith("---") && !l.startsWith("+++") && !l.startsWith("@@") && !l.startsWith("==="),
-    );
+    const contentLines = text
+      .split("\n")
+      .filter((l) => !l.startsWith("---") && !l.startsWith("+++") && !l.startsWith("@@") && !l.startsWith("==="));
     expect(contentLines.every((l) => l.startsWith(" ") || l === "")).toBe(true);
   });
 
@@ -178,9 +178,7 @@ describe("handleDiff", () => {
     const result = await handleDiff({
       file_path: swapFile,
       checksum: cs,
-      edits: [
-        { range: `1:${ha}..2:${hb}`, content: ["b", "a"] },
-      ],
+      edits: [{ range: `1:${ha}..2:${hb}`, content: ["b", "a"] }],
       projectDir: testDir,
     });
 
@@ -297,9 +295,9 @@ describe("handleDiff", () => {
     expect(text).toContain("-line 2");
     expect(text).toContain("-line 3");
     // No additions
-    const contentLines = text.split("\n").filter((l) =>
-      !l.startsWith("---") && !l.startsWith("+++") && !l.startsWith("@@") && !l.startsWith("==="),
-    );
+    const contentLines = text
+      .split("\n")
+      .filter((l) => !l.startsWith("---") && !l.startsWith("+++") && !l.startsWith("@@") && !l.startsWith("==="));
     expect(contentLines.some((l) => l.startsWith("+"))).toBe(false);
   });
 });

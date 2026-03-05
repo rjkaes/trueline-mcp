@@ -2,12 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import {
-  parseToolPattern,
-  fileGlobToRegex,
-  readToolDenyPatterns,
-  evaluateFilePath,
-} from "../src/security.ts";
+import { parseToolPattern, fileGlobToRegex, readToolDenyPatterns, evaluateFilePath } from "../src/security.ts";
 
 describe("parseToolPattern", () => {
   test("parses Read(.env)", () => {
@@ -114,11 +109,7 @@ describe("readToolDenyPatterns", () => {
   });
 
   test("returns empty when no settings exist", async () => {
-    const patterns = await readToolDenyPatterns(
-      "Read",
-      "/nonexistent/path",
-      "/nonexistent/global/settings.json",
-    );
+    const patterns = await readToolDenyPatterns("Read", "/nonexistent/path", "/nonexistent/global/settings.json");
     expect(patterns).toEqual([]);
   });
 });
@@ -131,18 +122,12 @@ describe("evaluateFilePath", () => {
   });
 
   test("allows non-matching paths", () => {
-    const result = evaluateFilePath(
-      "/project/src/app.ts",
-      [[".env", "**/*.key"]],
-    );
+    const result = evaluateFilePath("/project/src/app.ts", [[".env", "**/*.key"]]);
     expect(result.denied).toBe(false);
   });
 
   test("normalizes backslashes", () => {
-    const result = evaluateFilePath(
-      "C:\\Users\\dev\\.env",
-      [["**/.env"]],
-    );
+    const result = evaluateFilePath("C:\\Users\\dev\\.env", [["**/.env"]]);
     expect(result.denied).toBe(true);
   });
 
@@ -164,11 +149,7 @@ describe("evaluateFilePath", () => {
   });
 
   test("suffix matching respects caseInsensitive flag", () => {
-    const result = evaluateFilePath(
-      "/project/SRC/.Env",
-      [["src/.env"]],
-      true,
-    );
+    const result = evaluateFilePath("/project/SRC/.Env", [["src/.env"]], true);
     expect(result.denied).toBe(true);
   });
 });

@@ -12,10 +12,7 @@ let testFile: string;
 beforeEach(() => {
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-integration-")));
   testFile = join(testDir, "app.ts");
-  writeFileSync(
-    testFile,
-    'function greet(name: string) {\n  return "Hello, " + name;\n}\n',
-  );
+  writeFileSync(testFile, 'function greet(name: string) {\n  return "Hello, " + name;\n}\n');
 });
 
 afterEach(() => {
@@ -49,7 +46,7 @@ describe("read → diff → edit roundtrip", () => {
       edits: [
         {
           range: `2:${line2Hash}..2:${line2Hash}`,
-          content: ['  return `Hello, ${name}!`;'],
+          content: ["  return `Hello, ${name}!`;"],
         },
       ],
       projectDir: testDir,
@@ -70,7 +67,7 @@ describe("read → diff → edit roundtrip", () => {
       edits: [
         {
           range: `2:${line2Hash}..2:${line2Hash}`,
-          content: ['  return `Hello, ${name}!`;'],
+          content: ["  return `Hello, ${name}!`;"],
         },
       ],
       projectDir: testDir,

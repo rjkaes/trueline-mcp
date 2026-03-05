@@ -1,8 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import {
-  mkdtempSync, realpathSync, writeFileSync, readFileSync,
-  rmSync, symlinkSync, mkdirSync,
-} from "node:fs";
+import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, symlinkSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
@@ -27,20 +24,13 @@ afterEach(() => {
 function setupFile(name: string, content: string) {
   const f = join(testDir, name);
   writeFileSync(f, content);
-  const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-    .split("\n");
+  const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const cs = lines.length > 0
-    ? rangeChecksum(lines, 1, lines.length)
-    : EMPTY_FILE_CHECKSUM;
+  const cs = lines.length > 0 ? rangeChecksum(lines, 1, lines.length) : EMPTY_FILE_CHECKSUM;
   return { path: f, lines, cs };
 }
 
-function edit(opts: {
-  file_path: string;
-  checksum: string;
-  edits: { range: string; content: string[] }[];
-}) {
+function edit(opts: { file_path: string; checksum: string; edits: { range: string; content: string[] }[] }) {
   return handleEdit({ ...opts, projectDir: testDir });
 }
 
@@ -80,21 +70,25 @@ describe("range format parsing", () => {
   test("rejects malformed range — missing hash", async () => {
     const { path, cs } = setupFile("bad.txt", "aaa\nbbb\n");
 
-    await expect(edit({
-      file_path: path,
-      checksum: cs,
-      edits: [{ range: "1:", content: ["x"] }],
-    })).rejects.toThrow();
+    await expect(
+      edit({
+        file_path: path,
+        checksum: cs,
+        edits: [{ range: "1:", content: ["x"] }],
+      }),
+    ).rejects.toThrow();
   });
 
   test("rejects malformed range — non-numeric line number", async () => {
     const { path, cs } = setupFile("bad2.txt", "aaa\nbbb\n");
 
-    await expect(edit({
-      file_path: path,
-      checksum: cs,
-      edits: [{ range: "abc:aa..2:bb", content: ["x"] }],
-    })).rejects.toThrow();
+    await expect(
+      edit({
+        file_path: path,
+        checksum: cs,
+        edits: [{ range: "abc:aa..2:bb", content: ["x"] }],
+      }),
+    ).rejects.toThrow();
   });
 
   test("rejects range where start > end", async () => {
@@ -102,21 +96,25 @@ describe("range format parsing", () => {
     const h1 = lineHash("aaa");
     const h3 = lineHash("ccc");
 
-    await expect(edit({
-      file_path: path,
-      checksum: cs,
-      edits: [{ range: `3:${h3}..1:${h1}`, content: ["x"] }],
-    })).rejects.toThrow();
+    await expect(
+      edit({
+        file_path: path,
+        checksum: cs,
+        edits: [{ range: `3:${h3}..1:${h1}`, content: ["x"] }],
+      }),
+    ).rejects.toThrow();
   });
 
   test("rejects line 0 without + prefix", async () => {
     const { path, cs } = setupFile("zero.txt", "aaa\n");
 
-    await expect(edit({
-      file_path: path,
-      checksum: cs,
-      edits: [{ range: "0:aa..0:aa", content: ["x"] }],
-    })).rejects.toThrow();
+    await expect(
+      edit({
+        file_path: path,
+        checksum: cs,
+        edits: [{ range: "0:aa..0:aa", content: ["x"] }],
+      }),
+    ).rejects.toThrow();
   });
 
   test("+0: prefix for prepend requires no hash", async () => {
@@ -239,9 +237,7 @@ describe("insert-after (+) semantics", () => {
 
 describe("multi-edit batches", () => {
   test("two non-overlapping replacements in one call", async () => {
-    const { path, cs } = setupFile(
-      "batch.txt", "aaa\nbbb\nccc\nddd\neee\n",
-    );
+    const { path, cs } = setupFile("batch.txt", "aaa\nbbb\nccc\nddd\neee\n");
     const h1 = lineHash("aaa");
     const h3 = lineHash("ccc");
 
@@ -259,9 +255,7 @@ describe("multi-edit batches", () => {
   });
 
   test("edits provided out of order succeed (engine sorts)", async () => {
-    const { path, cs } = setupFile(
-      "unsorted.txt", "aaa\nbbb\nccc\nddd\n",
-    );
+    const { path, cs } = setupFile("unsorted.txt", "aaa\nbbb\nccc\nddd\n");
     const h3 = lineHash("ccc");
     const h1 = lineHash("aaa");
 
@@ -280,9 +274,7 @@ describe("multi-edit batches", () => {
   });
 
   test("batch with replace + insert-after at different lines", async () => {
-    const { path, cs } = setupFile(
-      "mixed.txt", "aaa\nbbb\nccc\n",
-    );
+    const { path, cs } = setupFile("mixed.txt", "aaa\nbbb\nccc\n");
     const h1 = lineHash("aaa");
     const h3 = lineHash("ccc");
 
@@ -300,9 +292,7 @@ describe("multi-edit batches", () => {
   });
 
   test("overlapping replace ranges are rejected", async () => {
-    const { path, cs } = setupFile(
-      "overlap.txt", "aaa\nbbb\nccc\nddd\n",
-    );
+    const { path, cs } = setupFile("overlap.txt", "aaa\nbbb\nccc\nddd\n");
     const h1 = lineHash("aaa");
     const h2 = lineHash("bbb");
     const h3 = lineHash("ccc");
@@ -321,9 +311,7 @@ describe("multi-edit batches", () => {
   });
 
   test("adjacent ranges (non-overlapping) succeed", async () => {
-    const { path, cs } = setupFile(
-      "adjacent.txt", "aaa\nbbb\nccc\nddd\n",
-    );
+    const { path, cs } = setupFile("adjacent.txt", "aaa\nbbb\nccc\nddd\n");
     const h1 = lineHash("aaa");
     const h2 = lineHash("bbb");
     const h3 = lineHash("ccc");
@@ -364,9 +352,7 @@ describe("multi-edit batches", () => {
 
 describe("checksum coverage", () => {
   test("narrow checksum covering only the edited line works", async () => {
-    const { path, lines } = setupFile(
-      "narrow.txt", "aaa\nbbb\nccc\nddd\neee\n",
-    );
+    const { path, lines } = setupFile("narrow.txt", "aaa\nbbb\nccc\nddd\neee\n");
     const narrowCs = rangeChecksum(lines, 2, 4);
     const h3 = lineHash("ccc");
 
@@ -381,9 +367,7 @@ describe("checksum coverage", () => {
   });
 
   test("checksum range must cover all edits in batch", async () => {
-    const { path, lines } = setupFile(
-      "partial.txt", "aaa\nbbb\nccc\nddd\neee\n",
-    );
+    const { path, lines } = setupFile("partial.txt", "aaa\nbbb\nccc\nddd\neee\n");
     // Checksum covers lines 1-3 but edit targets line 5
     const narrowCs = rangeChecksum(lines, 1, 3);
     const h5 = lineHash("eee");
@@ -399,9 +383,7 @@ describe("checksum coverage", () => {
   });
 
   test("checksum from partial read covers insert-after anchor line", async () => {
-    const { path, lines } = setupFile(
-      "partial-ins.txt", "aaa\nbbb\nccc\n",
-    );
+    const { path, lines } = setupFile("partial-ins.txt", "aaa\nbbb\nccc\n");
     // Only cover lines 1-2
     const narrowCs = rangeChecksum(lines, 1, 2);
     const h2 = lineHash("bbb");
@@ -449,9 +431,7 @@ describe("content growth and shrinkage", () => {
   });
 
   test("replace many lines with one (file shrinks)", async () => {
-    const { path, cs } = setupFile(
-      "shrink.txt", "aaa\nbbb\nccc\nddd\neee\n",
-    );
+    const { path, cs } = setupFile("shrink.txt", "aaa\nbbb\nccc\nddd\neee\n");
     const h2 = lineHash("bbb");
     const h4 = lineHash("ddd");
 
@@ -466,9 +446,7 @@ describe("content growth and shrinkage", () => {
   });
 
   test("delete lines (empty content array)", async () => {
-    const { path, cs } = setupFile(
-      "delete.txt", "aaa\nbbb\nccc\nddd\n",
-    );
+    const { path, cs } = setupFile("delete.txt", "aaa\nbbb\nccc\nddd\n");
     const h2 = lineHash("bbb");
     const h3 = lineHash("ccc");
 
@@ -530,9 +508,7 @@ describe("content growth and shrinkage", () => {
 
 describe("unicode and special content", () => {
   test("emoji content hashes and edits correctly", async () => {
-    const { path, cs } = setupFile(
-      "emoji.txt", "hello\n🎉🎊🎈\nworld\n",
-    );
+    const { path, cs } = setupFile("emoji.txt", "hello\n🎉🎊🎈\nworld\n");
     const h2 = lineHash("🎉🎊🎈");
 
     const result = await edit({
@@ -546,9 +522,7 @@ describe("unicode and special content", () => {
   });
 
   test("CJK characters", async () => {
-    const { path, cs } = setupFile(
-      "cjk.txt", "你好\n世界\n测试\n",
-    );
+    const { path, cs } = setupFile("cjk.txt", "你好\n世界\n测试\n");
     const h2 = lineHash("世界");
 
     const result = await edit({
@@ -564,9 +538,7 @@ describe("unicode and special content", () => {
   test("lines containing colons and pipe characters", async () => {
     // These chars appear in the trueline format itself — ensure they
     // don't confuse the parser when they're in file content.
-    const { path, cs } = setupFile(
-      "special.txt", "key:value|extra\nnormal\n",
-    );
+    const { path, cs } = setupFile("special.txt", "key:value|extra\nnormal\n");
     const h1 = lineHash("key:value|extra");
 
     const result = await edit({
@@ -580,9 +552,7 @@ describe("unicode and special content", () => {
   });
 
   test("lines with only whitespace", async () => {
-    const { path, cs } = setupFile(
-      "ws.txt", "  \n\t\t\n   \n",
-    );
+    const { path, cs } = setupFile("ws.txt", "  \n\t\t\n   \n");
     const h1 = lineHash("  ");
     const h2 = lineHash("\t\t");
 
@@ -615,9 +585,7 @@ describe("unicode and special content", () => {
 
   test("very long line", async () => {
     const longLine = "x".repeat(10000);
-    const { path, cs } = setupFile(
-      "long.txt", `aaa\n${longLine}\nccc\n`,
-    );
+    const { path, cs } = setupFile("long.txt", `aaa\n${longLine}\nccc\n`);
     const h2 = lineHash(longLine);
 
     const result = await edit({
@@ -637,9 +605,7 @@ describe("unicode and special content", () => {
 
 describe("line ending edge cases", () => {
   test("CRLF file: replacement uses CRLF", async () => {
-    const { path, cs } = setupFile(
-      "crlf.txt", "aaa\r\nbbb\r\nccc\r\n",
-    );
+    const { path, cs } = setupFile("crlf.txt", "aaa\r\nbbb\r\nccc\r\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
@@ -819,9 +785,7 @@ describe("read-then-edit round-trip", () => {
     expect(readResult.isError).toBeUndefined();
 
     // Extract checksum from read output
-    const csMatch = readResult.content[0].text.match(
-      /checksum:\s*(\d+-\d+:[0-9a-f]+)/,
-    );
+    const csMatch = readResult.content[0].text.match(/checksum:\s*(\d+-\d+:[0-9a-f]+)/);
     expect(csMatch).not.toBeNull();
 
     const hBeta = lineHash("beta");
@@ -847,9 +811,7 @@ describe("read-then-edit round-trip", () => {
     });
     expect(readResult.isError).toBeUndefined();
 
-    const csMatch = readResult.content[0].text.match(
-      /checksum:\s*(\d+-\d+:[0-9a-f]+)/,
-    );
+    const csMatch = readResult.content[0].text.match(/checksum:\s*(\d+-\d+:[0-9a-f]+)/);
     expect(csMatch).not.toBeNull();
 
     const hCcc = lineHash("ccc");
@@ -966,9 +928,7 @@ describe("boundary hash verification", () => {
 
 describe("security and file validation", () => {
   test("rejects path outside project directory", async () => {
-    const outsideDir = realpathSync(
-      mkdtempSync(join(tmpdir(), "trueline-outside-")),
-    );
+    const outsideDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-outside-")));
     const outsideFile = join(outsideDir, "escape.txt");
     writeFileSync(outsideFile, "secret\n");
 
@@ -1040,9 +1000,7 @@ describe("security and file validation", () => {
   });
 
   test("symlink escaping project directory is rejected", async () => {
-    const outsideDir = realpathSync(
-      mkdtempSync(join(tmpdir(), "trueline-symesc-")),
-    );
+    const outsideDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-symesc-")));
     const outsideFile = join(outsideDir, "target.txt");
     writeFileSync(outsideFile, "secret\n");
     const linkFile = join(testDir, "escape-link.txt");
@@ -1153,21 +1111,25 @@ describe("checksum format validation", () => {
     const h = lineHash("aaa");
 
     // Just the hex part, no "1-1:" prefix
-    await expect(edit({
-      file_path: path,
-      checksum: "abcdef01",
-      edits: [{ range: `1:${h}`, content: ["x"] }],
-    })).rejects.toThrow();
+    await expect(
+      edit({
+        file_path: path,
+        checksum: "abcdef01",
+        edits: [{ range: `1:${h}`, content: ["x"] }],
+      }),
+    ).rejects.toThrow();
   });
 
   test("rejects completely garbled checksum", async () => {
     const { path } = setupFile("garbled.txt", "aaa\n");
     const h = lineHash("aaa");
 
-    await expect(edit({
-      file_path: path,
-      checksum: "not-a-checksum",
-      edits: [{ range: `1:${h}`, content: ["x"] }],
-    })).rejects.toThrow();
+    await expect(
+      edit({
+        file_path: path,
+        checksum: "not-a-checksum",
+        edits: [{ range: `1:${h}`, content: ["x"] }],
+      }),
+    ).rejects.toThrow();
   });
 });

@@ -59,9 +59,7 @@ describe("rangeChecksum", () => {
   test("changes when content changes", () => {
     const lines1 = ["a", "b", "c"];
     const lines2 = ["a", "x", "c"];
-    expect(rangeChecksum(lines1, 1, 3)).not.toBe(
-      rangeChecksum(lines2, 1, 3),
-    );
+    expect(rangeChecksum(lines1, 1, 3)).not.toBe(rangeChecksum(lines2, 1, 3));
   });
 
   test("clamps endLine to file length", () => {
@@ -71,7 +69,6 @@ describe("rangeChecksum", () => {
     expect(cs).toBe(rangeChecksum(lines, 1, 2));
   });
 });
-
 
 describe("parseRange", () => {
   test("parses valid range", () => {
@@ -139,4 +136,3 @@ describe("parseChecksum", () => {
     expect(() => parseChecksum("1-3e1:00000000")).toThrow("decimal integer");
   });
 });
-

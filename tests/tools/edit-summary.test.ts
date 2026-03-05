@@ -25,11 +25,7 @@ function setupFile(name: string, content: string) {
   return { path: f, lines, cs };
 }
 
-function edit(params: {
-  file_path: string;
-  checksum: string;
-  edits: { range: string; content: string[] }[];
-}) {
+function edit(params: { file_path: string; checksum: string; edits: { range: string; content: string[] }[] }) {
   return handleEdit({ ...params, projectDir: testDir });
 }
 
