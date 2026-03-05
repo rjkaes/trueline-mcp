@@ -3,8 +3,8 @@ import { fileURLToPath } from "node:url";
 export function getInstructions() {
   return `<trueline_mcp_instructions>
   <tools>
-    <tool name="trueline_read">Read a file; returns content with per-line hashes and a checksum. Call before editing.</tool>
-    <tool name="trueline_edit">Edit a file with hash verification. Replaces the built-in Edit tool, which is blocked. Each edit needs: range (startLine:hash..endLine:hash or +startLine:hash for insert-after), content (replacement lines as a newline-separated string; empty string to delete). Checksum from trueline_read goes at the top level, not per-edit. Supports multiple edits in one call — pass all changes to the same file in the edits array.</tool>
+    <tool name="trueline_read">Read a file; returns per-line hashes and a checksum per range. Supports multiple disjoint ranges in one call. Call before editing.</tool>
+    <tool name="trueline_edit">Edit a file with hash verification. Replaces the built-in Edit tool, which is blocked. Each edit needs: checksum (from trueline_read for the covering range), range (startLine:hash..endLine:hash or +startLine:hash for insert-after), content (replacement lines as newline-separated string; empty string to delete). Pass all changes to the same file in the edits array.</tool>
     <tool name="trueline_diff">Preview edits as a unified diff without writing to disk.</tool>
   </tools>
   <workflow>trueline_read \u2192 trueline_diff (optional) \u2192 trueline_edit</workflow>
