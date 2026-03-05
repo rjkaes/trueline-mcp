@@ -214,3 +214,29 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
 
   return { ok: true, ops, checksumRefs };
 }
+
+// ==============================================================================
+// Encoding validation
+// ==============================================================================
+
+const SUPPORTED_ENCODINGS: Record<string, BufferEncoding> = {
+  "utf-8": "utf-8",
+  utf8: "utf-8",
+  ascii: "ascii",
+  latin1: "latin1",
+};
+
+/**
+ * Validate and normalize an encoding string.
+ *
+ * Returns a canonical `BufferEncoding` value. Defaults to `"utf-8"` when
+ * the input is undefined. Throws on unsupported encodings.
+ */
+export function validateEncoding(encoding?: string): BufferEncoding {
+  if (encoding === undefined) return "utf-8";
+  const normalized = SUPPORTED_ENCODINGS[encoding.toLowerCase()];
+  if (normalized === undefined) {
+    throw new Error(`Unsupported encoding "${encoding}". Supported: utf-8, ascii, latin1`);
+  }
+  return normalized;
+}

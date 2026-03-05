@@ -141,4 +141,24 @@ describe("handleRead", () => {
     });
     expect(result.isError).toBe(true);
   });
+
+  test("hash is based on raw file bytes, not decoded string", async () => {
+    // Latin-1 file: 0xe9 = é in latin1, but 0xc3 0xa9 in UTF-8
+    // If we hash raw bytes, the hash should be based on the single 0xe9 byte
+    const latin1File = join(testDir, "latin1.txt");
+    writeFileSync(latin1File, Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a])); // "café\n"
+
+    const result = await handleRead({
+      file_path: latin1File,
+      encoding: "latin1",
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    // The decoded content should show "café"
+    expect(text).toContain("café");
+    // And the hash should be present
+    expect(text).toMatch(/^1:[a-z]{2}\|café$/m);
+  });
 });

@@ -9,13 +9,21 @@
 // ==============================================================================
 
 import { splitLines } from "../line-splitter.ts";
-import { EMPTY_FILE_CHECKSUM, FNV_OFFSET_BASIS, fnv1aHash, foldHash, formatChecksum, hashToLetters } from "../hash.ts";
+import {
+  EMPTY_FILE_CHECKSUM,
+  FNV_OFFSET_BASIS,
+  fnv1aHashBytes,
+  foldHash,
+  formatChecksum,
+  hashToLetters,
+} from "../hash.ts";
 import { parseRanges, type ReadRange } from "../parse.ts";
-import { validatePath } from "./shared.ts";
+import { validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 interface ReadParams {
   file_path: string;
+  encoding?: string;
   start_line?: number;
   end_line?: number;
   ranges?: Array<{ start?: number; end?: number }>;
@@ -28,6 +36,13 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
+
+  let enc: BufferEncoding;
+  try {
+    enc = validateEncoding(params.encoding);
+  } catch (err: unknown) {
+    return errorResult((err as Error).message);
+  }
 
   const { resolvedPath } = validated;
 
@@ -90,8 +105,8 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       // Within current range — hash and output
       if (rangeFirstLine === 0) rangeFirstLine = lineNumber;
       rangeLastLine = lineNumber;
-      const line = lineBytes.toString("utf-8");
-      const h = fnv1aHash(line);
+      const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
+      const line = lineBytes.toString(enc);
       rangeChecksumHash = foldHash(rangeChecksumHash, h);
       outputParts.push(`${lineNumber}:${hashToLetters(h)}|${line}`);
     }
