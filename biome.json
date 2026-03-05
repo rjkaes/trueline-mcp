@@ -13,7 +13,7 @@
       "!tests/fixtures/",
       "!tests/benchmark-results-v04.json",
       "!package.json",
-      "!.claude-plugin/"
+      "!.claude-plugin/**"
     ]
   },
   "formatter": {
@@ -32,7 +32,8 @@
         "useTemplate": "off"
       },
       "suspicious": {
-        "noExplicitAny": "off"
+        "noExplicitAny": "off",
+        "useBiomeIgnoreFolder": "off"
       }
     }
   },
