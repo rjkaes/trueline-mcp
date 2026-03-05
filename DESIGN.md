@@ -63,9 +63,9 @@ range.
 ```
 trueline_read({
   file_path: "src/main.ts",
-  start_line: 10,    // optional, default 1
-  end_line: 25,      // optional, default EOF
+  ranges: [{ start: 10, end: 25 }],  // optional, default: whole file
 })
+```
 ```
 
 The tool streams the file line-by-line — it never loads the entire
@@ -83,11 +83,15 @@ file into memory. The pipeline:
 
 ### Partial reads
 
-When `start_line` / `end_line` are specified, the checksum covers only
-that range. This matters for `trueline_edit`: the checksum you pass
-must cover at least the lines you intend to edit. Reading 6 lines
-around your edit target is enough — you don't need to re-read a
-2000-line file to edit line 500.
+When `ranges` are specified, each range produces its own checksum
+covering only those lines. This matters for `trueline_edit`: the
+checksum you pass in each edit must cover at least the lines that edit
+targets. Reading a few lines around your edit target is enough — you
+don't need to re-read a 2000-line file to edit line 500.
+
+Multiple disjoint ranges can be read in a single call, each producing
+its own checksum. This is useful when editing lines in different parts
+of a file — one read call provides all the checksums needed.
 
 ### Empty files
 
@@ -100,12 +104,13 @@ an empty file without special-casing.
 ```
 trueline_edit({
   file_path: "src/main.ts",
-  checksum: "10-25:f7e2a1b0",
   edits: [{
+    checksum: "10-25:f7e2a1b0",
     range: "12:mp..14:qk",
-    content: "  const x = 1;\\n  const y = 2;",
+    content: "  const x = 1;\n  const y = 2;",
   }]
 })
+```
 ```
 
 Each edit specifies:
@@ -118,10 +123,11 @@ Each edit specifies:
   string. The resulting lines can be fewer or more than the range
   (shrinking or growing the file). An empty string deletes the range.
 
-The top-level **`checksum`** is the range checksum from a prior
-`trueline_read`. Must be the full string including the range prefix
-(e.g. `"10-25:f7e2a1b0"`, not just `"f7e2a1b0"`). All edits in a
-batch must come from the same `trueline_read` call.
+Each edit carries its own **`checksum`** — the range checksum from a
+prior `trueline_read`. Must be the full string including the range
+prefix (e.g. `"10-25:f7e2a1b0"`, not just `"f7e2a1b0"`). Edits
+targeting different ranges can use different checksums from the same
+or different `trueline_read` calls.
 
 ### Verification
 
@@ -189,7 +195,7 @@ Checksum mismatch for lines 1-50: expected f7e2a1b0, got ab12cd34.
 File changed since last read. Re-read with trueline_read.
 
 However, lines 12-14 appear unchanged. Re-read with
-trueline_read(start_line=12, end_line=14) to get a narrow checksum,
+trueline_read(ranges=[{start: 12, end: 14}]) to get a narrow checksum,
 then retry the edit.
 ```
 
@@ -203,11 +209,11 @@ the TOCTOU window but doesn't eliminate it.
 
 ### Multi-edit batches
 
-A single `trueline_edit` call can carry multiple edits. All edits share
-the same file and top-level checksum, and are verified together before
-any are applied. This is useful for making several changes in one atomic
-operation. Edits must not overlap — if two edits target the same line,
-the call is rejected.
+A single `trueline_edit` call can carry multiple edits. Each edit
+carries its own checksum, so edits can reference different read ranges.
+All edits are verified together before any are applied. This is useful
+for making several changes in one atomic operation. Edits must not
+overlap — if two edits target the same line, the call is rejected.
 
 ### Return value
 

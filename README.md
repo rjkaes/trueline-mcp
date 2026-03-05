@@ -42,8 +42,8 @@ trueline_edit replaces the old text with a compact line-range reference:
 // trueline_edit — just the range and the new content
 {
   "file_path": "src/server.ts",
-  "checksum": "1-50:a3b1c2d4",
   "edits": [{
+    "checksum": "1-50:a3b1c2d4",
     "range": "12:kf..16:qz",
     "content": "export function handleRequest(req: Request) {\n  const body = await req.json();\n  const parsed = schema.parse(body);\n  return process(parsed);\n}"
   }]
@@ -88,9 +88,11 @@ cost rises further — trueline stays constant.
 
 ## How it works
 
-`trueline_read` returns file content in trueline format. Each line is prefixed
-with its line number and a 2-letter hash derived from FNV-1a 32-bit. A range
-checksum (FNV-1a 32-bit, 8 hex chars) covers the lines read:
+`trueline_read` returns file content in trueline format. It supports reading
+multiple disjoint ranges in a single call, each producing its own checksum.
+Each line is prefixed with its line number and a 2-letter hash derived from
+FNV-1a 32-bit. A range checksum (FNV-1a 32-bit, 8 hex chars) covers each
+range of lines read:
 
 ```
 1:bx|import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -101,16 +103,16 @@ checksum: 1-3:8a64a3f7
 ```
 
 `trueline_edit` takes a range specifier (`startLine:startHash..endLine:endHash`,
-e.g. `"1:bx..3:ew"`) and the checksum from the read. Both are verified before
-the write — if either has changed since the read, the edit is rejected.
+e.g. `"1:bx..3:ew"`) and a per-edit checksum from the read. Both are verified
+before the write — if either has changed since the read, the edit is rejected.
 
 Here is what a `trueline_edit` call looks like in practice:
 
 ```
 trueline_edit(
   file_path: "README.md",
-  checksum: "1-112:a509e33a",
   edits: [{
+    checksum: "1-112:a509e33a",
     range: "+56:dd",
     content: "\\nthis is awesome\\n"
   }]
@@ -154,11 +156,10 @@ paths.
 
 Read a file and return its content with per-line hashes and a range checksum.
 
-| Parameter    | Type    | Description                              |
-|--------------|---------|------------------------------------------|
-| `file_path`  | string  | Path to the file                         |
-| `start_line` | integer | First line to read (default: 1)          |
-| `end_line`   | integer | Last line to read (default: end of file) |
+| Parameter    | Type    | Description                                             |
+|--------------|---------|-------------------------------------------------------  |
+| `file_path`  | string  | Path to the file                                        |
+| `ranges`     | array   | Optional array of `{start, end}` ranges to read (default: whole file) |
 
 ### `trueline_edit`
 
@@ -167,15 +168,15 @@ Apply one or more edits to a file with hash verification.
 | Parameter  | Type   | Description                                              |
 |------------|--------|----------------------------------------------------------|
 | `file_path`| string | Path to the file                                         |
-| `checksum` | string | Range checksum from `trueline_read` (e.g. `1-50:ab12cd34`) |
 | `edits`    | array  | List of edit operations (see below)                      |
 
 Each edit:
 
-| Field     | Type     | Description                                                                          |
-|-----------|----------|--------------------------------------------------------------------------------------|
-| `range`   | string   | `startLine:hash..endLine:hash` or `startLine:hash`; prefix `+` for insert-after     |
-| `content` | string   | Replacement lines, newline-separated. Empty string to delete range.                  |
+| Field      | Type     | Description                                                                          |
+|------------|----------|--------------------------------------------------------------------------------------|
+| `checksum` | string   | Range checksum from `trueline_read` (e.g. `1-50:ab12cd34`)                          |
+| `range`    | string   | `startLine:hash..endLine:hash` or `startLine:hash`; prefix `+` for insert-after     |
+| `content`  | string   | Replacement lines, newline-separated. Empty string to delete range.                  |
 
 ### `trueline_diff`
 
