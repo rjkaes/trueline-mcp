@@ -2,14 +2,15 @@
 // trueline_read handler
 //
 // Streams the file line-by-line via `splitLines` — the file is never loaded
-// into memory as a whole.  Lines before `start_line` are counted and skipped;
-// lines after `end_line` stop the stream early.  Each line is decoded to a JS
+// into memory as a whole.  Supports reading multiple disjoint ranges in a
+// single call, each producing its own checksum.  Each line is decoded to a JS
 // string (required for the trueline output format), hashed with `fnv1aHash`,
 // and formatted as `lineNumber:hash|content`.
 // ==============================================================================
 
 import { splitLines } from "../line-splitter.ts";
 import { EMPTY_FILE_CHECKSUM, FNV_OFFSET_BASIS, fnv1aHash, foldHash, formatChecksum, hashToLetters } from "../hash.ts";
+import { parseRanges, type ReadRange } from "../parse.ts";
 import { validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
@@ -17,6 +18,7 @@ interface ReadParams {
   file_path: string;
   start_line?: number;
   end_line?: number;
+  ranges?: Array<{ start?: number; end?: number }>;
   projectDir?: string;
   allowedDirs?: string[];
 }
@@ -29,32 +31,68 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   const { resolvedPath } = validated;
 
-  const start = start_line ?? 1;
-  if (start < 1) {
-    return errorResult(`start_line ${start} must be >= 1`);
-  }
-  if (end_line !== undefined && end_line < start) {
-    return errorResult(`end_line ${end_line} must be >= start_line ${start}`);
+  // Support both legacy start_line/end_line and new ranges param
+  let ranges: ReadRange[];
+  try {
+    if (params.ranges) {
+      ranges = parseRanges(params.ranges);
+    } else if (start_line !== undefined || end_line !== undefined) {
+      const start = start_line ?? 1;
+      if (start < 1) {
+        return errorResult(`start_line ${start} must be >= 1`);
+      }
+      if (end_line !== undefined && end_line < start) {
+        return errorResult(`end_line ${end_line} must be >= start_line ${start}`);
+      }
+      ranges = [{ start, end: end_line ?? Infinity }];
+    } else {
+      ranges = [{ start: 1, end: Infinity }];
+    }
+  } catch (err: unknown) {
+    return errorResult((err as Error).message);
   }
 
-  const end = end_line ?? Infinity;
   const outputParts: string[] = [];
-  let checksumHash = FNV_OFFSET_BASIS;
-  let lastLineNo = 0;
+  let rangeIdx = 0;
+  let currentRange = ranges[0];
+  let rangeChecksumHash = FNV_OFFSET_BASIS;
+  let rangeFirstLine = 0;
+  let rangeLastLine = 0;
   let totalLines = 0;
 
   try {
     for await (const { lineBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: true })) {
       totalLines = lineNumber;
 
-      if (lineNumber < start) continue;
-      if (lineNumber > end) break;
+      // Past all ranges — stop early
+      if (rangeIdx >= ranges.length) break;
 
-      lastLineNo = lineNumber;
+      currentRange = ranges[rangeIdx];
+
+      // Before current range
+      if (lineNumber < currentRange.start) continue;
+
+      // Past current range — close it, advance
+      if (lineNumber > currentRange.end) {
+        outputParts.push("");
+        outputParts.push(`checksum: ${formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash)}`);
+
+        rangeIdx++;
+        rangeChecksumHash = FNV_OFFSET_BASIS;
+        rangeFirstLine = 0;
+
+        // Check if new range starts at this line
+        if (rangeIdx >= ranges.length) break;
+        currentRange = ranges[rangeIdx];
+        if (lineNumber < currentRange.start) continue;
+      }
+
+      // Within current range — hash and output
+      if (rangeFirstLine === 0) rangeFirstLine = lineNumber;
+      rangeLastLine = lineNumber;
       const line = lineBytes.toString("utf-8");
       const h = fnv1aHash(line);
-      checksumHash = foldHash(checksumHash, h);
-
+      rangeChecksumHash = foldHash(rangeChecksumHash, h);
       outputParts.push(`${lineNumber}:${hashToLetters(h)}|${line}`);
     }
   } catch (err: unknown) {
@@ -69,11 +107,16 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     return textResult(`(empty file)\n\nchecksum: ${EMPTY_FILE_CHECKSUM}`);
   }
 
-  // start_line out of range
-  if (start > totalLines) {
-    return errorResult(`start_line ${start} out of range (file has ${totalLines} lines)`);
+  // Check if first range's start is out of range
+  if (ranges[0].start > totalLines) {
+    return errorResult(`start_line ${ranges[0].start} out of range (file has ${totalLines} lines)`);
   }
 
-  const checksum = formatChecksum(start, lastLineNo, checksumHash);
-  return textResult(`${outputParts.join("\n")}\n\nchecksum: ${checksum}`);
+  // Emit checksum for the last range
+  if (rangeFirstLine > 0) {
+    outputParts.push("");
+    outputParts.push(`checksum: ${formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash)}`);
+  }
+
+  return textResult(outputParts.join("\n"));
 }

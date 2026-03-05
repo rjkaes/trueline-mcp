@@ -84,4 +84,61 @@ describe("handleRead", () => {
     });
     expect(result.isError).toBe(true);
   });
+
+  test("reads multiple disjoint ranges with separate checksums", async () => {
+    const lines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
+    const multiFile = join(testDir, "multi.txt");
+    writeFileSync(multiFile, lines.join("\n") + "\n");
+
+    const result = await handleRead({
+      file_path: multiFile,
+      ranges: [
+        { start: 3, end: 5 },
+        { start: 15, end: 17 },
+      ],
+      projectDir: testDir,
+    });
+
+    const text = result.content[0].text;
+
+    // Should have two checksum lines
+    const checksumMatches = text.match(/^checksum: \d+-\d+:[0-9a-f]{8}$/gm);
+    expect(checksumMatches).toHaveLength(2);
+
+    // Should contain lines 3-5 and 15-17 but not lines 6-14
+    expect(text).toMatch(/^3:/m);
+    expect(text).toMatch(/^5:/m);
+    expect(text).toMatch(/^15:/m);
+    expect(text).toMatch(/^17:/m);
+    expect(text).not.toMatch(/^6:/m);
+    expect(text).not.toMatch(/^14:/m);
+  });
+
+  test("reads whole file when ranges omitted", async () => {
+    const wholeFile = join(testDir, "whole.txt");
+    writeFileSync(wholeFile, "a\nb\nc\n");
+    const result = await handleRead({
+      file_path: wholeFile,
+      projectDir: testDir,
+    });
+    const text = result.content[0].text;
+    expect(text).toContain("1:");
+    expect(text).toContain("3:");
+    const checksumMatches = text.match(/^checksum: /gm);
+    expect(checksumMatches).toHaveLength(1);
+  });
+
+  test("rejects overlapping ranges", async () => {
+    const overlapFile = join(testDir, "overlap.txt");
+    writeFileSync(overlapFile, "a\nb\nc\nd\n");
+    const result = await handleRead({
+      file_path: overlapFile,
+      ranges: [
+        { start: 1, end: 3 },
+        { start: 2, end: 4 },
+      ],
+      projectDir: testDir,
+    });
+    expect(result.isError).toBe(true);
+  });
 });
