@@ -36,6 +36,26 @@ checksum: 1-3:a4b5
 e.g. `"1:bq..3:mz"`) and the checksum from the read. Both are verified before
 the write — if either has changed since the read, the edit is rejected.
 
+Here is what a `trueline_edit` call looks like in practice:
+
+```
+trueline_edit(
+  file_path: "README.md",
+  checksum: "1-112:a509e33a",
+  edits: [{
+    range: "+56:dd",
+    content: ["", "this is awesome", ""]
+  }]
+)
+```
+
+```
+Edit applied. (10ms)
+
+inserted 3 lines after line 56
+checksum: 1-115:52d30156
+```
+
 `trueline_diff` previews the proposed changes as a unified diff without writing
 to disk.
 
@@ -76,23 +96,23 @@ Read a file and return its content with per-line hashes and a range checksum.
 
 Apply one or more edits to a file with hash verification.
 
-| Parameter   | Type  | Description                         |
-|-------------|-------|-------------------------------------|
-| `file_path` | string | Path to the file                   |
-| `edits`     | array  | List of edit operations (see below) |
+| Parameter  | Type   | Description                                              |
+|------------|--------|----------------------------------------------------------|
+| `file_path`| string | Path to the file                                         |
+| `checksum` | string | Range checksum from `trueline_read` (e.g. `1-50:ab12cd34`) |
+| `edits`    | array  | List of edit operations (see below)                      |
 
 Each edit:
 
-| Field          | Type    | Description                                                    |
-|----------------|---------|----------------------------------------------------------------|
-| `range`        | string  | `"startLine:startHash..endLine:endHash"` from `trueline_read`  |
-| `content`      | string  | Replacement text (empty string to delete the range)            |
-| `checksum`     | string  | Range checksum from `trueline_read`                            |
-| `insert_after` | boolean | Insert `content` after the range instead of replacing it       |
+| Field     | Type     | Description                                                                          |
+|-----------|----------|--------------------------------------------------------------------------------------|
+| `range`   | string   | `startLine:hash..endLine:hash` or `startLine:hash`; prefix `+` for insert-after     |
+| `content` | string[] | Replacement lines (one string per line, no `\n` chars). Empty array to delete range. |
 
 ### `trueline_diff`
 
-Preview edits as a unified diff. Takes the same parameters as `trueline_edit`.
+Preview edits as a unified diff. Takes the same
+parameters as `trueline_edit`.
 
 ## Development
 
