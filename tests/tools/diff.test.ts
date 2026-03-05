@@ -3,21 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleDiff } from "../../src/tools/diff.ts";
-import { fnv1aHashBytes, FNV_OFFSET_BASIS, foldHash, formatChecksum, hashToLetters } from "../../src/hash.ts";
-import { lineHash, rangeChecksum } from "../helpers.ts";
-
-function rawLineHash(buf: Buffer): string {
-  const h = fnv1aHashBytes(buf, 0, buf.length);
-  return hashToLetters(h);
-}
-
-function rawRangeChecksum(bufs: Buffer[], startLine: number, endLine: number): string {
-  let hash = FNV_OFFSET_BASIS;
-  for (let i = 0; i < bufs.length; i++) {
-    hash = foldHash(hash, fnv1aHashBytes(bufs[i], 0, bufs[i].length));
-  }
-  return formatChecksum(startLine, endLine, hash);
-}
+import { lineHash, rangeChecksum, rawLineHash, rawRangeChecksum } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;

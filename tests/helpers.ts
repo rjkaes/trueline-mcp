@@ -1,4 +1,4 @@
-import { FNV_OFFSET_BASIS, foldHash, fnv1aHash, formatChecksum } from "../src/hash.ts";
+import { FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, fnv1aHash, formatChecksum, hashToLetters } from "../src/hash.ts";
 
 /**
  * Compute a read-range checksum over a slice of file lines.
@@ -26,4 +26,26 @@ export function lineHash(line: string): string {
   const c1 = String.fromCharCode(97 + (h % 26));
   const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
   return c1 + c2;
+}
+
+/**
+ * Compute a read-range checksum over raw byte buffers.
+ *
+ * Use this for non-UTF-8 test files where the raw bytes differ from
+ * the UTF-8 encoding of the decoded string.
+ */
+export function rawRangeChecksum(bufs: Buffer[], startLine: number, endLine: number): string {
+  let hash = FNV_OFFSET_BASIS;
+  for (let i = 0; i < bufs.length; i++) {
+    hash = foldHash(hash, fnv1aHashBytes(bufs[i], 0, bufs[i].length));
+  }
+  return formatChecksum(startLine, endLine, hash);
+}
+
+/**
+ * Compute 2-letter content hash from raw bytes.
+ */
+export function rawLineHash(buf: Buffer): string {
+  const h = fnv1aHashBytes(buf, 0, buf.length);
+  return hashToLetters(h);
 }
