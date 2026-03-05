@@ -77,7 +77,7 @@ function editSummary(ops: StreamEditOp[]): string {
 
       const delta = lines - span;
       const sign = delta > 0 ? "+" : delta < 0 ? "" : "\u00b1";
-      return `replaced ${rangeStr} (${span} \u2192 ${lines} line${lines !== 1 ? "s" : ""}, ${sign}${delta})`;
+      return `replaced ${rangeStr} (${span}\u2192${lines} line${lines !== 1 ? "s" : ""}, ${sign}${delta})`;
     })
     .join("\n");
 }

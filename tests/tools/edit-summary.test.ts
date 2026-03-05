@@ -47,7 +47,7 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("replaced line 2 (1 \u2192 3 lines, +2)");
+    expect(text).toContain("replaced line 2 (1\u21923 lines, +2)");
   });
 
   test("multi-line replace shows range and delta", async () => {
@@ -61,7 +61,7 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("replaced lines 2\u20134 (3 \u2192 1 line, -2)");
+    expect(text).toContain("replaced lines 2\u20134 (3\u21921 line, -2)");
   });
 
   test("replace with same line count shows \u00b10", async () => {
@@ -73,7 +73,7 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("replaced line 1 (1 \u2192 1 line, \u00b10)");
+    expect(text).toContain("replaced line 1 (1\u21921 line, \u00b10)");
   });
 
   test("deletion shows deleted with line count", async () => {
@@ -136,7 +136,7 @@ describe("edit summary", () => {
 
     const text = result.content[0].text;
     expect(text).toContain("no changes");
-    expect(text).toContain("replaced line 1 (1 \u2192 1 line, \u00b10)");
+    expect(text).toContain("replaced line 1 (1\u21921 line, \u00b10)");
   });
 
   test("batch edit shows one summary line per op", async () => {
