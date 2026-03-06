@@ -63,6 +63,9 @@ lines.
 
 Every line range in the outline maps directly to a `trueline_read` call.
 
+Supports 20+ languages: TypeScript, JavaScript, Python, Go, Rust, Java, C,
+C++, C#, Ruby, PHP, Kotlin, Swift, Scala, Elixir, Lua, Dart, Zig, Bash.
+
 ### 44% fewer output tokens with `trueline_edit`
 
 The built-in `Edit` makes the model echo back the text being replaced:
@@ -148,57 +151,15 @@ overhead for multi-site changes.
 ## Workflow
 
 ```
-trueline_outline (navigate) → trueline_read (targeted ranges) → trueline_diff (preview) → trueline_edit (apply)
+trueline_outline (navigate)
+    → trueline_read (targeted ranges)
+    → trueline_diff (preview) [optional]
+    → trueline_edit (apply)
 ```
 
 A `SessionStart` hook injects instructions directing the agent to use
 trueline tools. A `PreToolUse` hook blocks the built-in `Edit` tool and
 redirects to the trueline workflow.
-
-## Tools
-
-### `trueline_outline`
-
-Get a compact structural outline of a source file using tree-sitter.
-
-| Parameter    | Type    | Description                                             |
-|--------------|---------|-------------------------------------------------------  |
-| `file_path`  | string  | Path to the file                                        |
-
-Supports 20+ languages: TypeScript, JavaScript, Python, Go, Rust, Java,
-C, C++, C#, Ruby, PHP, Kotlin, Swift, Scala, Elixir, Lua, Dart, Zig,
-Bash.
-
-### `trueline_read`
-
-Read a file with per-line hashes and a range checksum.
-
-| Parameter    | Type    | Description                                             |
-|--------------|---------|-------------------------------------------------------  |
-| `file_path`  | string  | Path to the file                                        |
-| `ranges`     | array   | Optional array of `{start, end}` ranges (default: whole file) |
-
-### `trueline_edit`
-
-Apply one or more hash-verified edits to a file.
-
-| Parameter  | Type   | Description                                              |
-|------------|--------|----------------------------------------------------------|
-| `file_path`| string | Path to the file                                         |
-| `edits`    | array  | List of edit operations (see below)                      |
-
-Each edit:
-
-| Field      | Type     | Description                                                                          |
-|------------|----------|--------------------------------------------------------------------------------------|
-| `checksum` | string   | Range checksum from `trueline_read` (e.g. `1-50:ab12cd34`)                          |
-| `range`    | string   | `startLine:hash..endLine:hash` or `startLine:hash`; prefix `+` for insert-after     |
-| `content`  | string   | Replacement lines, newline-separated. Empty string to delete range.                  |
-
-### `trueline_diff`
-
-Preview edits as a unified diff without writing to disk. Takes the same
-parameters as `trueline_edit`.
 
 ## Path access
 
