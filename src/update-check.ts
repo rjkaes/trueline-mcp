@@ -43,17 +43,26 @@ async function fetchLatestVersion(): Promise<string | null> {
 
 /**
  * Non-blocking update check. Compares the running version against the latest
- * on npm and writes a notice to stderr if a newer version is available.
+ * on npm and notifies via the provided callback if a newer version is available.
  * Checks at most once per 24 hours (cached in a temp file).
+ *
+ * @param onUpdate Called with `{ current, latest }` when a newer version exists.
+ *                 Defaults to writing a notice to stderr.
  */
-export function scheduleUpdateCheck(currentVersion: string): void {
+export function scheduleUpdateCheck(
+  currentVersion: string,
+  onUpdate?: (info: { current: string; latest: string }) => void,
+): void {
+  const notify = onUpdate ?? defaultNotify;
+
   // Fire-and-forget — never delays startup or rejects into the event loop
   void (async () => {
     const cached = await readCache();
 
     if (cached && Date.now() - cached.timestamp < CHECK_INTERVAL_MS) {
-      // Use cached result
-      notifyIfNewer(currentVersion, cached.latestVersion);
+      if (compareVersions(cached.latestVersion, currentVersion) > 0) {
+        notify({ current: currentVersion, latest: cached.latestVersion });
+      }
       return;
     }
 
@@ -61,14 +70,14 @@ export function scheduleUpdateCheck(currentVersion: string): void {
     if (!latest) return;
 
     await writeCache({ timestamp: Date.now(), latestVersion: latest });
-    notifyIfNewer(currentVersion, latest);
+    if (compareVersions(latest, currentVersion) > 0) {
+      notify({ current: currentVersion, latest });
+    }
   })();
 }
 
-function notifyIfNewer(current: string, latest: string): void {
-  if (compareVersions(latest, current) > 0) {
-    process.stderr.write(`[trueline-mcp] update available: ${current} → ${latest} (npm i -g trueline-mcp)\n`);
-  }
+function defaultNotify({ current, latest }: { current: string; latest: string }): void {
+  process.stderr.write(`[trueline-mcp] update available: ${current} → ${latest} (npm i -g trueline-mcp)\n`);
 }
 
 /** Simple semver comparison: returns >0 if a > b, <0 if a < b, 0 if equal. */

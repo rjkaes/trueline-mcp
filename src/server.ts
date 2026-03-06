@@ -12,7 +12,6 @@ import { handleOutline } from "./tools/outline.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
 
 const VERSION = pkg.version;
-scheduleUpdateCheck(VERSION);
 
 const server = new McpServer({
   name: "trueline-mcp",
@@ -155,3 +154,9 @@ try {
   console.error("Failed to start trueline-mcp server:", err);
   process.exit(1);
 }
+
+scheduleUpdateCheck(VERSION, ({ current, latest }) => {
+  const message = `update available: ${current} → ${latest} (npm i -g trueline-mcp)`;
+  process.stderr.write(`[trueline-mcp] ${message}\n`);
+  server.sendLoggingMessage({ level: "warning", logger: "trueline-mcp", data: message }).catch(() => {});
+});
