@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { extractOutline, formatOutline } from "../outline/extract.ts";
-import { getLanguageConfig, supportedExtensions } from "../outline/languages.ts";
+import { getLanguageConfig } from "../outline/languages.ts";
 import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
@@ -27,7 +27,7 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
   const ext = extname(validated.resolvedPath).toLowerCase();
   const config = getLanguageConfig(ext);
   if (!config) {
-    return errorResult(`No outline support for "${ext}" files. Supported: ${supportedExtensions().join(", ")}`);
+    return textResult(`No outline support for "${ext}" files — use trueline_read to read this file directly.`);
   }
 
   let source: string;

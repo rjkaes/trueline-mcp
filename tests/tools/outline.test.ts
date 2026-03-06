@@ -193,12 +193,13 @@ describe("trueline_outline", () => {
     expect(text).not.toContain("use std::io");
   });
 
-  test("returns error for unsupported file type", async () => {
+  test("returns guidance for unsupported file type", async () => {
     const file = writeTestFile("data.csv", "a,b,c\n1,2,3\n");
 
     const result = await handleOutline({ file_path: file, projectDir: testDir });
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBeUndefined();
     expect(getText(result)).toContain("No outline support");
+    expect(getText(result)).toContain("trueline_read");
   });
 
   test("returns error for nonexistent file", async () => {
