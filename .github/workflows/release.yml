@@ -26,6 +26,7 @@ jobs:
       - run: bun run build
       - name: Publish to npm
         run: |
+          npm install -g npm@latest
           npm config delete //registry.npmjs.org/:_authToken
           npm publish --provenance --access public
       - name: Amend release tag to include dist/server.js
