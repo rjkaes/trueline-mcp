@@ -56,27 +56,15 @@ server.registerTool(
     description: "Read a file; returns N:hash|content per line plus a checksum per range.",
     inputSchema: z.object({
       file_path: z.string(),
-      start_line: z
-        .number()
-        .int()
-        .positive()
-        .describe("First line to read (1-based). For single-range reads.")
-        .optional(),
-      end_line: z
-        .number()
-        .int()
-        .positive()
-        .describe("Last line to read (1-based, inclusive). For single-range reads.")
-        .optional(),
       ranges: z
         .array(
           z.object({
-            start: z.number().int().positive().optional(),
-            end: z.number().int().positive().optional(),
+            start: z.number().int().positive().describe("First line to read (1-based).").optional(),
+            end: z.number().int().positive().describe("Last line to read (1-based, inclusive).").optional(),
           }),
         )
         .describe(
-          "Multiple disjoint ranges to read in one call. Each gets its own checksum. Use start_line/end_line for single ranges.",
+          "Line ranges to read. Omit to read the whole file. Example: [{start: 10, end: 25}] or [{start: 1, end: 50}, {start: 200, end: 220}] for disjoint ranges. Each range gets its own checksum.",
         )
         .optional(),
       encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
