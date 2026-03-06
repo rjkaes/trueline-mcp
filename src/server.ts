@@ -9,8 +9,10 @@ import { handleDiff } from "./tools/diff.ts";
 import { handleEdit } from "./tools/edit.ts";
 import { handleRead } from "./tools/read.ts";
 import { handleOutline } from "./tools/outline.ts";
+import { scheduleUpdateCheck } from "./update-check.ts";
 
 const VERSION = pkg.version;
+scheduleUpdateCheck(VERSION);
 
 const server = new McpServer({
   name: "trueline-mcp",

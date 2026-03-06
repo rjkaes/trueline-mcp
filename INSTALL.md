@@ -26,7 +26,7 @@ Add to `~/.gemini/settings.json`:
   "mcpServers": {
     "trueline": {
       "command": "npx",
-      "args": ["-y", "trueline-mcp"]
+      "args": ["-y", "trueline-mcp@latest"]
     }
   }
 }
@@ -73,7 +73,7 @@ Add to `.vscode/mcp.json` in your project:
   "servers": {
     "trueline": {
       "command": "npx",
-      "args": ["-y", "trueline-mcp"]
+      "args": ["-y", "trueline-mcp@latest"]
     }
   }
 }
@@ -109,7 +109,7 @@ Add to your `opencode.json`:
   "mcp": {
     "trueline": {
       "command": "npx",
-      "args": ["-y", "trueline-mcp"]
+      "args": ["-y", "trueline-mcp@latest"]
     }
   }
 }
@@ -135,7 +135,7 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.trueline]
 command = "npx"
-args = ["-y", "trueline-mcp"]
+args = ["-y", "trueline-mcp@latest"]
 ```
 
 ### 2. Add the instruction file
@@ -189,3 +189,15 @@ The hook dispatcher auto-detects the platform from environment variables:
 | `CLAUDE_PROJECT_DIR`   | claude-code    |
 
 Override with `TRUELINE_PLATFORM=<platform>` if auto-detection doesn't work.
+
+## Keeping trueline up to date
+
+The recommended `npx -y trueline-mcp@latest` configuration checks the npm
+registry on each launch and always runs the newest version. If you prefer
+faster startup and offline resilience, drop the `@latest` suffix — npx will
+use whichever version it cached on first install. You can update manually at
+any time with `npm i -g trueline-mcp`.
+
+Regardless of configuration, the server prints a notice to stderr when a newer
+version is available (checked at most once every 24 hours). This notice is
+never sent to the agent — it only appears in MCP server logs.
