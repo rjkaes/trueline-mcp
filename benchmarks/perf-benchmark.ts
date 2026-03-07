@@ -2,7 +2,7 @@
  * Performance benchmark harness.
  *
  * Measures wall-clock time of core operations across realistic workloads.
- * Run: bun run perf
+ * Run: bun run benchmark
  */
 import { join } from "node:path";
 import { mkdtempSync, realpathSync, writeFileSync, rmSync, statSync } from "node:fs";
