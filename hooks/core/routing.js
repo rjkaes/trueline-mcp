@@ -6,12 +6,15 @@
 // block/approve decisions. Returns normalized {action, reason} objects
 // that platform-specific formatters translate to the right JSON shape.
 
+import { stat } from "node:fs/promises";
+
 // Maps platform-specific built-in tool names to canonical names.
 const TOOL_ALIASES = {
   // Gemini CLI
   read_file: "Read",
   read_many_files: "Read",
   edit_file: "Edit",
+  write_file: "Write",
   run_shell_command: "Bash",
   // OpenCode
   view: "Read",
@@ -81,6 +84,31 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
             "<trueline_redirect>" +
             "Read is blocked for this file. Use trueline_read instead. " +
             "trueline_read returns per-line hashes and a checksum needed for trueline_edit." +
+            "</trueline_redirect>",
+        };
+      }
+    }
+    return null;
+  }
+
+  if (canonical === "Write") {
+    if (typeof filePath === "string") {
+      const canWrite = await canAccessFn(filePath, "Edit");
+      if (canWrite) {
+        // Fall through to built-in Write for non-regular files (directories,
+        // devices, etc.) that trueline_write would reject.
+        try {
+          const s = await stat(filePath);
+          if (!s.isFile()) return null;
+        } catch {
+          // File doesn't exist yet — trueline_write can handle creation.
+        }
+        return {
+          action: "block",
+          reason:
+            "<trueline_redirect>" +
+            "Use trueline_write instead of Write for files in the project directory. " +
+            "trueline_write returns a checksum for verification." +
             "</trueline_redirect>",
         };
       }

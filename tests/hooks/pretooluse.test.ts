@@ -127,8 +127,35 @@ describe("PreToolUse hook", () => {
     }
   });
 
+  test("blocks Write for files trueline can access", async () => {
+    const result = await processHookEvent({
+      tool_name: "Write",
+      tool_input: { file_path: insideFile, content: "new content" },
+    });
+    expect(result.decision).toBe("block");
+    expect(result.reason).toContain("trueline_write");
+  });
+
+  test("approves Write for files outside project", async () => {
+    const result = await processHookEvent({
+      tool_name: "Write",
+      tool_input: { file_path: "/nonexistent/outside/file.ts", content: "x" },
+    });
+    expect(result.decision).toBe("approve");
+  });
+
+  test("approves Write for directories inside project", async () => {
+    const dirPath = join(projectDir, "a-subdir");
+    mkdirSync(dirPath, { recursive: true });
+    const result = await processHookEvent({
+      tool_name: "Write",
+      tool_input: { file_path: dirPath, content: "x" },
+    });
+    expect(result.decision).toBe("approve");
+  });
+
   test("approves other tools unconditionally", async () => {
-    for (const tool of ["Write", "Bash", "Glob"]) {
+    for (const tool of ["Bash", "Glob"]) {
       const result = await processHookEvent({ tool_name: tool, tool_input: {} });
       expect(result.decision).toBe("approve");
       expect(result.reason).toBeUndefined();

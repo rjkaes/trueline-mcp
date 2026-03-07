@@ -10,6 +10,7 @@ import { handleEdit } from "./tools/edit.ts";
 import { handleRead } from "./tools/read.ts";
 import { handleOutline } from "./tools/outline.ts";
 import { handleSearch } from "./tools/search.ts";
+import { handleWrite } from "./tools/write.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
 
 const VERSION = pkg.version;
@@ -174,6 +175,26 @@ server.registerTool(
   },
   async (params) => {
     return handleSearch({ ...params, projectDir, allowedDirs });
+  },
+);
+
+server.registerTool(
+  "trueline_write",
+  {
+    description:
+      "Create or overwrite a file. Returns a checksum of the written content for verification. " +
+      "To edit afterward, call trueline_read first to get per-line hashes.",
+    inputSchema: z.object({
+      file_path: z.string(),
+      content: z.string().describe("The full file content to write."),
+      create_directories: z
+        .boolean()
+        .describe("Create parent directories if they don't exist. Default: true.")
+        .optional(),
+    }),
+  },
+  async (params) => {
+    return handleWrite({ ...params, projectDir, allowedDirs });
   },
 );
 

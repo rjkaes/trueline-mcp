@@ -11,6 +11,9 @@ const PLATFORM_RULES = {
     readAdvice:
       "Never use the built-in Read tool \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
+    writeAdvice:
+      "Never use the built-in Write tool for files in the project directory \u2014 use trueline_write instead. " +
+      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
     subagentRule: true,
   },
   "gemini-cli": {
@@ -18,6 +21,9 @@ const PLATFORM_RULES = {
     readAdvice:
       "Never use read_file or read_many_files \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
+    writeAdvice:
+      "Never use write_file for files in the project directory \u2014 use trueline_write instead. " +
+      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
     subagentRule: false,
   },
   "vscode-copilot": {
@@ -25,6 +31,9 @@ const PLATFORM_RULES = {
     readAdvice:
       "Never use the built-in Read tool \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
+    writeAdvice:
+      "Never use the built-in Write tool for files in the project directory \u2014 use trueline_write instead. " +
+      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
     subagentRule: false,
   },
   opencode: {
@@ -32,6 +41,9 @@ const PLATFORM_RULES = {
     readAdvice:
       "Never use the built-in view tool \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
+    writeAdvice:
+      "Never use the built-in write tool for files in the project directory \u2014 use trueline_write instead. " +
+      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
     subagentRule: false,
   },
   codex: {
@@ -39,6 +51,9 @@ const PLATFORM_RULES = {
     readAdvice:
       "Never use read_file or shell with cat/head/tail \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
+    writeAdvice:
+      "Never use shell with echo/cat redirection for files in the project directory \u2014 use trueline_write instead. " +
+      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
     subagentRule: false,
   },
 };
@@ -62,12 +77,14 @@ export function getInstructions(platform = "claude-code") {
     <tool name="trueline_edit">Edit a file with hash verification. Replaces the built-in Edit tool, which is blocked. Each edit needs: checksum (from trueline_read for the covering range), range (startLine:hash..endLine:hash or +startLine:hash for insert-after), content (replacement lines as newline-separated string; empty string to delete). Pass all changes to the same file in the edits array.</tool>
     <tool name="trueline_diff">Preview edits as a unified diff without writing to disk.</tool>
     <tool name="trueline_outline">Get a compact structural outline of a source file (functions, classes, types, etc.) without reading full content. Often sufficient on its own for navigation and understanding. Use before trueline_read to identify the right line ranges when you do need to read.</tool>
-    <tool name="trueline_search">Search a file by regex. Returns matching lines with surrounding context, per-line hashes, and checksums — output is edit-ready (pass checksums directly to trueline_edit). Preferred over Grep for single-file searches because results include hashes for immediate editing. Preferred over outline+read when you know a pattern to search for.</tool>
+    <tool name="trueline_search">Search a file by regex. Returns matching lines with surrounding context, per-line hashes, and checksums \u2014 output is edit-ready (pass checksums directly to trueline_edit). Preferred over Grep for single-file searches because results include hashes for immediate editing. Preferred over outline+read when you know a pattern to search for.</tool>
+    <tool name="trueline_write">Create or overwrite a file. Returns a checksum for verification. To edit afterward, call trueline_read first to get per-line hashes. Use instead of the built-in Write tool for files in the project directory.</tool>
   </tools>
   <workflow>trueline_outline (navigate / understand) → trueline_read (targeted ranges, only if needed) → trueline_diff (optional) → trueline_edit</workflow>
   <workflow>trueline_search (find + read in one step) → trueline_edit (edit directly from search results, no re-read needed)</workflow>
   <rules>${editRule}
-    <rule>${rules.readAdvice}</rule>${subagentRule}
+    <rule>${rules.readAdvice}</rule>
+    <rule>${rules.writeAdvice}</rule>${subagentRule}
     <rule>trueline_outline is often enough by itself for questions about file structure, purpose, or navigation. Only call trueline_read when you actually need the source code (e.g. to edit, debug, or understand implementation details).</rule>
     <rule>After using trueline_outline, if you do need to read, use its line numbers to read only the specific ranges you need \u2014 do NOT read the entire file.</rule>
     <rule>Only read a full file (no ranges) when you have not used trueline_outline and the file is short, or you genuinely need every line.</rule>
