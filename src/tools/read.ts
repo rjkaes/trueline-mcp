@@ -160,7 +160,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   // Append truncation notice so the agent knows to use narrower ranges
   if (truncated) {
     const reason = outputLines > MAX_OUTPUT_LINES ? `${MAX_OUTPUT_LINES} line` : "20 MB output";
-    const notice = `\n\n(truncated — ${reason} limit reached. Use ranges to read specific sections.)`;
+    const notice = `\n\n(truncated at ${reason} limit — use ranges for specific sections)`;
     const nb = Buffer.from(notice);
     outputChunks.push(nb);
     outputLen += nb.length;

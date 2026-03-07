@@ -78,13 +78,21 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 
   // Whether we've captured enough matches and finished all post-context
   let done = false;
+  // After capturing all matches + post-context, scan at most this many more
+  // lines to estimate totalMatches. Avoids O(file) scan for huge files.
+  const POST_LIMIT_SCAN_CAP = 1000;
+  let postLimitScanned = 0;
+  let postLimitCapped = false;
 
   try {
     for await (const { lineBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: true })) {
       if (done) {
-        // We still need to count remaining matches for the truncation notice,
-        // but only check — don't decode or store.
-        // Optimization: decode only to test regex
+        // Count remaining matches up to the scan cap
+        postLimitScanned++;
+        if (postLimitScanned > POST_LIMIT_SCAN_CAP) {
+          postLimitCapped = true;
+          break;
+        }
         const text = lineBytes.toString("utf-8");
         if (regex.test(text)) totalMatches++;
         continue;
@@ -115,6 +123,13 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 
         currentWindow.lines.push(decoded);
         postRemaining = contextLines; // reset post-context counter
+
+        // With zero context lines, postRemaining is already 0 — flush immediately
+        if (matchesCaptured >= maxMatches && postRemaining === 0) {
+          windows.push(currentWindow);
+          currentWindow = null;
+          done = true;
+        }
       } else if (postRemaining > 0 && currentWindow !== null) {
         // Collecting post-context
         currentWindow.lines.push(decoded);
@@ -198,7 +213,8 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   // Truncation notice
   if (totalMatches > maxMatches) {
     parts.push("");
-    parts.push(`(showing ${maxMatches} of ${totalMatches} matches — increase max_matches to see more)`);
+    const countLabel = postLimitCapped ? `${totalMatches}+` : `${totalMatches}`;
+    parts.push(`(showing ${maxMatches} of ${countLabel} matches — increase max_matches to see more)`);
   }
 
   return textResult(parts.join("\n"));

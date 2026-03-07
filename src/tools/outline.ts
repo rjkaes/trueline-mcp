@@ -37,7 +37,8 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
     return errorResult(`Error reading file: ${(err as Error).message}`);
   }
 
-  const totalLines = source.split("\n").length;
+  let totalLines = 1;
+  for (let i = 0; i < source.length; i++) if (source.charCodeAt(i) === 10) totalLines++;
 
   try {
     const entries = await extractOutline(source, config);

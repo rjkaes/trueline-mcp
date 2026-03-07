@@ -2,7 +2,7 @@ import { dirname, resolve, sep } from "node:path";
 import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import type { ToolResult } from "./types.ts";
 import { errorResult, textResult } from "./types.ts";
-import { handleRead } from "./read.ts";
+import { computeFileChecksum } from "../hash.ts";
 
 // ==============================================================================
 // Path validation for write (handles both new and existing files)
@@ -108,12 +108,9 @@ export async function handleWrite(params: WriteParams): Promise<ToolResult> {
     return errorResult(`Write failed: ${(err as Error).message}`);
   }
 
-  // Reuse trueline_read to compute a checksum for verification. This
-  // guarantees the checksum matches what a subsequent trueline_read would
-  // return, regardless of EOL style.
-  const readResult = await handleRead({ file_path: resolvedPath, projectDir, allowedDirs });
-  const checksumMatch = readResult.content[0].text.match(/checksum: (\S+)/);
-  const checksum = checksumMatch ? checksumMatch[1] : "0-0:00000000";
+  // Compute checksum directly — avoids the full handleRead pipeline
+  // (per-line formatting, output buffers, regex extraction).
+  const checksum = await computeFileChecksum(resolvedPath);
 
   const verb = validated.exists ? "overwritten" : "created";
   return textResult(`File ${verb}: ${file_path}\n\nchecksum: ${checksum}`);

@@ -113,3 +113,27 @@ const LETTER_TABLE: string[] = /* @__PURE__ */ (() => {
 export function hashToLetters(h: number): string {
   return LETTER_TABLE[((h & 0x1f) << 5) | ((h >>> 8) & 0x1f)];
 }
+
+/**
+ * Compute a whole-file checksum by streaming lines and folding their hashes.
+ *
+ * Returns the same checksum string that `handleRead` would produce for a
+ * full-file read, but without building any per-line output buffers.
+ */
+export async function computeFileChecksum(filePath: string): Promise<string> {
+  // Lazy import to avoid circular dependency (splitLines → hash is fine,
+  // but hash → line-splitter would be new).
+  const { splitLines } = await import("./line-splitter.ts");
+
+  let acc = FNV_OFFSET_BASIS;
+  let lastLine = 0;
+
+  for await (const { lineBytes, lineNumber } of splitLines(filePath)) {
+    const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
+    acc = foldHash(acc, h);
+    lastLine = lineNumber;
+  }
+
+  if (lastLine === 0) return EMPTY_FILE_CHECKSUM;
+  return formatChecksum(1, lastLine, acc);
+}
