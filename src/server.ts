@@ -9,6 +9,7 @@ import { handleDiff } from "./tools/diff.ts";
 import { handleEdit } from "./tools/edit.ts";
 import { handleRead } from "./tools/read.ts";
 import { handleOutline } from "./tools/outline.ts";
+import { handleSearch } from "./tools/search.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
 
 const VERSION = pkg.version;
@@ -150,6 +151,29 @@ server.registerTool(
   },
   async (params) => {
     return handleOutline({ ...params, projectDir, allowedDirs });
+  },
+);
+
+server.registerTool(
+  "trueline_search",
+  {
+    description:
+      "Search a file by regex pattern. Returns matching lines with context, per-line hashes, and checksums — " +
+      "ready for immediate editing. Use instead of outline+read when you know what pattern to look for.",
+    inputSchema: z.object({
+      file_path: z.string(),
+      pattern: z.string().describe("Regex pattern to search for (line-by-line matching)."),
+      context_lines: z
+        .number()
+        .int()
+        .min(0)
+        .describe("Lines of context above/below each match. Default: 2.")
+        .optional(),
+      max_matches: z.number().int().positive().describe("Maximum number of matches to return. Default: 10.").optional(),
+    }),
+  },
+  async (params) => {
+    return handleSearch({ ...params, projectDir, allowedDirs });
   },
 );
 
