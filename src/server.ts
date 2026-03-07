@@ -5,6 +5,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import pkg from "../package.json";
+import type { ToolResult } from "./tools/types.ts";
+import { errorResult } from "./tools/types.ts";
 import { handleDiff } from "./tools/diff.ts";
 import { handleEdit } from "./tools/edit.ts";
 import { handleRead } from "./tools/read.ts";
@@ -12,6 +14,18 @@ import { handleOutline } from "./tools/outline.ts";
 import { handleSearch } from "./tools/search.ts";
 import { handleWrite } from "./tools/write.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
+
+function safeTool<P>(handler: (params: P) => Promise<ToolResult>): (params: P) => Promise<ToolResult> {
+  return async (params) => {
+    try {
+      return await handler(params);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[trueline-mcp] tool error: ${message}\n`);
+      return errorResult(`Internal error: ${message}`);
+    }
+  };
+}
 
 const VERSION = pkg.version;
 
@@ -83,9 +97,9 @@ server.registerTool(
         .optional(),
     }),
   },
-  async (params) => {
+  safeTool(async (params) => {
     return handleRead({ ...params, projectDir, allowedDirs });
-  },
+  }),
 );
 
 server.registerTool(
@@ -109,9 +123,9 @@ server.registerTool(
       encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
     }),
   },
-  async (params) => {
+  safeTool(async (params) => {
     return handleEdit({ ...params, projectDir, allowedDirs });
-  },
+  }),
 );
 
 server.registerTool(
@@ -135,9 +149,9 @@ server.registerTool(
       encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
     }),
   },
-  async (params) => {
+  safeTool(async (params) => {
     return handleDiff({ ...params, projectDir, allowedDirs });
-  },
+  }),
 );
 
 server.registerTool(
@@ -150,9 +164,9 @@ server.registerTool(
       file_path: z.string(),
     }),
   },
-  async (params) => {
+  safeTool(async (params) => {
     return handleOutline({ ...params, projectDir, allowedDirs });
-  },
+  }),
 );
 
 server.registerTool(
@@ -173,9 +187,9 @@ server.registerTool(
       max_matches: z.number().int().positive().describe("Maximum number of matches to return. Default: 10.").optional(),
     }),
   },
-  async (params) => {
+  safeTool(async (params) => {
     return handleSearch({ ...params, projectDir, allowedDirs });
-  },
+  }),
 );
 
 server.registerTool(
@@ -193,9 +207,9 @@ server.registerTool(
         .optional(),
     }),
   },
-  async (params) => {
+  safeTool(async (params) => {
     return handleWrite({ ...params, projectDir, allowedDirs });
-  },
+  }),
 );
 
 const transport = new StdioServerTransport();
@@ -205,6 +219,14 @@ try {
   console.error("Failed to start trueline-mcp server:", err);
   process.exit(1);
 }
+
+process.on("uncaughtException", (err) => {
+  process.stderr.write(`[trueline-mcp] uncaught exception: ${err.message}\n`);
+});
+process.on("unhandledRejection", (reason) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  process.stderr.write(`[trueline-mcp] unhandled rejection: ${message}\n`);
+});
 
 scheduleUpdateCheck(VERSION, ({ current, latest }) => {
   const message = `update available: ${current} → ${latest} (npm i -g trueline-mcp)`;

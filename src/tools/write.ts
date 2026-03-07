@@ -99,12 +99,14 @@ export async function handleWrite(params: WriteParams): Promise<ToolResult> {
 
   const { resolvedPath } = validated;
 
-  // Create parent directories if needed
-  if (createDirs) {
-    await mkdir(dirname(resolvedPath), { recursive: true });
+  try {
+    if (createDirs) {
+      await mkdir(dirname(resolvedPath), { recursive: true });
+    }
+    await writeFile(resolvedPath, content, "utf-8");
+  } catch (err: unknown) {
+    return errorResult(`Write failed: ${(err as Error).message}`);
   }
-
-  await writeFile(resolvedPath, content, "utf-8");
 
   // Reuse trueline_read to compute a checksum for verification. This
   // guarantees the checksum matches what a subsequent trueline_read would
