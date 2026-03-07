@@ -37,7 +37,7 @@ matches — the agent silently corrupts your code.
 
 ## How trueline fixes this
 
-trueline replaces Claude Code's built-in `Read` and `Edit` with four
+trueline replaces Claude Code's built-in `Read` and `Edit` with five
 tools that are smaller, faster, and verified.
 
 ### 95% fewer input tokens with `trueline_outline`
@@ -122,6 +122,25 @@ trueline_read(file_path: "big-file.ts", ranges: [{start: 45, end: 60}, {start: 2
 
 30 lines instead of 2000 — with separate checksums for each range.
 
+For exploratory reads where you don't plan to edit, pass `hashes: false`
+to omit per-line hashes and save ~3 tokens per line. Checksums are
+always included, so you can still use the output for subsequent edits
+after a targeted re-read.
+
+### Find-and-fix in one step with `trueline_search`
+
+`trueline_search` finds lines by regex and returns them with context,
+per-line hashes, and checksums — ready for immediate editing:
+
+```
+trueline_search(file_path: "server.ts", pattern: "validatePath", context_lines: 3)
+```
+
+Instead of outline → read → find the right lines, the agent goes
+straight to the code it needs. In benchmarks, a search-based workflow
+uses **~127 tokens** vs **~2000** for outline+read — a 93% reduction
+for targeted lookups.
+
 ### Hash verification catches mistakes
 
 Every line from `trueline_read` carries a content hash. Every edit must
@@ -161,6 +180,9 @@ trueline_outline (navigate)
     → trueline_read (targeted ranges)
     → trueline_diff (preview) [optional]
     → trueline_edit (apply)
+
+trueline_search (find pattern)
+    → trueline_edit (immediate edit from search results)
 ```
 
 A `SessionStart` hook injects instructions directing the agent to use

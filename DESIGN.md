@@ -6,7 +6,8 @@ hashes back — proving the agent is working against the file's actual
 content rather than a stale or hallucinated version.
 
 This document explains how the core tools — `trueline_read`,
-`trueline_edit`, `trueline_diff`, and `trueline_outline` — work together.
+`trueline_edit`, `trueline_diff`, `trueline_outline`, and
+`trueline_search` — work together.
 
 ## The problem
 
@@ -91,6 +92,15 @@ don't need to re-read a 2000-line file to edit line 500.
 Multiple disjoint ranges can be read in a single call, each producing
 its own checksum. This is useful when editing lines in different parts
 of a file — one read call provides all the checksums needed.
+
+### Compact reads
+
+When the agent is exploring code without planning to edit, it can pass
+`hashes: false` to omit the per-line 2-letter hashes. The output format
+changes from `N:hash|content` to `N|content`, saving ~3 tokens per line.
+Checksums are always included regardless of the `hashes` setting, so the
+agent can still reference the output for a subsequent targeted re-read
+before editing.
 
 ### Empty files
 
@@ -309,9 +319,52 @@ Elixir, Lua, Dart, Zig, and Bash.
 Adding a new language requires only a new entry in `languages.ts` — no
 new dependencies.
 
+## Searching: `trueline_search`
+
+```
+trueline_search({
+  file_path: "src/server.ts",
+  pattern: "validatePath",
+  context_lines: 3,      // optional, default: 2
+  max_matches: 10,       // optional, default: 10
+})
+```
+
+`trueline_search` searches a file by regex and returns matching lines
+with context, per-line hashes, and checksums — ready for immediate
+editing. It replaces the outline → read → find workflow when the agent
+knows what pattern to look for.
+
+The pipeline:
+
+1. Validates the file path through the same security boundary as other
+   tools.
+2. Validates the regex pattern (rejects invalid patterns with an error).
+3. Streams the file line-by-line, hashing each line and testing against
+   the regex.
+4. Builds context windows around matches, merging overlapping ranges.
+5. Formats output with per-line hashes and a checksum per context
+   window.
+
+If `max_matches` is exceeded, the output includes a truncation notice
+with the total match count.
+
+The output is identical in format to `trueline_read` — same `N:hash|`
+prefix, same checksums — so the agent can pass results directly to
+`trueline_edit` without a re-read step.
+
+### When to use search vs outline+read
+
+| Scenario | Recommended tool |
+|----------|------------------|
+| Understand file structure | `trueline_outline` |
+| Read specific known lines | `trueline_read` |
+| Find code by pattern, then edit | `trueline_search` |
+| Explore unfamiliar code | `trueline_outline` → `trueline_read` |
+
 ## Security model
 
-All four tools share a file-access layer that enforces deny patterns
+All five tools share a file-access layer that enforces deny patterns
 from a three-tier settings hierarchy:
 
 1. `.claude/settings.local.json` (project-local, gitignored)
