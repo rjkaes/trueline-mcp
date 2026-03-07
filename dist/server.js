@@ -4,25 +4,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name2, newValue) {
+  this[name2] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name2 in all)
     __defProp(target, name2, {
       get: all[name2],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name2] = () => newValue
+      set: __exportSetter.bind(all, name2)
     });
 };
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
@@ -6501,7 +6519,7 @@ var require_dist = __commonJS((exports, module2) => {
 
 // node_modules/web-tree-sitter/tree-sitter.js
 var require_tree_sitter = __commonJS((exports, module2) => {
-  var __dirname = "/Users/rjk/src/opensource/trueline-mcp/node_modules/web-tree-sitter";
+  var __dirname = "/home/runner/work/trueline-mcp/trueline-mcp/node_modules/web-tree-sitter";
   var Module = typeof Module != "undefined" ? Module : {};
   var ENVIRONMENT_IS_WEB = typeof window == "object";
   var ENVIRONMENT_IS_WORKER = typeof importScripts == "function";
@@ -22335,7 +22353,7 @@ class StdioServerTransport {
 // package.json
 var package_default = {
   name: "trueline-mcp",
-  version: "2.3.0",
+  version: "2.4.0",
   type: "module",
   description: "Truth-verified file editing for AI coding agents via MCP",
   license: "Apache-2.0",
