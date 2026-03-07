@@ -55,6 +55,12 @@ fi
 current_version=$(jq -r .version package.json)
 echo "Releasing: ${current_version} -> ${new_version}"
 
+# Pull latest from origin so we don't conflict with CI-pushed commits
+# (e.g., dist/server.js auto-built on main).
+echo ""
+echo "==> Syncing with origin/main..."
+git pull --rebase --quiet origin main
+
 # Bump version in both files
 echo ""
 echo "==> Bumping version in package.json and .claude-plugin/plugin.json..."
@@ -69,12 +75,10 @@ git add package.json .claude-plugin/plugin.json
 LEFTHOOK=0 git commit -m "chore: release v${new_version}"
 git tag "$tag"
 
-# Push (lefthook pre-push hook auto-rebases onto remote main)
+# Push commit and tag
 echo ""
 echo "==> Pushing commit and tag..."
-echo ""
-echo "==> Pushing commit and tag..."
-git push
+LEFTHOOK=0 git push origin main
 git push origin "$tag"
 
 echo ""
