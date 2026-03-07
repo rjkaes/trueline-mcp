@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleRead } from "../src/tools/read.ts";
 import { handleOutline } from "../src/tools/outline.ts";
+import { handleSearch } from "../src/tools/search.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -24,7 +25,9 @@ function outputBytes(result: { content: Array<{ text: string }> }): number {
   return result.content.reduce((sum, c) => sum + Buffer.byteLength(c.text, "utf-8"), 0);
 }
 
-function printTable(results: ScenarioResult[]): void {
+function printTable(label: string, results: ScenarioResult[]): void {
+  console.log(`\n${label}`);
+  console.log("=".repeat(label.length));
   const header = `${"Scenario".padEnd(40)} | ${"Bytes".padStart(8)} | ${"~Tokens".padStart(8)}`;
   console.log(header);
   console.log("-".repeat(header.length));
@@ -120,24 +123,109 @@ async function scenarioBroadExploration(): Promise<ScenarioResult> {
   return { name: "Broad exploration", steps, totalBytes, totalTokens: Math.round(totalBytes / 4) };
 }
 
+// Compact-read variants: same scenarios but with hashes=false for exploratory reads
+
+async function scenarioNavigateCompact(): Promise<ScenarioResult> {
+  const steps: ScenarioResult["steps"] = [];
+
+  const outline = await handleOutline({ file_path: SAMPLE_FILE, projectDir: PROJECT_DIR, allowedDirs: ALLOWED_DIRS });
+  steps.push({ tool: "outline", outputBytes: outputBytes(outline) });
+
+  const read = await handleRead({
+    file_path: SAMPLE_FILE,
+    ranges: [{ start: 74, end: 150 }],
+    hashes: false,
+    projectDir: PROJECT_DIR,
+    allowedDirs: ALLOWED_DIRS,
+  });
+  steps.push({ tool: "read (no hashes)", outputBytes: outputBytes(read) });
+
+  const totalBytes = steps.reduce((s, x) => s + x.outputBytes, 0);
+  return { name: "Navigate and understand (compact)", steps, totalBytes, totalTokens: Math.round(totalBytes / 4) };
+}
+
+async function scenarioExploreCompact(): Promise<ScenarioResult> {
+  const steps: ScenarioResult["steps"] = [];
+
+  const outline = await handleOutline({ file_path: SAMPLE_FILE, projectDir: PROJECT_DIR, allowedDirs: ALLOWED_DIRS });
+  steps.push({ tool: "outline", outputBytes: outputBytes(outline) });
+
+  // Exploratory read without hashes
+  const explore = await handleRead({
+    file_path: SAMPLE_FILE,
+    ranges: [{ start: 74, end: 250 }],
+    hashes: false,
+    projectDir: PROJECT_DIR,
+    allowedDirs: ALLOWED_DIRS,
+  });
+  steps.push({ tool: "read (exploratory, no hashes)", outputBytes: outputBytes(explore) });
+
+  // Targeted re-read with hashes for editing
+  const targeted = await handleRead({
+    file_path: SAMPLE_FILE,
+    ranges: [{ start: 100, end: 115 }],
+    projectDir: PROJECT_DIR,
+    allowedDirs: ALLOWED_DIRS,
+  });
+  steps.push({ tool: "read (edit target, with hashes)", outputBytes: outputBytes(targeted) });
+
+  const totalBytes = steps.reduce((s, x) => s + x.outputBytes, 0);
+  return { name: "Explore then edit (compact)", steps, totalBytes, totalTokens: Math.round(totalBytes / 4) };
+}
+
+// Search-based workflow: find pattern → edit-ready in one step
+
+async function scenarioSearchAndEdit(): Promise<ScenarioResult> {
+  const steps: ScenarioResult["steps"] = [];
+
+  const search = await handleSearch({
+    file_path: SAMPLE_FILE,
+    pattern: "validatePath",
+    context_lines: 3,
+    projectDir: PROJECT_DIR,
+    allowedDirs: ALLOWED_DIRS,
+  });
+  steps.push({ tool: "search (validatePath, ctx=3)", outputBytes: outputBytes(search) });
+
+  const totalBytes = steps.reduce((s, x) => s + x.outputBytes, 0);
+  return { name: "Find and fix (search)", steps, totalBytes, totalTokens: Math.round(totalBytes / 4) };
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  console.log("Token Benchmark — trueline-mcp\n");
-  console.log(`Sample file: ${SAMPLE_FILE}\n`);
+  console.log("Token Benchmark — trueline-mcp");
+  console.log(`Sample file: ${SAMPLE_FILE}`);
 
-  const results = await Promise.all([
+  const baseline = await Promise.all([
     scenarioNavigateAndUnderstand(),
     scenarioExploreAndEdit(),
     scenarioBroadExploration(),
   ]);
+  printTable("Baseline (hashes=true)", baseline);
 
-  printTable(results);
+  const compact = await Promise.all([scenarioNavigateCompact(), scenarioExploreCompact(), scenarioSearchAndEdit()]);
+  printTable("With compact reads & search", compact);
 
-  const grandTotal = results.reduce((s, r) => s + r.totalBytes, 0);
-  console.log(`\nGrand total: ${grandTotal} bytes (~${Math.round(grandTotal / 4)} tokens)`);
+  // Comparison
+  console.log("\nComparison");
+  console.log("==========");
+  const pairs: [string, ScenarioResult, ScenarioResult][] = [
+    ["Navigate", baseline[0], compact[0]],
+    ["Explore→edit", baseline[1], compact[1]],
+  ];
+  for (const [name, b, c] of pairs) {
+    const saved = b.totalBytes - c.totalBytes;
+    const pct = ((saved / b.totalBytes) * 100).toFixed(1);
+    console.log(`${name.padEnd(20)} ${b.totalBytes} → ${c.totalBytes} bytes (−${saved}, −${pct}%)`);
+  }
+
+  const grandBaseline = baseline.reduce((s, r) => s + r.totalBytes, 0);
+  const grandCompact = compact.reduce((s, r) => s + r.totalBytes, 0);
+  console.log(`\nBaseline total:  ${grandBaseline} bytes (~${Math.round(grandBaseline / 4)} tokens)`);
+  console.log(`Compact total:   ${grandCompact} bytes (~${Math.round(grandCompact / 4)} tokens)`);
 }
 
 main().catch((err) => {
