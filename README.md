@@ -72,6 +72,20 @@ Every line range in the outline maps directly to a `trueline_read` call.
 Supports 20+ languages: TypeScript, JavaScript, Python, Go, Rust, Java, C,
 C++, C#, Ruby, PHP, Kotlin, Swift, Scala, Elixir, Lua, Dart, Zig, Bash.
 
+### Find-and-fix in one step with `trueline_search`
+
+`trueline_search` finds lines by regex and returns them with context,
+per-line hashes, and checksums — ready for immediate editing:
+
+```
+trueline_search(file_path: "server.ts", pattern: "validatePath", context_lines: 3)
+```
+
+Instead of outline → read → find the right lines, the agent goes
+straight to the code it needs. In benchmarks, a search-based workflow
+uses **~127 tokens** vs **~2000** for outline+read — a 93% reduction
+for targeted lookups.
+
 ### 44% fewer output tokens with `trueline_edit`
 
 The built-in `Edit` makes the model echo back the text being replaced:
@@ -126,20 +140,6 @@ For exploratory reads where you don't plan to edit, pass `hashes: false`
 to omit per-line hashes and save ~3 tokens per line. Checksums are
 always included, so you can still use the output for subsequent edits
 after a targeted re-read.
-
-### Find-and-fix in one step with `trueline_search`
-
-`trueline_search` finds lines by regex and returns them with context,
-per-line hashes, and checksums — ready for immediate editing:
-
-```
-trueline_search(file_path: "server.ts", pattern: "validatePath", context_lines: 3)
-```
-
-Instead of outline → read → find the right lines, the agent goes
-straight to the code it needs. In benchmarks, a search-based workflow
-uses **~127 tokens** vs **~2000** for outline+read — a 93% reduction
-for targeted lookups.
 
 ### Hash verification catches mistakes
 
