@@ -24189,7 +24189,7 @@ var rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
 var projectDir = await realpath3(rawProjectDir).catch(() => rawProjectDir);
 async function resolveAllowedDirs() {
   const dirs = [];
-  if (process.env.CLAUDE_PROJECT_DIR) {
+  if (process.env.CLAUDECODE) {
     const claudeDir = join2(homedir2(), ".claude");
     await mkdir2(claudeDir, { recursive: true }).catch(() => {});
     const realClaudeDir = await realpath3(claudeDir).catch(() => null);
