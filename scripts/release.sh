@@ -10,11 +10,12 @@ set -euo pipefail
 #
 # What it does:
 #   1. Validates the version argument and checks for a clean working tree
-#   2. Runs typecheck and tests
-#   3. Bumps the version in package.json and .claude-plugin/plugin.json
-#   4. Commits the version bump
-#   5. Tags the commit as v<version>
-#   6. Pushes the commit and tag (triggers the Release workflow on CI)
+#   2. Bumps the version in package.json and .claude-plugin/plugin.json
+#   3. Commits the version bump
+#   4. Tags the commit as v<version>
+#   5. Pushes the commit and tag (triggers the Release workflow on CI)
+#
+# Typecheck and tests are intentionally omitted — CI validates on push.
 # =============================================================================
 
 if [[ $# -ne 1 ]]; then
@@ -53,15 +54,6 @@ fi
 
 current_version=$(jq -r .version package.json)
 echo "Releasing: ${current_version} -> ${new_version}"
-
-# Run checks before touching anything
-echo ""
-echo "==> Running typecheck..."
-bun run typecheck
-
-echo ""
-echo "==> Running tests..."
-bun test
 
 # Bump version in both files
 echo ""
