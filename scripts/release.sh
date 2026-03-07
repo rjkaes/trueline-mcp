@@ -71,6 +71,10 @@ git tag "$tag"
 
 # Push
 echo ""
+echo "==> Rebasing onto remote main (in case CI committed dist/)..."
+git pull --rebase origin main
+
+echo ""
 echo "==> Pushing commit and tag..."
 git push
 git push origin "$tag"
