@@ -202,10 +202,21 @@ export async function streamingEdit(
   }
 
   // Compare replacement content against original bytes. If identical, write
-  // the original buffers (no-op); otherwise write the replacement. Encodes
-  // replacement strings to Buffers once and reuses them for both the
-  // comparison and the output write to avoid double allocation.
+  // the original buffers (no-op); otherwise write the replacement.
+  //
+  // Fast path: when line counts differ, skip Buffer allocation entirely —
+  // the content is definitely changed.
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[]): Promise<void> {
+    if (op.content.length !== origBytes.length) {
+      contentChanged = true;
+      for (const s of op.content) await enqueueString(s);
+      if (collector) {
+        for (const buf of origBytes) collector.delete(buf.toString(encoding));
+        for (const s of op.content) collector.insert(s);
+      }
+      return;
+    }
+    // Same line count — encode and compare byte-by-byte
     const replacementBufs = op.content.map((s) => Buffer.from(s, encoding));
     if (buffersEqual(replacementBufs, origBytes)) {
       for (const buf of origBytes) await enqueueLine(buf);
@@ -397,7 +408,6 @@ export async function streamingEdit(
 
   // Flush remaining buffered bytes and close the file descriptor.
   try {
-    await flushWriteBuf();
     await flushWriteBuf();
     await fd.close();
   } catch (err) {

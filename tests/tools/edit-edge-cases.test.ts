@@ -657,7 +657,7 @@ describe("read-then-edit round-trip", () => {
     const cs = csMatch![1];
 
     // Extract line hash for line 2
-    const lineMatch = text.match(/^2:([a-z]{2})\|/m);
+    const lineMatch = text.match(/^2:([a-z2-7]{2})\|/m);
     expect(lineMatch).toBeTruthy();
     const lh = lineMatch![1];
 
@@ -694,7 +694,7 @@ describe("read-then-edit round-trip", () => {
 
     const csMatch = text.match(/checksum: (.+)/);
     const cs = csMatch![1];
-    const lineMatch = text.match(/^3:([a-z]{2})\|/m);
+    const lineMatch = text.match(/^3:([a-z2-7]{2})\|/m);
     const lh = lineMatch![1];
 
     const editResult = await handleEdit({
@@ -737,7 +737,7 @@ describe("read-then-edit round-trip", () => {
     const text = readResult.content[0].text;
     const csMatch = text.match(/checksum: (.+)/);
     const newCs = csMatch![1];
-    const lineMatch = text.match(/^3:([a-z]{2})\|/m);
+    const lineMatch = text.match(/^3:([a-z2-7]{2})\|/m);
     const lh = lineMatch![1];
 
     // Second edit using new checksum

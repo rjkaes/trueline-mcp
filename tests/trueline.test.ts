@@ -32,7 +32,7 @@ describe("fnv1aHash", () => {
 describe("lineHash", () => {
   test("returns exactly 2 lowercase letters", () => {
     const h = lineHash("console.log('hello')");
-    expect(h).toMatch(/^[a-z]{2}$/);
+    expect(h).toMatch(/^[a-z2-7]{2}$/);
   });
 
   test("deterministic", () => {
@@ -40,7 +40,7 @@ describe("lineHash", () => {
   });
 
   test("empty line produces valid hash", () => {
-    expect(lineHash("")).toMatch(/^[a-z]{2}$/);
+    expect(lineHash("")).toMatch(/^[a-z2-7]{2}$/);
   });
 });
 
@@ -96,8 +96,8 @@ describe("parseRange", () => {
   });
 
   test("throws on malformed range (not a valid line:hash either)", () => {
-    // "12:gh-21:yz" has no ".." and the hash "gh-21:yz" is not 2 lowercase letters
-    expect(() => parseRange("12:gh-21:yz")).toThrow("2 lowercase letters");
+    // "12:gh-21:yz" has no ".." and the hash "gh-21:yz" is not 2 valid hash chars
+    expect(() => parseRange("12:gh-21:yz")).toThrow("must be exactly 2 characters");
   });
 
   test("throws when start > end", () => {

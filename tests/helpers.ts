@@ -17,15 +17,12 @@ export function rangeChecksum(lines: string[], startLine: number, endLine: numbe
 }
 
 /**
- * Compute 2-letter content hash for a line.
+ * Compute 2-character content hash for a line.
  *
- * Maps FNV-1a output to two lowercase ASCII letters (676 possible values).
+ * Maps FNV-1a output to a two-character tag via `hashToLetters`.
  */
 export function lineHash(line: string): string {
-  const h = fnv1aHash(line);
-  const c1 = String.fromCharCode(97 + (h % 26));
-  const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
-  return c1 + c2;
+  return hashToLetters(fnv1aHash(line));
 }
 
 /**

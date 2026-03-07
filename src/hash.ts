@@ -90,19 +90,26 @@ export function formatChecksum(startLine: number, endLine: number, hash: number)
 }
 
 /**
- * Pre-computed lookup table of all 676 two-letter hash tags.
- * Avoids per-call `String.fromCharCode` + concatenation in the hot loop.
+ * 32-char alphabet: a-z + 2-7 (base32-like, all visually distinct).
+ * Power-of-2 size enables bitwise AND instead of modulo division.
+ */
+const HASH_CHARS = "abcdefghijklmnopqrstuvwxyz234567";
+
+/**
+ * Pre-computed lookup table of all 1024 two-character hash tags.
+ * Avoids per-call string concatenation in the hot loop.
  */
 const LETTER_TABLE: string[] = /* @__PURE__ */ (() => {
-  const t = new Array<string>(676);
-  for (let i = 0; i < 26; i++) for (let j = 0; j < 26; j++) t[i * 26 + j] = String.fromCharCode(97 + i, 97 + j);
+  const t = new Array<string>(1024);
+  for (let i = 0; i < 32; i++) for (let j = 0; j < 32; j++) t[i * 32 + j] = HASH_CHARS[i] + HASH_CHARS[j];
   return t;
 })();
 
 /**
- * Map an FNV-1a hash to a two-lowercase-letter tag (676 possible values).
- * Used in the `lineNumber:ab|content` format returned by `trueline_read`.
+ * Map an FNV-1a hash to a two-character tag (1024 possible values).
+ * Uses `& 0x1f` (bitwise AND) instead of `% 26` (integer division)
+ * for the index computation.
  */
 export function hashToLetters(h: number): string {
-  return LETTER_TABLE[(h % 26) * 26 + ((h >>> 8) % 26)];
+  return LETTER_TABLE[((h & 0x1f) << 5) | ((h >>> 8) & 0x1f)];
 }

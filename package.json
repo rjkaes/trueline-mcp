@@ -44,7 +44,8 @@
     "test": "bun test",
     "lint": "bunx biome ci .",
     "lint:fix": "bunx biome check --write .",
-    "benchmark": "bun run benchmarks/token-benchmark.ts"
+    "benchmark": "bun run benchmarks/token-benchmark.ts",
+    "perf": "bun run benchmarks/perf-benchmark.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",

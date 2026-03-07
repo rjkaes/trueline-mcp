@@ -44,12 +44,11 @@ For example, reading a three-line file:
 checksum: 1-3:f7e2a1b0
 ```
 
-The **hash** is two lowercase letters derived from the line's content
-via FNV-1a (a fast, non-cryptographic hash). Two letters give 676
-possible values — enough to catch accidental mismatches, not enough to
-be a security mechanism. The format matches the
-[vscode-hashline-edit-tool](https://github.com/sethml/vscode-hashline-edit-tool)
-spec for interoperability.
+The **hash** is two characters from a 32-symbol alphabet (`a-z` plus
+`2-7`) derived from the line's content via FNV-1a (a fast,
+non-cryptographic hash). Two characters give 1024 possible values —
+enough to catch accidental mismatches, not enough to be a security
+mechanism.
 
 The **checksum** covers the entire range of lines returned. Its format
 is `startLine-endLine:8hex`, where the hex is an FNV-1a accumulator
@@ -340,10 +339,18 @@ The pipeline:
 1. Validates the file path through the same security boundary as other
    tools.
 2. Validates the regex pattern (rejects invalid patterns with an error).
-3. Streams the file line-by-line, hashing each line and testing against
-   the regex.
-4. Builds context windows around matches, merging overlapping ranges.
-5. Formats output with per-line hashes and a checksum per context
+3. Streams the file in a single pass using a sliding window of
+   `context_lines` capacity. Memory usage is O(context_lines) regardless
+   of file size — unlike a naive approach that collects all lines first.
+   Each line is decoded to a string exactly once.
+4. When a match is found, the ring buffer of recent lines provides
+   pre-context. The engine then switches to collecting post-context.
+   Overlapping windows (matches within context distance of each other)
+   are merged by extending the current window.
+5. Early termination: once `max_matches` matches have been captured and
+   their post-context is complete, the engine stops decoding lines
+   (remaining lines are only scanned for the total match count).
+6. Formats output with per-line hashes and a checksum per context
    window.
 
 If `max_matches` is exceeded, the output includes a truncation notice
@@ -419,17 +426,21 @@ The streaming edit engine has a byte-level equivalent,
 Buffer directly — identical output, no string decode/encode
 round-trip.
 
-### Two-letter tag: `hashToLetters`
+### Two-character tag: `hashToLetters`
 
-The 32-bit per-line hash is projected into two lowercase letters for
-the `N:xy|content` display format:
+The 32-bit per-line hash is projected into two characters from a
+32-symbol alphabet (`a-z` plus `2-7`, 1024 combinations) for the
+`N:xy|content` display format:
 
 ```
-c1 = 'a' + (hash % 26)          // bits 0-4
-c2 = 'a' + ((hash >>> 8) % 26)  // bits 8-12
+c1 = HASH_CHARS[hash & 0x1f]          // bits 0-4
+c2 = HASH_CHARS[(hash >>> 8) & 0x1f]  // bits 8-12
 ```
 
-This is a lossy mapping to 676 possible values — a typo detector, not
+The power-of-2 alphabet size allows bitwise AND (`& 0x1f`) instead of
+integer division (`% 26`), which is measurably faster in the hot loop.
+
+This is a lossy mapping to 1024 possible values — a typo detector, not
 a security boundary.
 
 ### Range checksum: `foldHash`

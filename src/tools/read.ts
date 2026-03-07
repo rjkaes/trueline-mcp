@@ -10,7 +10,7 @@
 // end.  This avoids a per-line `Buffer.toString()` allocation.
 // ==============================================================================
 
-import { splitLines } from "../line-splitter.ts";
+import { splitLines, LF_BUF } from "../line-splitter.ts";
 import {
   EMPTY_FILE_CHECKSUM,
   FNV_OFFSET_BASIS,
@@ -73,7 +73,6 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   const MAX_OUTPUT_LINES = 2000;
   const MAX_OUTPUT_BYTES = 20 * 1024 * 1024; // 20 MB
-  const LF = Buffer.from("\n");
   const outputChunks: Buffer[] = [];
   let outputLen = 0;
   let rangeIdx = 0;
@@ -130,7 +129,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
       rangeLastLine = lineNumber;
       rangeChecksumHash = foldHash(rangeChecksumHash, h);
-      outputChunks.push(prefix, lineBytes, LF);
+      outputChunks.push(prefix, lineBytes, LF_BUF);
       outputLen += lineLen;
     }
   } catch (err: unknown) {

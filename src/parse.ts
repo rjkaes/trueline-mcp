@@ -35,8 +35,8 @@ function parseLineHash(ref: string): LineRef {
   if (line === 0 && hash !== "") {
     throw new Error(`Invalid line:hash reference "${ref}" — line 0 must have empty hash`);
   }
-  if (line > 0 && !/^[a-z]{2}$/.test(hash)) {
-    throw new Error(`Invalid hash in "${ref}" — must be exactly 2 lowercase letters`);
+  if (line > 0 && !/^[a-z2-7]{2}$/.test(hash)) {
+    throw new Error(`Invalid hash in "${ref}" — must be exactly 2 characters from a-z, 2-7`);
   }
 
   return { line, hash };

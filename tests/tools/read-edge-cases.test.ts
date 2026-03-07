@@ -40,7 +40,7 @@ describe("empty and minimal files", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\|hello$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|hello$/);
   });
 
   test("single line without trailing newline", async () => {
@@ -52,7 +52,7 @@ describe("empty and minimal files", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\|hello$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|hello$/);
   });
 
   test("file with only a newline is one empty-string line", async () => {
@@ -65,7 +65,7 @@ describe("empty and minimal files", () => {
     const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
     // The line content is empty — so it should be "1:XX|" with nothing after the pipe
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\|$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|$/);
   });
 
   test("file with multiple blank lines", async () => {
@@ -94,9 +94,9 @@ describe("line endings", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\|aaa$/);
-    expect(lines[1]).toMatch(/^2:[a-z]{2}\|bbb$/);
-    expect(lines[2]).toMatch(/^3:[a-z]{2}\|ccc$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|aaa$/);
+    expect(lines[1]).toMatch(/^2:[a-z2-7]{2}\|bbb$/);
+    expect(lines[2]).toMatch(/^3:[a-z2-7]{2}\|ccc$/);
   });
 
   test("CRLF line endings", async () => {
@@ -132,7 +132,7 @@ describe("line endings", () => {
     expect(result.isError).toBeUndefined();
     const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\|aaa$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|aaa$/);
   });
 });
 
@@ -282,7 +282,7 @@ describe("range parameters", () => {
     expect(result.isError).toBeUndefined();
     const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^2:[a-z]{2}\|bbb$/);
+    expect(lines[0]).toMatch(/^2:[a-z2-7]{2}\|bbb$/);
   });
 
   test("reading a middle range produces correct checksum", async () => {
@@ -347,8 +347,8 @@ describe("checksum consistency", () => {
     const r1 = await handleRead({ file_path: f, projectDir: testDir });
     const r2 = await handleRead({ file_path: f, projectDir: testDir });
     // Extract the hash portion of the first content line
-    const hash1 = r1.content[0].text.split("\n")[0].match(/^1:([a-z]{2})/)?.[1];
-    const hash2 = r2.content[0].text.split("\n")[0].match(/^1:([a-z]{2})/)?.[1];
+    const hash1 = r1.content[0].text.split("\n")[0].match(/^1:([a-z2-7]{2})/)?.[1];
+    const hash2 = r2.content[0].text.split("\n")[0].match(/^1:([a-z2-7]{2})/)?.[1];
     expect(hash1).toBe(hash2);
   });
 });
