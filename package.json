@@ -38,7 +38,7 @@
   ],
   "scripts": {
     "dev": "bun run src/server.ts",
-    "build": "bun build src/server.ts --target=node --outfile dist/server.js",
+    "build": "bun build src/server.ts --target=node --minify --outfile dist/server.js",
     "prepublishOnly": "bun run build",
     "typecheck": "bun x tsc --noEmit",
     "test": "bun test",
