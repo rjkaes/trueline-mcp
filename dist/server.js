@@ -22353,7 +22353,7 @@ class StdioServerTransport {
 // package.json
 var package_default = {
   name: "trueline-mcp",
-  version: "2.4.0",
+  version: "2.4.1",
   type: "module",
   description: "Truth-verified file editing for AI coding agents via MCP",
   license: "Apache-2.0",
