@@ -41,7 +41,7 @@ commit_parsers = [
   { message = "^ci", group = "CI" },
   { message = "^chore\\(release\\)", skip = true },
   { message = "^chore: release", skip = true },
-  { message = "^chore", group = "Miscellaneous" },
+  { message = "^chore\\(build\\): update dist", skip = true },
 ]
 tag_pattern = "v[0-9].*"
 sort_commits = "newest"
