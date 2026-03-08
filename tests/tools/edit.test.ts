@@ -427,4 +427,56 @@ describe("handleEdit", () => {
     expect(written[0]).toBe(0x72); // r
     expect(written[1]).toBe(0xe9); // é (latin1, not UTF-8's 0xc3 0xa9)
   });
+  describe("dry_run", () => {
+    test("returns unified diff without modifying file", async () => {
+      writeFileSync(testFile, "line 1\nline 2\nline 3\n");
+      const lines = ["line 1", "line 2", "line 3"];
+      const cs = rangeChecksum(lines, 1, 3);
+      const h2 = lineHash("line 2");
+
+      const result = await handleEdit({
+        file_path: testFile,
+        dry_run: true,
+        edits: [{ checksum: cs, range: `2:${h2}..2:${h2}`, content: "CHANGED" }],
+        projectDir: testDir,
+      });
+
+      expect(result.isError).toBeUndefined();
+      const text = result.content[0].text;
+      expect(text).toContain("-line 2");
+      expect(text).toContain("+CHANGED");
+      expect(text).toMatch(/^@@.+@@/m);
+
+      // File must be unchanged
+      const content = readFileSync(testFile, "utf-8");
+      expect(content).toBe("line 1\nline 2\nline 3\n");
+    });
+
+    test("returns no-changes marker when edit is identity", async () => {
+      writeFileSync(testFile, "line 1\nline 2\nline 3\n");
+      const lines = ["line 1", "line 2", "line 3"];
+      const cs = rangeChecksum(lines, 1, 3);
+      const h2 = lineHash("line 2");
+
+      const result = await handleEdit({
+        file_path: testFile,
+        dry_run: true,
+        edits: [{ checksum: cs, range: `2:${h2}..2:${h2}`, content: "line 2" }],
+        projectDir: testDir,
+      });
+
+      expect(result.content[0].text).toBe("(no changes)");
+    });
+
+    test("rejects stale checksum same as non-dry-run", async () => {
+      const result = await handleEdit({
+        file_path: testFile,
+        dry_run: true,
+        edits: [{ checksum: "1-3:00000000", range: "1:zz..1:zz", content: "nope" }],
+        projectDir: testDir,
+      });
+
+      expect(result.isError).toBe(true);
+    });
+  });
 });

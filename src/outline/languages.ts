@@ -19,6 +19,10 @@ export interface LanguageConfig {
   recurse: Set<string>;
   /** Node types only included when they are direct children of the root */
   topLevelOnly?: Set<string>;
+  /** Whitespace normalization for semantic diffing body hashes.
+   *  "collapse" (default): collapse whitespace runs to single space, trim lines.
+   *  "preserve-indent": normalize trailing whitespace only, preserve leading indentation. */
+  whitespaceMode?: "collapse" | "preserve-indent";
 }
 
 const typescript: LanguageConfig = {
@@ -71,6 +75,7 @@ const python: LanguageConfig = {
   ]),
   skip: new Set(["import_statement", "import_from_statement"]),
   recurse: new Set(["block"]),
+  whitespaceMode: "preserve-indent",
 };
 
 const go: LanguageConfig = {
