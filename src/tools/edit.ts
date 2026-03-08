@@ -10,6 +10,9 @@
 // The file is never loaded into memory as a whole.
 // ==============================================================================
 
+import { unlink } from "node:fs/promises";
+import { relative } from "node:path";
+import { DiffCollector } from "../diff-collector.ts";
 import { streamingEdit } from "../streaming-edit.ts";
 import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
@@ -18,15 +21,18 @@ interface EditParams {
   file_path: string;
   encoding?: string;
   edits: EditInput[];
+  dry_run?: boolean;
   projectDir?: string;
   allowedDirs?: string[];
 }
 
 export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const t0 = performance.now();
-  const { file_path, edits, projectDir, allowedDirs } = params;
+  const { file_path, edits, dry_run, projectDir, allowedDirs } = params;
 
-  const validated = await validatePath(file_path, "Edit", projectDir, allowedDirs);
+  // dry_run uses Read deny patterns: it's a read-only preview, same as the old trueline_diff
+  const toolName = dry_run ? "Read" : "Edit";
+  const validated = await validatePath(file_path, toolName, projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
   let enc: BufferEncoding;
@@ -40,6 +46,23 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
 
   const built = validateEdits(edits);
   if (!built.ok) return built.error;
+
+  if (dry_run) {
+    const collector = new DiffCollector();
+    const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true, enc, collector);
+
+    if (!result.ok) return errorResult(result.error);
+    if (!result.changed) return textResult("(no changes)");
+
+    const relPath = file_path.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : file_path;
+    const diff = collector.format(`a/${relPath}`, `b/${relPath}`);
+
+    if (result.tmpPath) {
+      try { await unlink(result.tmpPath); } catch { /* best-effort */ }
+    }
+
+    return textResult(diff);
+  }
 
   const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, false, enc);
 

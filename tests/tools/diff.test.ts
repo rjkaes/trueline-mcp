@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { handleDiff } from "../../src/tools/diff.ts";
+import { handleEdit } from "../../src/tools/edit.ts";
 import { lineHash, rangeChecksum, rawLineHash, rawRangeChecksum } from "../helpers.ts";
 
 let testDir: string;
@@ -18,14 +18,15 @@ afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
-describe("handleDiff", () => {
+describe("handleEdit dry_run (migrated from handleDiff)", () => {
   test("returns unified diff with @@ hunk header for replacement", async () => {
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: testFile,
+      dry_run: true,
       edits: [
         {
           checksum: cs,
@@ -49,8 +50,9 @@ describe("handleDiff", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h1 = lineHash("line 1");
 
-    await handleDiff({
+    await handleEdit({
       file_path: testFile,
+      dry_run: true,
       edits: [
         {
           checksum: cs,
@@ -68,8 +70,9 @@ describe("handleDiff", () => {
   });
 
   test("rejects stale checksum", async () => {
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: testFile,
+      dry_run: true,
       edits: [
         {
           checksum: "1-3:00000000",
@@ -92,8 +95,9 @@ describe("handleDiff", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h1 = lineHash("line 1");
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: testFile,
+      dry_run: true,
       edits: [
         {
           checksum: cs,
@@ -119,8 +123,9 @@ describe("handleDiff", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: testFile,
+      dry_run: true,
       edits: [
         {
           checksum: cs,
@@ -142,8 +147,9 @@ describe("handleDiff", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: testFile,
+      dry_run: true,
       edits: [
         {
           checksum: cs,
@@ -159,8 +165,8 @@ describe("handleDiff", () => {
     expect(text).toBe("(no changes)");
   });
 
-  test("single-line swap does not loop — was the infinite-loop case", async () => {
-    // The greedy diff would infinite-loop on ["a","b"] → ["b","a"]
+  test("single-line swap does not loop \u2014 was the infinite-loop case", async () => {
+    // The greedy diff would infinite-loop on ["a","b"] \u2192 ["b","a"]
     // because both lines match somewhere in the lookahead window.
     const swapFile = join(testDir, "swap.ts");
     writeFileSync(swapFile, "a\nb\n");
@@ -170,22 +176,23 @@ describe("handleDiff", () => {
     const ha = lineHash("a");
     const hb = lineHash("b");
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: swapFile,
+      dry_run: true,
       edits: [{ checksum: cs, range: `1:${ha}..2:${hb}`, content: "b\na" }],
       projectDir: testDir,
     });
 
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    // Standard LCS diff of ["a","b"] → ["b","a"]: "b" is the LCS so it
+    // Standard LCS diff of ["a","b"] \u2192 ["b","a"]: "b" is the LCS so it
     // stays as context; only "a" is removed and re-inserted after "b".
     expect(text).toContain("-a");
     expect(text).toContain("+a");
     expect(text).toContain(" b"); // "b" is unchanged context
   });
 
-  test("multi-line change spanning >5 lines — was the window-size limitation", async () => {
+  test("multi-line change spanning >5 lines \u2014 was the window-size limitation", async () => {
     // The greedy diff had a 5-line lookahead window, so changes spanning
     // more than 5 lines were handled incorrectly.
     const bigFile = join(testDir, "big.ts");
@@ -196,8 +203,9 @@ describe("handleDiff", () => {
     const ha = lineHash("a");
     const hh = lineHash("h");
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: bigFile,
+      dry_run: true,
       edits: [
         {
           checksum: cs,
@@ -227,8 +235,9 @@ describe("handleDiff", () => {
     const cs = rangeChecksum(lines, 1, 1);
     const h = lineHash("line 1");
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: emptyFile,
+      dry_run: true,
       edits: [
         {
           checksum: cs,
@@ -252,8 +261,9 @@ describe("handleDiff", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: crlfFile,
+      dry_run: true,
       edits: [{ checksum: cs, range: `2:${h2}..2:${h2}`, content: "CHANGED" }],
       projectDir: testDir,
     });
@@ -270,8 +280,9 @@ describe("handleDiff", () => {
     const h1 = lineHash("line 1");
     const h3 = lineHash("line 3");
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: testFile,
+      dry_run: true,
       edits: [
         {
           checksum: cs,
@@ -295,8 +306,8 @@ describe("handleDiff", () => {
   });
 
   test("diffs a latin1 file correctly", async () => {
-    const line1 = Buffer.from([0x63, 0x61, 0x66, 0xe9]); // café
-    const line2 = Buffer.from([0x6e, 0x61, 0xef, 0x76, 0x65]); // naïve
+    const line1 = Buffer.from([0x63, 0x61, 0x66, 0xe9]); // caf\u00e9
+    const line2 = Buffer.from([0x6e, 0x61, 0xef, 0x76, 0x65]); // na\u00efve
     const fileBytes = Buffer.concat([line1, Buffer.from("\n"), line2, Buffer.from("\n")]);
     const latin1File = join(testDir, "latin1.txt");
     writeFileSync(latin1File, fileBytes);
@@ -304,14 +315,15 @@ describe("handleDiff", () => {
     const cs = rawRangeChecksum([line1, line2], 1, 2);
     const h1 = rawLineHash(line1);
 
-    const result = await handleDiff({
+    const result = await handleEdit({
       file_path: latin1File,
+      dry_run: true,
       encoding: "latin1",
       edits: [
         {
           checksum: cs,
           range: `1:${h1}..1:${h1}`,
-          content: "résumé",
+          content: "r\u00e9sum\u00e9",
         },
       ],
       projectDir: testDir,
@@ -319,7 +331,7 @@ describe("handleDiff", () => {
 
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    expect(text).toContain("-café");
-    expect(text).toContain("+résumé");
+    expect(text).toContain("-caf\u00e9");
+    expect(text).toContain("+r\u00e9sum\u00e9");
   });
 });

@@ -138,6 +138,7 @@ server.registerTool(
           )
           .min(1),
         encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
+        dry_run: z.boolean().describe("Preview edits as unified diff without writing. Defaults to false.").optional(),
       }),
     ),
   },
