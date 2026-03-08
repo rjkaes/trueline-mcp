@@ -66,7 +66,10 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
     .map((entry) => {
       const bodyLines = lines.slice(entry.startLine - 1, entry.endLine);
       const bodyText = bodyLines.join("\n");
-      const normalized = normalizeBody(bodyText, wsMode);
+      // Hash body excluding the signature line so renames don't change the hash.
+      // For single-line nodes, innerBody is empty; rename detection won't apply.
+      const innerLines = bodyLines.length > 1 ? bodyLines.slice(1) : bodyLines;
+      const normalized = normalizeBody(innerLines.join("\n"), wsMode);
       const name = extractName(entry.text, entry.nodeType);
 
       return {

@@ -150,21 +150,21 @@ server.registerTool(
 server.registerTool(
   "trueline_diff",
   {
-    description: "Preview edits as a unified diff without writing to disk. Each edit carries its own checksum.",
+    description:
+      "Semantic, AST-based summary of structural changes in one or more files compared to a git ref. " +
+      "Detects added/removed/renamed symbols, signature changes, and logic modifications. " +
+      "Use instead of `git diff` to review changes with minimal token usage.",
     inputSchema: z.preprocess(
       coerceJsonStrings,
       z.object({
-        file_path: z.string().describe("Absolute or project-relative file path."),
-        edits: z
-          .array(
-            z.object({
-              checksum: z.string().describe("Checksum from trueline_read for the covering range"),
-              range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
-              content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
-            }),
-          )
-          .min(1),
-        encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
+        file_paths: z
+          .array(z.string())
+          .min(1)
+          .describe('File paths to diff. Use ["*"] for all unstaged changed files.'),
+        compare_against: z
+          .string()
+          .describe('Git ref to compare against. Defaults to "HEAD". Use ":0" for staged content.')
+          .optional(),
       }),
     ),
   },

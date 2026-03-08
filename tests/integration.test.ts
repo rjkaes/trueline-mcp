@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead } from "../src/tools/read.ts";
 import { handleEdit } from "../src/tools/edit.ts";
-import { handleDiff } from "../src/tools/diff.ts";
 
 let testDir: string;
 let testFile: string;
@@ -39,9 +38,10 @@ describe("read → diff → edit roundtrip", () => {
     expect(line2Match).not.toBeNull();
     const line2Hash = line2Match![1];
 
-    // Step 2: Preview the edit with diff
-    const diffResult = await handleDiff({
+    // Step 2: Preview the edit with dry_run
+    const diffResult = await handleEdit({
       file_path: testFile,
+      dry_run: true,
       edits: [
         {
           checksum,
