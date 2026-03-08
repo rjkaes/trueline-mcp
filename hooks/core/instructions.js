@@ -14,6 +14,9 @@ const PLATFORM_RULES = {
     writeAdvice:
       "Use the built-in Write tool to create new files. " +
       "To edit them afterward, use trueline_read or trueline_search to get checksums first.",
+    atRefAdvice:
+      "If file content was injected by an @ reference, never call Read or trueline_read just to view it again. " +
+      "Only call trueline_read or trueline_search when you need checksums for editing.",
     grepAdvice: "use Grep to identify the files",
   },
   "gemini-cli": {
@@ -34,6 +37,9 @@ const PLATFORM_RULES = {
     writeAdvice:
       "Use the built-in Write tool to create new files. " +
       "To edit them afterward, use trueline_read or trueline_search to get checksums first.",
+    atRefAdvice:
+      "If file content was injected by an @ reference, never call Read or trueline_read just to view it again. " +
+      "Only call trueline_read or trueline_search when you need checksums for editing.",
     grepAdvice: "use Grep to identify the files",
   },
   opencode: {
@@ -67,6 +73,7 @@ export function getInstructions(platform = "claude-code") {
   const rules = PLATFORM_RULES[platform] ?? PLATFORM_RULES["claude-code"];
 
   const editRule = rules.editAdvice ? `\n    <rule>${rules.editAdvice}</rule>` : "";
+  const atRefRule = rules.atRefAdvice ? `\n    <rule>${rules.atRefAdvice}</rule>` : "";
 
   return `<trueline_mcp_instructions>
   <tools>
@@ -86,7 +93,7 @@ export function getInstructions(platform = "claude-code") {
     <rule>Prefer trueline_outline first. Only call trueline_read for specific ranges you need (to edit, debug, or understand details). Read whole files only when short and you haven't used outline.</rule>
     <rule>When you already know the text to change, use trueline_search → trueline_edit (skips the read). This is the fastest edit path. Each match group gets its own checksum — use it directly with trueline_edit.</rule>
     <rule>When you need to find a pattern across many files, ${rules.grepAdvice}, then use trueline_search on individual files you need to edit.</rule>
-    <rule>Batch multiple edits to the same file into one trueline_edit call. Each edit carries its own checksum — they don't need to share one.</rule>
+    <rule>Batch multiple edits to the same file into one trueline_edit call. Each edit carries its own checksum \u2014 they don't need to share one.</rule>${atRefRule}
   </rules>
 </trueline_mcp_instructions>`;
 }
