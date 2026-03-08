@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
+import { getLanguageConfig } from "../outline/languages.ts";
 import { validatePath } from "./shared.ts";
 import { type ToolResult, textResult } from "./types.ts";
 
@@ -55,8 +56,8 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
       extractSymbols(diskContent, ext),
     ]);
 
-    // Unsupported file type check
-    if (oldSymbols.length === 0 && newSymbols.length === 0 && gitContent !== "" && diskContent !== "") {
+    // Unsupported file type: extension has no language config
+    if (!getLanguageConfig(`.${ext}`)) {
       sections.push(`## ${relPath}\n\nFile type not supported for semantic diffing.`);
       continue;
     }
