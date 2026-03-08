@@ -71,7 +71,7 @@ const allowedDirs = await resolveAllowedDirs();
 server.registerTool(
   "trueline_read",
   {
-    description: "Read a file; returns N:hash|content per line plus a checksum per range.",
+    description: "Read a file; returns 'N:hash\tcontent' per line plus a checksum per range.",
     inputSchema: z.object({
       file_path: z.string(),
       ranges: z

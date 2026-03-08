@@ -35,7 +35,7 @@ describe("read → diff → edit roundtrip", () => {
     const checksum = checksumMatch![1];
 
     // Extract line 2 hash from read result
-    const line2Match = readText.match(/^2:([a-z2-7]{2})\|/m);
+    const line2Match = readText.match(/^2:([a-z2-7]{2})\t/m);
     expect(line2Match).not.toBeNull();
     const line2Hash = line2Match![1];
 

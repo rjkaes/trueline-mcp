@@ -12,8 +12,8 @@ const PLATFORM_RULES = {
       "Never use the built-in Read tool \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
     writeAdvice:
-      "Never use the built-in Write tool for files in the project directory \u2014 use trueline_write instead. " +
-      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
+      "Use the built-in Write tool to create new files. " +
+      "To edit files afterward, use trueline_search \u2192 trueline_edit.",
   },
   "gemini-cli": {
     editAdvice: "Never use edit_file \u2014 use trueline_edit instead.",
@@ -21,8 +21,7 @@ const PLATFORM_RULES = {
       "Never use read_file or read_many_files \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
     writeAdvice:
-      "Never use write_file for files in the project directory \u2014 use trueline_write instead. " +
-      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
+      "Use write_file to create new files. " + "To edit files afterward, use trueline_search \u2192 trueline_edit.",
   },
   "vscode-copilot": {
     editAdvice: "Never use the built-in Edit or MultiEdit tools \u2014 they are blocked and will be rejected.",
@@ -30,8 +29,8 @@ const PLATFORM_RULES = {
       "Never use the built-in Read tool \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
     writeAdvice:
-      "Never use the built-in Write tool for files in the project directory \u2014 use trueline_write instead. " +
-      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
+      "Use the built-in Write tool to create new files. " +
+      "To edit files afterward, use trueline_search \u2192 trueline_edit.",
   },
   opencode: {
     editAdvice: "Never use the built-in edit tool \u2014 use trueline_edit instead.",
@@ -39,8 +38,8 @@ const PLATFORM_RULES = {
       "Never use the built-in view tool \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
     writeAdvice:
-      "Never use the built-in write tool for files in the project directory \u2014 use trueline_write instead. " +
-      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
+      "Use the built-in write tool to create new files. " +
+      "To edit files afterward, use trueline_search \u2192 trueline_edit.",
   },
   codex: {
     editAdvice: "",
@@ -48,8 +47,8 @@ const PLATFORM_RULES = {
       "Never use read_file or shell with cat/head/tail \u2014 use trueline_read instead. " +
       "trueline_read returns per-line hashes and checksums needed for trueline_edit.",
     writeAdvice:
-      "Never use shell with echo/cat redirection for files in the project directory \u2014 use trueline_write instead. " +
-      "trueline_write returns a checksum for verification. To edit afterward, call trueline_read first.",
+      "Use shell redirection to create new files. " +
+      "To edit files afterward, use trueline_search \u2192 trueline_edit.",
   },
 };
 
@@ -70,7 +69,6 @@ export function getInstructions(platform = "claude-code") {
     <tool name="trueline_diff">Preview edits as unified diff without writing.</tool>
     <tool name="trueline_outline">Structural outline — often enough on its own. Use to find line ranges before targeted reads.</tool>
     <tool name="trueline_search">Regex search with hashes — edit-ready results. Preferred over Grep for single-file searches.</tool>
-    <tool name="trueline_write">Create/overwrite files. Returns checksum.</tool>
     <tool name="trueline_verify">Check if held checksums are still valid. Cheaper than re-reading.</tool>
   </tools>
   <workflow>trueline_outline → trueline_read (targeted ranges) → trueline_diff (optional) → trueline_edit</workflow>

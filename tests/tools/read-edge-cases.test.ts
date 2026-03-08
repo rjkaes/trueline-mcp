@@ -40,7 +40,7 @@ describe("empty and minimal files", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|hello$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\thello$/);
   });
 
   test("single line without trailing newline", async () => {
@@ -52,7 +52,7 @@ describe("empty and minimal files", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|hello$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\thello$/);
   });
 
   test("file with only a newline is one empty-string line", async () => {
@@ -65,7 +65,7 @@ describe("empty and minimal files", () => {
     const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
     // The line content is empty — so it should be "1:XX|" with nothing after the pipe
-    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\t$/);
   });
 
   test("file with multiple blank lines", async () => {
@@ -94,9 +94,9 @@ describe("line endings", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|aaa$/);
-    expect(lines[1]).toMatch(/^2:[a-z2-7]{2}\|bbb$/);
-    expect(lines[2]).toMatch(/^3:[a-z2-7]{2}\|ccc$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\taaa$/);
+    expect(lines[1]).toMatch(/^2:[a-z2-7]{2}\tbbb$/);
+    expect(lines[2]).toMatch(/^3:[a-z2-7]{2}\tccc$/);
   });
 
   test("CRLF line endings", async () => {
@@ -132,7 +132,7 @@ describe("line endings", () => {
     expect(result.isError).toBeUndefined();
     const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|aaa$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\taaa$/);
   });
 });
 
@@ -184,10 +184,10 @@ describe("unicode content", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    // The protocol format uses the first pipe as delimiter — content after
-    // the first pipe should include subsequent pipes verbatim.
-    expect(text).toContain("|a|b|c");
-    expect(text).toContain("|foo | bar");
+    // The protocol format uses a tab as delimiter — pipes in content
+    // should pass through verbatim.
+    expect(text).toContain("\ta|b|c");
+    expect(text).toContain("\tfoo | bar");
   });
 });
 
@@ -282,7 +282,7 @@ describe("range parameters", () => {
     expect(result.isError).toBeUndefined();
     const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^2:[a-z2-7]{2}\|bbb$/);
+    expect(lines[0]).toMatch(/^2:[a-z2-7]{2}\tbbb$/);
   });
 
   test("reading a middle range produces correct checksum", async () => {

@@ -40,9 +40,9 @@ describe("handleRead", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter(Boolean);
     // Should have 3 content lines + blank + checksum line
-    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\|const a = 1;$/);
-    expect(lines[1]).toMatch(/^2:[a-z2-7]{2}\|const b = 2;$/);
-    expect(lines[2]).toMatch(/^3:[a-z2-7]{2}\|const c = 3;$/);
+    expect(lines[0]).toMatch(/^1:[a-z2-7]{2}\tconst a = 1;$/);
+    expect(lines[1]).toMatch(/^2:[a-z2-7]{2}\tconst b = 2;$/);
+    expect(lines[2]).toMatch(/^3:[a-z2-7]{2}\tconst c = 3;$/);
   });
 
   test("returns checksum in result", async () => {
@@ -65,7 +65,7 @@ describe("handleRead", () => {
     const text = result.content[0].text;
     const contentLines = text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(contentLines).toHaveLength(1);
-    expect(contentLines[0]).toMatch(/^2:[a-z2-7]{2}\|const b = 2;$/);
+    expect(contentLines[0]).toMatch(/^2:[a-z2-7]{2}\tconst b = 2;$/);
   });
 
   test("denies reading .env file", async () => {
@@ -159,7 +159,7 @@ describe("handleRead", () => {
     // The decoded content should show "café"
     expect(text).toContain("café");
     // And the hash should be present
-    expect(text).toMatch(/^1:[a-z2-7]{2}\|café$/m);
+    expect(text).toMatch(/^1:[a-z2-7]{2}\tcafé$/m);
   });
 
   test("truncates output at 2000 lines", async () => {
@@ -204,10 +204,10 @@ describe("handleRead", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     const lines = text.split("\n").filter(Boolean);
-    // Format should be N|content (no hash)
-    expect(lines[0]).toMatch(/^1\|const a = 1;$/);
-    expect(lines[1]).toMatch(/^2\|const b = 2;$/);
-    expect(lines[2]).toMatch(/^3\|const c = 3;$/);
+    // Format should be N\tcontent (no hash)
+    expect(lines[0]).toMatch(/^1\tconst a = 1;$/);
+    expect(lines[1]).toMatch(/^2\tconst b = 2;$/);
+    expect(lines[2]).toMatch(/^3\tconst c = 3;$/);
     // Checksum should still be present
     expect(text).toContain("checksum:");
   });
@@ -221,7 +221,7 @@ describe("handleRead", () => {
     });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    expect(text).toMatch(/^1\|const a = 1;\n2\|const b = 2;\n/);
+    expect(text).toMatch(/^1\tconst a = 1;\n2\tconst b = 2;\n/);
     expect(text).toContain("checksum: 1-2:");
   });
 
@@ -232,6 +232,6 @@ describe("handleRead", () => {
     });
     const text = result.content[0].text;
     // Default should include hashes
-    expect(text.split("\n")[0]).toMatch(/^1:[a-z2-7]{2}\|/);
+    expect(text.split("\n")[0]).toMatch(/^1:[a-z2-7]{2}\t/);
   });
 });

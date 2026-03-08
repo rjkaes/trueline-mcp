@@ -90,7 +90,7 @@ describe("trueline_write", () => {
 
     // Extract line hashes for an edit
     const lines = readText.split("\n").filter((l: string) => l.match(/^\d+:/));
-    const line2Match = lines[1].match(/^2:(\w+)\|/);
+    const line2Match = lines[1].match(/^2:(\w+)\t/);
     expect(line2Match).not.toBeNull();
     const line2Hash = line2Match![1];
 

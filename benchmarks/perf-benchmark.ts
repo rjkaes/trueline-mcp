@@ -151,7 +151,7 @@ async function benchEditSingleLine(): Promise<BenchResult> {
   });
   const text = readResult.content[0].text;
   const checksumMatch = text.match(/checksum: (\S+)/);
-  const lineMatch = text.match(/^(\d+):([a-z0-9]{2})\|(.*)$/m);
+  const lineMatch = text.match(/^(\d+):([a-z0-9]{2})\t(.*)$/m);
   if (!checksumMatch || !lineMatch) throw new Error("Failed to parse read result for edit benchmark");
 
   const checksumStr = checksumMatch[1];
@@ -192,7 +192,7 @@ async function benchEditMultiLine(): Promise<BenchResult> {
   });
   const text = readResult.content[0].text;
   const checksumMatch = text.match(/checksum: (\S+)/);
-  const lines = text.split("\n").filter((l) => /^\d+:[a-z0-9]{2}\|/.test(l));
+  const lines = text.split("\n").filter((l) => /^\d+:[a-z0-9]{2}\t/.test(l));
   if (!checksumMatch || lines.length === 0)
     throw new Error("Failed to parse read result for multi-line edit benchmark");
 
@@ -200,8 +200,8 @@ async function benchEditMultiLine(): Promise<BenchResult> {
   const [range, csHash] = checksumStr.split(":");
   const [csStart, csEnd] = range.split("-").map(Number);
 
-  const firstMatch = lines[0].match(/^(\d+):([a-z0-9]{2})\|/);
-  const lastMatch = lines[lines.length - 1].match(/^(\d+):([a-z0-9]{2})\|/);
+  const firstMatch = lines[0].match(/^(\d+):([a-z0-9]{2})\t/);
+  const lastMatch = lines[lines.length - 1].match(/^(\d+):([a-z0-9]{2})\t/);
   if (!firstMatch || !lastMatch) throw new Error("Failed to parse line hashes");
 
   const replacement = Array.from({ length: 20 }, (_, i) => `const replaced_${i} = ${i};`);

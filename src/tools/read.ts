@@ -117,7 +117,9 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       if (rangeFirstLine === 0) rangeFirstLine = lineNumber;
 
       const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
-      const prefix = includeHashes ? Buffer.from(`${lineNumber}:${hashToLetters(h)}|`) : Buffer.from(`${lineNumber}|`);
+      const prefix = includeHashes
+        ? Buffer.from(`${lineNumber}:${hashToLetters(h)}	`)
+        : Buffer.from(`${lineNumber}	`);
       const lineLen = prefix.length + lineBytes.length + 1;
 
       // Check output limits before committing this line

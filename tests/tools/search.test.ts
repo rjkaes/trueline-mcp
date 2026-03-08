@@ -50,7 +50,7 @@ describe("trueline_search", () => {
     // Should have checksums
     expect(text).toContain("checksum:");
     // Should have per-line hashes
-    expect(text).toMatch(/\d+:[a-z2-7]{2}\|/);
+    expect(text).toMatch(/\d+:[a-z2-7]{2}\t/);
   });
 
   test("respects context_lines parameter", async () => {
@@ -166,7 +166,7 @@ describe("trueline_search", () => {
       fixed_string: true,
       projectDir: testDir,
     });
-    const text = getText(result);
+    const _text = getText(result);
     // Should not error — the bare '(' is escaped
     expect(result.isError).toBeUndefined();
   });

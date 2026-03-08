@@ -96,7 +96,7 @@ of a file — one read call provides all the checksums needed.
 
 When the agent is exploring code without planning to edit, it can pass
 `hashes: false` to omit the per-line 2-letter hashes. The output format
-changes from `N:hash|content` to `N|content`, saving ~3 tokens per line.
+changes from `N:hash\tcontent` to `N\tcontent`, saving ~3 tokens per line.
 Checksums are always included regardless of the `hashes` setting, so the
 agent can still reference the output for a subsequent targeted re-read
 before editing.
@@ -356,7 +356,7 @@ The pipeline:
 If `max_matches` is exceeded, the output includes a truncation notice
 with the total match count.
 
-The output is identical in format to `trueline_read` — same `N:hash|`
+The output is identical in format to `trueline_read` — same `N:hash\t`
 prefix, same checksums — so the agent can pass results directly to
 `trueline_edit` without a re-read step.
 

@@ -6,8 +6,6 @@
 // block/approve decisions. Returns normalized {action, reason} objects
 // that platform-specific formatters translate to the right JSON shape.
 
-import { stat } from "node:fs/promises";
-
 // Maps platform-specific built-in tool names to canonical names.
 const TOOL_ALIASES = {
   // Gemini CLI
@@ -80,27 +78,6 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
         return {
           action: "block",
           reason: "<trueline_redirect>Use trueline_read instead.</trueline_redirect>",
-        };
-      }
-    }
-    return null;
-  }
-
-  if (canonical === "Write") {
-    if (typeof filePath === "string") {
-      const canWrite = await canAccessFn(filePath, "Edit");
-      if (canWrite) {
-        // Fall through to built-in Write for non-regular files (directories,
-        // devices, etc.) that trueline_write would reject.
-        try {
-          const s = await stat(filePath);
-          if (!s.isFile()) return null;
-        } catch {
-          // File doesn't exist yet — trueline_write can handle creation.
-        }
-        return {
-          action: "block",
-          reason: "<trueline_redirect>Use trueline_write instead.</trueline_redirect>",
         };
       }
     }
