@@ -181,11 +181,11 @@ server.registerTool(
   "trueline_search",
   {
     description:
-      "Search a file by regex pattern. Returns matching lines with context, per-line hashes, and checksums — " +
-      "ready for immediate editing. Use instead of outline+read when you know what pattern to look for.",
+      "Search a file by regex or literal pattern. Returns matching lines with context, per-line hashes, and checksums \u2014 " +
+      "ready for immediate editing. Use instead of outline+read when you know what to look for.",
     inputSchema: z.object({
       file_path: z.string().describe("Absolute or project-relative file path."),
-      pattern: z.string().describe("Regex pattern to search for (line-by-line matching)."),
+      pattern: z.string().describe("Search pattern (regex by default, or literal string when fixed_string is true)."),
       context_lines: z
         .number()
         .int()

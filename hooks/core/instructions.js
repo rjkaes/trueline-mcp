@@ -14,6 +14,7 @@ const PLATFORM_RULES = {
     writeAdvice:
       "Use the built-in Write tool to create new files. " +
       "To edit them afterward, use trueline_read or trueline_search to get checksums first.",
+    grepAdvice: "use Grep to identify the files",
   },
   "gemini-cli": {
     editAdvice: "Never use edit_file \u2014 use trueline_edit instead.",
@@ -23,6 +24,7 @@ const PLATFORM_RULES = {
     writeAdvice:
       "Use write_file to create new files. " +
       "To edit them afterward, use trueline_read or trueline_search to get checksums first.",
+    grepAdvice: "use run_shell_command with grep/rg to identify the files",
   },
   "vscode-copilot": {
     editAdvice: "Never use the built-in Edit or MultiEdit tools \u2014 they are blocked and will be rejected.",
@@ -32,6 +34,7 @@ const PLATFORM_RULES = {
     writeAdvice:
       "Use the built-in Write tool to create new files. " +
       "To edit them afterward, use trueline_read or trueline_search to get checksums first.",
+    grepAdvice: "use Grep to identify the files",
   },
   opencode: {
     editAdvice: "Never use the built-in edit tool \u2014 use trueline_edit instead.",
@@ -41,6 +44,7 @@ const PLATFORM_RULES = {
     writeAdvice:
       "Use the built-in write tool to create new files. " +
       "To edit them afterward, use trueline_read or trueline_search to get checksums first.",
+    grepAdvice: "use bash with grep/rg to identify the files",
   },
   codex: {
     editAdvice: "",
@@ -50,6 +54,7 @@ const PLATFORM_RULES = {
     writeAdvice:
       "Use shell redirection to create new files. " +
       "To edit them afterward, use trueline_read or trueline_search to get checksums first.",
+    grepAdvice: "use shell with grep/rg to identify the files",
   },
 };
 
@@ -80,7 +85,7 @@ export function getInstructions(platform = "claude-code") {
     <rule>${rules.writeAdvice}</rule>
     <rule>Prefer trueline_outline first. Only call trueline_read for specific ranges you need (to edit, debug, or understand details). Read whole files only when short and you haven't used outline.</rule>
     <rule>When you already know the text to change, use trueline_search → trueline_edit (skips the read). This is the fastest edit path. Each match group gets its own checksum — use it directly with trueline_edit.</rule>
-    <rule>When you need to find a pattern across many files, use Grep to identify the files, then use trueline_search on individual files you need to edit.</rule>
+    <rule>When you need to find a pattern across many files, ${rules.grepAdvice}, then use trueline_search on individual files you need to edit.</rule>
     <rule>Batch multiple edits to the same file into one trueline_edit call. Each edit carries its own checksum — they don't need to share one.</rule>
   </rules>
 </trueline_mcp_instructions>`;
