@@ -13,22 +13,65 @@ import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
 interface OutlineParams {
-  file_path: string;
+  file_path?: string;
+  file_paths?: string[];
   depth?: number;
   projectDir?: string;
   allowedDirs?: string[];
 }
 
 export async function handleOutline(params: OutlineParams): Promise<ToolResult> {
-  const { file_path, projectDir, allowedDirs } = params;
+  const { projectDir, allowedDirs } = params;
 
+  // Resolve the list of files to outline
+  const filePaths = params.file_paths ?? (params.file_path ? [params.file_path] : []);
+  if (filePaths.length === 0) {
+    return errorResult("Provide either file_path or file_paths.");
+  }
+
+  // Single file — preserve original compact output
+  if (filePaths.length === 1) {
+    return outlineOneFile(filePaths[0], params.depth, projectDir, allowedDirs);
+  }
+
+  // Multiple files — collect results with per-file headers
+  const sections: string[] = [];
+  let totalSymbols = 0;
+  let totalLines = 0;
+
+  for (const fp of filePaths) {
+    const result = await outlineOneFile(fp, params.depth, projectDir, allowedDirs);
+    const text = result.content[0].type === "text" ? result.content[0].text : "";
+
+    // Extract counts from the summary line, e.g. "(12 symbols, 200 source lines)"
+    const countsMatch = text.match(/\((\d+) symbols?, (\d+) source lines?\)/);
+    if (countsMatch) {
+      totalSymbols += Number(countsMatch[1]);
+      totalLines += Number(countsMatch[2]);
+    }
+
+    const displayPath = projectDir && fp.startsWith(projectDir) ? fp.slice(projectDir.length + 1) : fp;
+    sections.push(`--- ${displayPath} ---\n${text}`);
+  }
+
+  const combined = sections.join("\n\n");
+  const summary = `\n(${totalSymbols} symbols, ${totalLines} source lines across ${filePaths.length} files)`;
+  return textResult(combined + summary);
+}
+
+async function outlineOneFile(
+  file_path: string,
+  depth: number | undefined,
+  projectDir: string | undefined,
+  allowedDirs: string[] | undefined,
+): Promise<ToolResult> {
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
   const ext = extname(validated.resolvedPath).toLowerCase();
   const config = getLanguageConfig(ext);
   if (!config) {
-    return textResult(`No outline support for "${ext}" files — use trueline_read to read this file directly.`);
+    return textResult(`No outline support for "${ext}" files \u2014 use trueline_read to read this file directly.`);
   }
 
   let source: string;
@@ -42,7 +85,7 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
   for (let i = 0; i < source.length; i++) if (source.charCodeAt(i) === 10) totalLines++;
 
   try {
-    const entries = await extractOutline(source, config, params.depth);
+    const entries = await extractOutline(source, config, depth);
     if (entries.length === 0) {
       return textResult(`(no outline entries found in ${totalLines}-line file)`);
     }

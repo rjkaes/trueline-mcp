@@ -57,7 +57,7 @@ describe("trueline_verify", () => {
   });
 
   test("mixed valid and stale with two ranges", async () => {
-    const lines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
+    const lines = `${Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n")}\n`;
     const file = writeTestFile("mixed.txt", lines);
 
     // Read two non-adjacent ranges
@@ -142,7 +142,7 @@ describe("trueline_verify", () => {
   });
 
   test("overlapping ranges both compute correctly", async () => {
-    const lines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
+    const lines = `${Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n")}\n`;
     const file = writeTestFile("overlap.txt", lines);
 
     // Read full file and a sub-range

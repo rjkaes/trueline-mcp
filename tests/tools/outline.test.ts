@@ -384,4 +384,42 @@ describe("trueline_outline", () => {
     // Both should include members
     expect(getText(withoutDepth)).toContain("greet");
   });
+
+  test("file_paths outlines multiple files in one call", async () => {
+    const tsFile = writeTestFile("multi-a.ts", ["function alpha() {}", "function beta() {}", ""].join("\n"));
+    const pyFile = writeTestFile("multi-b.py", ["def gamma():", "    pass", "def delta():", "    pass", ""].join("\n"));
+
+    const result = await handleOutline({ file_paths: [tsFile, pyFile], projectDir: testDir });
+    const text = getText(result);
+
+    // Each file gets a header
+    expect(text).toContain("--- multi-a.ts ---");
+    expect(text).toContain("--- multi-b.py ---");
+    // Symbols from both files appear
+    expect(text).toContain("alpha");
+    expect(text).toContain("beta");
+    expect(text).toContain("gamma");
+    expect(text).toContain("delta");
+    // Aggregate summary at the end
+    expect(text).toMatch(/\d+ symbols, \d+ source lines across 2 files/);
+  });
+
+  test("file_paths with mixed supported/unsupported files includes both", async () => {
+    const tsFile = writeTestFile("mixed-ok.ts", ["function hello() {}", ""].join("\n"));
+    const txtFile = writeTestFile("mixed-nope.xyz", "just plain text\n");
+
+    const result = await handleOutline({ file_paths: [tsFile, txtFile], projectDir: testDir });
+    const text = getText(result);
+
+    expect(text).toContain("--- mixed-ok.ts ---");
+    expect(text).toContain("hello");
+    expect(text).toContain("--- mixed-nope.xyz ---");
+    expect(text).toContain("No outline support");
+  });
+
+  test("errors when neither file_path nor file_paths provided", async () => {
+    const result = await handleOutline({ projectDir: testDir });
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain("Provide either file_path or file_paths");
+  });
 });

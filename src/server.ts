@@ -159,10 +159,15 @@ server.registerTool(
   "trueline_outline",
   {
     description:
-      "Get a compact structural outline of a source file (functions, classes, types, etc.) without reading the full content. " +
-      "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections.",
+      "Get a compact structural outline of source files (functions, classes, types, etc.) without reading the full content. " +
+      "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections. " +
+      "Supports single file (file_path) or multiple files (file_paths) in one call.",
     inputSchema: z.object({
-      file_path: z.string(),
+      file_path: z.string().describe("Single file to outline.").optional(),
+      file_paths: z
+        .array(z.string())
+        .describe("Multiple files to outline in one call. Use instead of file_path for batch outlines.")
+        .optional(),
       depth: z
         .number()
         .int()
@@ -194,6 +199,11 @@ server.registerTool(
         .describe("Lines of context above/below each match. Default: 2.")
         .optional(),
       max_matches: z.number().int().positive().describe("Maximum number of matches to return. Default: 10.").optional(),
+      case_insensitive: z.boolean().describe("Case-insensitive matching. Default: false.").optional(),
+      hashes: z
+        .boolean()
+        .describe("Include per-line hashes. Default: true. Set false for discovery searches.")
+        .optional(),
     }),
   },
   safeTool(async (params) => {
