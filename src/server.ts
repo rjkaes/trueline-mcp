@@ -72,7 +72,7 @@ server.registerTool(
   {
     description: "Read a file; returns 'N:hash\tcontent' per line plus a checksum per range.",
     inputSchema: z.object({
-      file_path: z.string(),
+      file_path: z.string().describe("Absolute or project-relative file path."),
       ranges: z
         .preprocess(
           (val) => (typeof val === "string" ? JSON.parse(val) : val),
@@ -107,7 +107,7 @@ server.registerTool(
   {
     description: "Apply hash-verified edits to a file. Each edit carries its own checksum.",
     inputSchema: z.object({
-      file_path: z.string(),
+      file_path: z.string().describe("Absolute or project-relative file path."),
       edits: z.preprocess(
         (val) => (typeof val === "string" ? JSON.parse(val) : val),
         z
@@ -133,7 +133,7 @@ server.registerTool(
   {
     description: "Preview edits as a unified diff without writing to disk. Each edit carries its own checksum.",
     inputSchema: z.object({
-      file_path: z.string(),
+      file_path: z.string().describe("Absolute or project-relative file path."),
       edits: z.preprocess(
         (val) => (typeof val === "string" ? JSON.parse(val) : val),
         z
@@ -162,10 +162,10 @@ server.registerTool(
       "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections. " +
       "Supports single file (file_path) or multiple files (file_paths) in one call.",
     inputSchema: z.object({
-      file_path: z.string().describe("Single file to outline.").optional(),
+      file_path: z.string().describe("Single file to outline. Required if file_paths is not provided.").optional(),
       file_paths: z
         .array(z.string())
-        .describe("Multiple files to outline in one call. Use instead of file_path for batch outlines.")
+        .describe("Multiple files to outline in one call. Required if file_path is not provided.")
         .optional(),
       depth: z
         .number()
@@ -189,7 +189,7 @@ server.registerTool(
       "Search a file by regex pattern. Returns matching lines with context, per-line hashes, and checksums — " +
       "ready for immediate editing. Use instead of outline+read when you know what pattern to look for.",
     inputSchema: z.object({
-      file_path: z.string(),
+      file_path: z.string().describe("Absolute or project-relative file path."),
       pattern: z.string().describe("Regex pattern to search for (line-by-line matching)."),
       context_lines: z
         .number()
@@ -214,7 +214,7 @@ server.registerTool(
       "Validate held checksums against a file. Returns which are valid or stale. " +
       "Cheaper than re-reading \u2014 use before editing when the file may have changed.",
     inputSchema: z.object({
-      file_path: z.string(),
+      file_path: z.string().describe("Absolute or project-relative file path."),
       checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
     }),
   },
