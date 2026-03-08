@@ -88,8 +88,11 @@ function gitExec(cmd: string, cwd: string): string {
 
 function getGitContent(filePath: string, ref: string, cwd: string): string {
   try {
-    // git show requires forward slashes, even on Windows
-    const relPath = relative(cwd, filePath).replace(/\\/g, "/");
+    // Use git's own toplevel to compute the relative path, so that
+    // Windows 8.3 short-name mismatches between realpath() and the
+    // test's realpathSync() don't produce wrong relative paths.
+    const toplevel = gitExec("git rev-parse --show-toplevel", cwd).trim();
+    const relPath = relative(toplevel, filePath).replace(/\\/g, "/");
     return gitExec(`git show ${ref}:${relPath}`, cwd);
   } catch {
     return ""; // untracked or not in git
