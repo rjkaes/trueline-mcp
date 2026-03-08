@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { handleRead } from "../src/tools/read.ts";
 import { handleOutline } from "../src/tools/outline.ts";
 import { handleSearch } from "../src/tools/search.ts";
+import { handleVerify } from "../src/tools/verify.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -238,6 +239,54 @@ async function truelineSearchFix(): Promise<ScenarioResult> {
   return buildResult("Search & fix", steps);
 }
 
+async function truelineVerifyBeforeEdit(): Promise<ScenarioResult> {
+  const steps: StepDetail[] = [];
+
+  // Initial read to get checksums (simulated prior session)
+  const readCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 74, end: 150 }] };
+  const read = await handleRead({
+    file_path: SAMPLE_FILE,
+    ranges: [{ start: 74, end: 150 }],
+    projectDir: PROJECT_DIR,
+    allowedDirs: ALLOWED_DIRS,
+  });
+  const readText = read.content[0].text;
+  const checksumMatch = readText.match(/checksum: (\S+)/);
+  const checksum = checksumMatch ? checksumMatch[1] : "74-150:00000000";
+  steps.push({
+    tool: "read 74-150 (initial)",
+    callBytes: jsonCallBytes(readCallObj),
+    resultBytes: outputBytes(read),
+  });
+
+  // Verify checksums are still valid (file unchanged — common case)
+  const verifyCallObj = { file_path: SAMPLE_FILE, checksums: [checksum] };
+  const verify = await handleVerify({
+    file_path: SAMPLE_FILE,
+    checksums: [checksum],
+    projectDir: PROJECT_DIR,
+    allowedDirs: ALLOWED_DIRS,
+  });
+  steps.push({
+    tool: "verify (still valid)",
+    callBytes: jsonCallBytes(verifyCallObj),
+    resultBytes: outputBytes(verify),
+  });
+
+  // Edit using held checksums (no re-read needed)
+  const editCall = jsonCallBytes({
+    file_path: SAMPLE_FILE,
+    edits: [{ range: "100:ab..115:cd", checksum: "74-150:abcdef01", content: "// replaced content\n" }],
+  });
+  steps.push({
+    tool: "edit (cached checksums)",
+    callBytes: editCall,
+    resultBytes: Buffer.byteLength("checksum: 74-150:newcheck", "utf-8"),
+  });
+
+  return buildResult("Verify before edit", steps);
+}
+
 async function truelineMultiRegion(): Promise<ScenarioResult> {
   const steps: StepDetail[] = [];
 
@@ -339,6 +388,28 @@ function builtinSearchFix(): ScenarioResult {
   return buildResult("Search & fix", steps);
 }
 
+function builtinVerifyBeforeEdit(): ScenarioResult {
+  const steps: StepDetail[] = [];
+  const lines = readFileSync(SAMPLE_FILE, "utf-8").split("\n");
+
+  // Initial read (full file — built-in can't do ranges)
+  const readCall1 = builtinReadCallBytes(SAMPLE_FILE);
+  const readResult1 = Buffer.byteLength(simulateBuiltinRead(SAMPLE_FILE), "utf-8");
+  steps.push({ tool: "Read full file (initial)", callBytes: readCall1, resultBytes: readResult1 });
+
+  // Must re-read full file to check if anything changed (no verify)
+  const readCall2 = builtinReadCallBytes(SAMPLE_FILE);
+  const readResult2 = Buffer.byteLength(simulateBuiltinRead(SAMPLE_FILE), "utf-8");
+  steps.push({ tool: "Read full file (re-check)", callBytes: readCall2, resultBytes: readResult2 });
+
+  // Edit with old_string echo
+  const oldString = lines.slice(99, 115).join("\n");
+  const editCall = builtinEditCallBytes(SAMPLE_FILE, oldString, "// replaced content");
+  steps.push({ tool: "Edit (old_string echo)", callBytes: editCall, resultBytes: builtinEditResultBytes() });
+
+  return buildResult("Verify before edit", steps);
+}
+
 function builtinMultiRegion(): ScenarioResult {
   const steps: StepDetail[] = [];
 
@@ -432,12 +503,13 @@ async function main(): Promise<void> {
   console.log(`Multi-file: ${SAMPLE_FILES.map((f) => f.split("/").pop()).join(", ")}`);
 
   // Run all trueline scenarios
-  const [tlNav, tlExplore, tlSearch, tlMultiRegion, tlMultiFile] = await Promise.all([
+  const [tlNav, tlExplore, tlSearch, tlMultiRegion, tlMultiFile, tlVerify] = await Promise.all([
     truelineNavigate(),
     truelineExploreEdit(),
     truelineSearchFix(),
     truelineMultiRegion(),
     truelineMultiFile(),
+    truelineVerifyBeforeEdit(),
   ]);
 
   // Run all built-in scenarios (synchronous — no IO)
@@ -446,6 +518,7 @@ async function main(): Promise<void> {
   const biSearch = builtinSearchFix();
   const biMultiRegion = builtinMultiRegion();
   const biMultiFile = builtinMultiFile();
+  const biVerify = builtinVerifyBeforeEdit();
 
   printComparisonTable([
     { name: "Navigate & understand", builtin: biNav, trueline: tlNav },
@@ -453,6 +526,7 @@ async function main(): Promise<void> {
     { name: "Search & fix", builtin: biSearch, trueline: tlSearch },
     { name: "Multi-region read", builtin: biMultiRegion, trueline: tlMultiRegion },
     { name: "Multi-file exploration", builtin: biMultiFile, trueline: tlMultiFile },
+    { name: "Verify before edit", builtin: biVerify, trueline: tlVerify },
   ]);
 }
 
