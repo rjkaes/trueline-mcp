@@ -74,7 +74,7 @@ export function getInstructions(platform = "claude-code") {
     <tool name="trueline_edit">Hash-verified edits. Needs checksum from trueline_read or trueline_search.</tool>
     <tool name="trueline_diff">Preview edits as unified diff without writing.</tool>
     <tool name="trueline_outline">Structural outline of one or more files. Often enough on its own. Use to find line ranges before targeted reads.</tool>
-    <tool name="trueline_search">Regex or fixed-string search with hashes — returns edit-ready results. Use for single-file searches when you plan to edit the matches. Prefer fixed_string=true for literal text.</tool>
+    <tool name="trueline_search">Literal string search with hashes \u2014 returns edit-ready results. Set regex=true for regex. Use for single-file searches when you plan to edit the matches.</tool>
     <tool name="trueline_verify">Check if held checksums are still valid. Cheaper than re-reading.</tool>
   </tools>
   <workflow>trueline_outline → trueline_read (targeted ranges) → trueline_diff (optional) → trueline_edit</workflow>

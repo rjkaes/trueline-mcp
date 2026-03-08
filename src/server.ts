@@ -181,11 +181,11 @@ server.registerTool(
   "trueline_search",
   {
     description:
-      "Search a file by regex or literal pattern. Returns matching lines with context, per-line hashes, and checksums \u2014 " +
+      "Search a file for a literal string or regex pattern. Returns matching lines with context, per-line hashes, and checksums \u2014 " +
       "ready for immediate editing. Use instead of outline+read when you know what to look for.",
     inputSchema: z.object({
       file_path: z.string().describe("Absolute or project-relative file path."),
-      pattern: z.string().describe("Search pattern (regex by default, or literal string when fixed_string is true)."),
+      pattern: z.string().describe("Search string. Literal by default; set regex=true for regular expressions."),
       context_lines: z
         .number()
         .int()
@@ -194,7 +194,7 @@ server.registerTool(
         .optional(),
       max_matches: z.number().int().positive().describe("Maximum number of matches to return. Default: 10.").optional(),
       case_insensitive: z.boolean().describe("Case-insensitive matching. Default: false.").optional(),
-      fixed_string: z.boolean().describe("Treat pattern as a literal string, not a regex. Default: false.").optional(),
+      regex: z.boolean().describe("Treat pattern as a regular expression. Default: false (literal match).").optional(),
     }),
   },
   safeTool(async (params) => {

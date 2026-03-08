@@ -102,10 +102,11 @@ describe("trueline_search", () => {
     expect(text).toContain("No matches");
   });
 
-  test("handles regex patterns", async () => {
+  test("regex mode matches regex patterns", async () => {
     const result = await handleSearch({
       file_path: testFile,
       pattern: "function \\w+",
+      regex: true,
       projectDir: testDir,
     });
     const text = getText(result);
@@ -113,14 +114,26 @@ describe("trueline_search", () => {
     expect(text).toContain("function world");
   });
 
-  test("rejects invalid regex", async () => {
+  test("regex mode rejects invalid regex", async () => {
+    const result = await handleSearch({
+      file_path: testFile,
+      pattern: "[invalid",
+      regex: true,
+      projectDir: testDir,
+    });
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain("Invalid regex");
+  });
+
+  test("literal mode does not reject regex metacharacters", async () => {
     const result = await handleSearch({
       file_path: testFile,
       pattern: "[invalid",
       projectDir: testDir,
     });
-    expect(result.isError).toBe(true);
-    expect(getText(result)).toContain("Invalid regex");
+    // Should not error — treated as literal
+    expect(result.isError).toBeUndefined();
+    expect(getText(result)).toContain("No matches");
   });
 
   test("case_insensitive matches case-insensitively", async () => {
@@ -145,12 +158,11 @@ describe("trueline_search", () => {
     expect(text).toContain("No matches");
   });
 
-  test("fixed_string matches literal metacharacters", async () => {
+  test("literal mode matches metacharacters without escaping", async () => {
     // The test file has 'console.log("hello")' — the dot and parens are regex metacharacters
     const result = await handleSearch({
       file_path: testFile,
       pattern: "console.log(",
-      fixed_string: true,
       projectDir: testDir,
     });
     const text = getText(result);
@@ -158,16 +170,13 @@ describe("trueline_search", () => {
     expect(text).toContain("checksum:");
   });
 
-  test("fixed_string does not treat pattern as regex", async () => {
-    // Without fixed_string, '(' would be an invalid regex
+  test("literal mode treats bare parens as literal text", async () => {
     const result = await handleSearch({
       file_path: testFile,
       pattern: "hello(",
-      fixed_string: true,
       projectDir: testDir,
     });
-    const _text = getText(result);
-    // Should not error — the bare '(' is escaped
+    // Should not error — literal match, not regex
     expect(result.isError).toBeUndefined();
   });
   test("validates file path", async () => {

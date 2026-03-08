@@ -18,7 +18,7 @@ interface SearchParams {
   context_lines?: number;
   max_matches?: number;
   case_insensitive?: boolean;
-  fixed_string?: boolean;
+  regex?: boolean;
   projectDir?: string;
   allowedDirs?: string[];
 }
@@ -46,14 +46,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 
   // Build line matcher
   let matchLine: (text: string) => boolean;
-  if (params.fixed_string) {
-    if (params.case_insensitive) {
-      const lower = pattern.toLowerCase();
-      matchLine = (text) => text.toLowerCase().includes(lower);
-    } else {
-      matchLine = (text) => text.includes(pattern);
-    }
-  } else {
+  if (params.regex) {
     let regex: RegExp;
     try {
       regex = new RegExp(pattern, params.case_insensitive ? "i" : undefined);
@@ -61,6 +54,13 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
       return errorResult(`Invalid regex pattern: "${pattern}"`);
     }
     matchLine = (text) => regex.test(text);
+  } else {
+    if (params.case_insensitive) {
+      const lower = pattern.toLowerCase();
+      matchLine = (text) => text.toLowerCase().includes(lower);
+    } else {
+      matchLine = (text) => text.includes(pattern);
+    }
   }
 
   const { resolvedPath } = validated;
