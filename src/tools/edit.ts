@@ -58,7 +58,11 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     const diff = collector.format(`a/${relPath}`, `b/${relPath}`);
 
     if (result.tmpPath) {
-      try { await unlink(result.tmpPath); } catch { /* best-effort */ }
+      try {
+        await unlink(result.tmpPath);
+      } catch {
+        /* best-effort */
+      }
     }
 
     return textResult(diff);
