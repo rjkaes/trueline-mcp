@@ -160,7 +160,7 @@ server.registerTool(
   {
     description:
       "Get a compact structural outline of a source file (functions, classes, types, etc.) without reading the full content. " +
-      "Much smaller than trueline_read — use this first to understand file structure, then read specific ranges.",
+      "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections.",
     inputSchema: z.object({
       file_path: z.string(),
       depth: z
@@ -225,9 +225,8 @@ server.registerTool(
   "trueline_verify",
   {
     description:
-      "Check whether held checksums are still valid for a file. " +
-      "Pass checksums from a prior trueline_read; returns which are valid or stale. " +
-      "Much cheaper than re-reading — use before editing when the file may have changed.",
+      "Validate held checksums against a file. Returns which are valid or stale. " +
+      "Cheaper than re-reading \u2014 use before editing when the file may have changed.",
     inputSchema: z.object({
       file_path: z.string(),
       checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
