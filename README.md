@@ -152,3 +152,7 @@ Inspired by [The Harness Problem](https://blog.can.ac/2026/02/12/the-harness-pro
 by Can Boluk and the
 [vscode-hashline-edit-tool](https://github.com/sethml/vscode-hashline-edit-tool)
 by Seth Livingston.
+
+## Special Thanks
+
+<a href="https://github.com/domis86"><img src="https://avatars.githubusercontent.com/u/2327600?v=4" width=32"></a>
