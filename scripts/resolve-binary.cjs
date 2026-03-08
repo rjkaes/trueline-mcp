@@ -35,35 +35,28 @@ function hasDeno() {
 // Dependency Installation
 // ==============================================================================
 
-// When installed as a Claude Code plugin, tree-sitter WASM files are needed
-// by trueline_outline but aren't bundled. Install them globally so they don't
-// bloat the plugin dir (Claude Code copies the entire plugin directory to a
-// versioned cache, and node_modules causes ENAMETOOLONG).
-const WASM_PKGS = ["web-tree-sitter@0.24.7", "tree-sitter-wasms@0.1.13"];
-
-function globalModulesDir() {
-  try {
-    return execFileSync("npm", ["root", "-g"], { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
-    return null;
-  }
-}
-
+// When installed as a Claude Code plugin, node_modules won't exist.
+// Install dependencies on first launch so tree-sitter WASMs (needed by
+// trueline_outline) and other native deps are available.
 function ensureDeps() {
-  const globalDir = globalModulesDir();
-  if (!globalDir) return;
+  if (existsSync(path.join(pluginRoot, "node_modules"))) return;
 
-  for (const spec of WASM_PKGS) {
-    const pkg = spec.split("@")[0];
-    if (existsSync(path.join(globalDir, pkg))) continue;
-    try {
-      execFileSync("npm", ["install", "-g", spec, "--silent"], {
-        stdio: "pipe",
-        timeout: 60_000,
-      });
-    } catch {
-      // Non-fatal: outline won't work, but read/edit/search/diff/verify will.
-    }
+  process.stderr.write("trueline-mcp: installing dependencies (first run)...\n");
+  try {
+    // Prefer bun for speed, fall back to npm (ships with node).
+    const installer = hasBun() ? "bun" : "npm";
+    const args = installer === "bun" ? ["install"] : ["install", "--production"];
+    execFileSync(installer, args, {
+      cwd: pluginRoot,
+      stdio: ["ignore", "ignore", "inherit"],
+      timeout: 120_000,
+    });
+    process.stderr.write("trueline-mcp: dependencies installed.\n");
+  } catch (err) {
+    // Non-fatal: outline won't work, but read/edit/search/diff/verify will.
+    process.stderr.write(
+      `trueline-mcp: dependency install failed (${err.message}). ` + "trueline_outline will be unavailable.\n",
+    );
   }
 }
 
@@ -85,16 +78,8 @@ if (hasBun()) {
   args = [path.join(pluginRoot, "dist", "server.js")];
 }
 
-// Node doesn't search global node_modules by default — expose via NODE_PATH
-const env = { ...process.env };
-const globalDir = globalModulesDir();
-if (globalDir) {
-  env.NODE_PATH = env.NODE_PATH ? `${globalDir}${path.delimiter}${env.NODE_PATH}` : globalDir;
-}
-
 const child = spawn(cmd, [...args, ...process.argv.slice(2)], {
   stdio: "inherit",
-  env,
 });
 
 child.on("error", (err) => {
