@@ -55,7 +55,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = getText(result);
 
@@ -88,7 +88,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     const text = getText(result);
 
     // Class should be at depth 0, members indented
@@ -118,7 +118,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = getText(result);
 
@@ -151,7 +151,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = getText(result);
 
@@ -182,7 +182,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = getText(result);
 
@@ -196,7 +196,7 @@ describe("trueline_outline", () => {
   test("returns guidance for unsupported file type", async () => {
     const file = writeTestFile("data.csv", "a,b,c\n1,2,3\n");
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     expect(result.isError).toBeUndefined();
     expect(getText(result)).toContain("No outline support");
     expect(getText(result)).toContain("trueline_read");
@@ -204,7 +204,7 @@ describe("trueline_outline", () => {
 
   test("returns error for nonexistent file", async () => {
     const result = await handleOutline({
-      file_path: join(testDir, "nope.ts"),
+      file_paths: [join(testDir, "nope.ts")],
       projectDir: testDir,
     });
     expect(result.isError).toBe(true);
@@ -214,7 +214,7 @@ describe("trueline_outline", () => {
   test("handles empty file", async () => {
     const file = writeTestFile("empty.ts", "");
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     expect(result.isError).toBeUndefined();
     expect(getText(result)).toContain("no outline entries");
   });
@@ -222,7 +222,7 @@ describe("trueline_outline", () => {
   test("reports symbol count and source lines", async () => {
     const file = writeTestFile("counted.ts", ["function a() {}", "function b() {}", "function c() {}", ""].join("\n"));
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     const text = getText(result);
     expect(text).toContain("3 symbols");
     expect(text).toContain("4 source lines");
@@ -242,7 +242,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     const text = getText(result);
 
     // Top-level expression_statement should be included
@@ -265,7 +265,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     const text = getText(result);
 
     // Should show collapsed imports with line range
@@ -277,7 +277,7 @@ describe("trueline_outline", () => {
   test("all entries use start-end line range format", async () => {
     const file = writeTestFile("ranges.ts", ["const x = 1;", "function foo() {", "  return 1;", "}", ""].join("\n"));
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     const text = getText(result);
 
     // Single-line entries should still use start-end format
@@ -301,7 +301,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     const text = getText(result);
     // Should show the full signature, not just the first line
     expect(text).toContain("createServer(name: string, port: number, options: ServerOptions): Promise<Server>");
@@ -313,7 +313,7 @@ describe("trueline_outline", () => {
       ["function add(a: number, b: number): number {", "  return a + b;", "}", ""].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     const text = getText(result);
     expect(text).toContain("function add(a: number, b: number): number {");
   });
@@ -339,7 +339,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, depth: 0, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], depth: 0, projectDir: testDir });
     const text = getText(result);
     // Top-level class and function should appear
     expect(text).toContain("class MyClass");
@@ -365,7 +365,7 @@ describe("trueline_outline", () => {
       ].join("\n"),
     );
 
-    const result = await handleOutline({ file_path: file, depth: 1, projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], depth: 1, projectDir: testDir });
     const text = getText(result);
     expect(text).toContain("class MyClass");
     expect(text).toContain("constructor");
@@ -378,8 +378,8 @@ describe("trueline_outline", () => {
       ["class MyClass {", "  greet(): string {", "    return 'hello';", "  }", "}", ""].join("\n"),
     );
 
-    const withoutDepth = await handleOutline({ file_path: file, projectDir: testDir });
-    const withInfinity = await handleOutline({ file_path: file, depth: undefined, projectDir: testDir });
+    const withoutDepth = await handleOutline({ file_paths: [file], projectDir: testDir });
+    const withInfinity = await handleOutline({ file_paths: [file], depth: undefined, projectDir: testDir });
     expect(getText(withoutDepth)).toEqual(getText(withInfinity));
     // Both should include members
     expect(getText(withoutDepth)).toContain("greet");
@@ -417,9 +417,9 @@ describe("trueline_outline", () => {
     expect(text).toContain("No outline support");
   });
 
-  test("errors when neither file_path nor file_paths provided", async () => {
-    const result = await handleOutline({ projectDir: testDir });
+  test("errors when file_paths is empty", async () => {
+    const result = await handleOutline({ file_paths: [], projectDir: testDir });
     expect(result.isError).toBe(true);
-    expect(getText(result)).toContain("Provide either file_path or file_paths");
+    expect(getText(result)).toContain("Provide at least one file path");
   });
 });

@@ -159,14 +159,9 @@ server.registerTool(
   {
     description:
       "Get a compact structural outline of source files (functions, classes, types, etc.) without reading the full content. " +
-      "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections. " +
-      "Supports single file (file_path) or multiple files (file_paths) in one call.",
+      "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections.",
     inputSchema: z.object({
-      file_path: z.string().describe("Single file to outline. Required if file_paths is not provided.").optional(),
-      file_paths: z
-        .array(z.string())
-        .describe("Multiple files to outline in one call. Required if file_path is not provided.")
-        .optional(),
+      file_paths: z.array(z.string()).describe("One or more absolute or project-relative file paths to outline."),
       depth: z
         .number()
         .int()

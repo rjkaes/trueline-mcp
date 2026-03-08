@@ -13,8 +13,7 @@ import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
 interface OutlineParams {
-  file_path?: string;
-  file_paths?: string[];
+  file_paths: string[];
   depth?: number;
   projectDir?: string;
   allowedDirs?: string[];
@@ -23,10 +22,9 @@ interface OutlineParams {
 export async function handleOutline(params: OutlineParams): Promise<ToolResult> {
   const { projectDir, allowedDirs } = params;
 
-  // Resolve the list of files to outline
-  const filePaths = params.file_paths ?? (params.file_path ? [params.file_path] : []);
+  const filePaths = params.file_paths;
   if (filePaths.length === 0) {
-    return errorResult("Provide either file_path or file_paths.");
+    return errorResult("Provide at least one file path in file_paths.");
   }
 
   // Single file — preserve original compact output
