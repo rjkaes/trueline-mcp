@@ -4,11 +4,13 @@
  * Measures wall-clock time of core operations across realistic workloads.
  * Run: bun run benchmark
  */
+import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { mkdtempSync, realpathSync, writeFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { handleRead } from "../src/tools/read.ts";
 import { handleSearch } from "../src/tools/search.ts";
+import { handleDiff } from "../src/tools/diff.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
 import { fnv1aHashBytes, hashToLetters } from "../src/hash.ts";
 
@@ -245,6 +247,75 @@ function benchHashToLetters(): BenchResult {
   });
 }
 
+async function benchSemanticDiff(): Promise<BenchResult> {
+  const gitDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-sdiff-")));
+  const testFile = join(gitDir, "app.ts");
+
+  // Set up a small git repo with TypeScript functions
+  const git = (cmd: string) =>
+    execSync(cmd, {
+      cwd: gitDir,
+      stdio: "pipe",
+      env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+    });
+
+  git("git init");
+  git('git config user.email "bench@test.com"');
+  git('git config user.name "Bench"');
+
+  const baseContent = [
+    "function add(a: number, b: number): number { return a + b; }",
+    "function subtract(a: number, b: number): number { return a - b; }",
+    "function multiply(a: number, b: number): number { return a * b; }",
+    "class Calculator {",
+    "  compute(op: string, a: number, b: number): number {",
+    "    switch (op) {",
+    '      case "add": return add(a, b);',
+    '      case "sub": return subtract(a, b);',
+    '      case "mul": return multiply(a, b);',
+    '      default: throw new Error("unknown");',
+    "    }",
+    "  }",
+    "}",
+  ].join("\n");
+
+  writeFileSync(testFile, `${baseContent}\n`);
+  git("git add .");
+  git("git commit -m initial");
+
+  // Modified version: remove subtract, add divide, change multiply params, add method
+  const modifiedContent = [
+    "function add(a: number, b: number): number { return a + b; }",
+    'function divide(a: number, b: number): number { if (b === 0) throw new Error("zero"); return a / b; }',
+    "function multiply(x: number, y: number): number { return x * y; }",
+    "class Calculator {",
+    "  compute(op: string, a: number, b: number): number {",
+    "    switch (op) {",
+    '      case "add": return add(a, b);',
+    '      case "div": return divide(a, b);',
+    '      case "mul": return multiply(a, b);',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal code content
+    "      default: throw new Error(`unknown: ${op}`);",
+    "    }",
+    "  }",
+    "  getHistory(): number[] { return []; }",
+    "}",
+  ].join("\n");
+
+  writeFileSync(testFile, `${modifiedContent}\n`);
+
+  return bench("semantic-diff", 20, async () => {
+    await handleDiff({
+      file_paths: ["app.ts"],
+      compare_against: "HEAD",
+      projectDir: gitDir,
+      allowedDirs: [gitDir],
+    });
+  }).finally(() => {
+    rmSync(gitDir, { recursive: true, force: true });
+  });
+}
+
 // ===========================================================================
 // Main
 // ===========================================================================
@@ -266,6 +337,7 @@ async function main(): Promise<void> {
   results.push(await benchEditMultiLine());
   results.push(benchHashBytes());
   results.push(benchHashToLetters());
+  results.push(await benchSemanticDiff());
 
   console.log();
   printResults(results);

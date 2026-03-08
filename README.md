@@ -90,6 +90,16 @@ tokens are the most expensive token class, so this adds up fast.
 
 Multiple edits can be batched in a single call and applied atomically.
 
+### Review smarter: `trueline_diff`
+
+`trueline_diff` provides a semantic, AST-based summary of structural
+changes compared to a git ref. Instead of raw line diffs, it reports
+added/removed/renamed symbols, signature changes, and logic
+modifications with inline mini-diffs for small changes.
+
+Pass `["*"]` to diff all changed files at once. The output is compact
+enough to review an entire feature branch in a single tool call.
+
 ### Never corrupt: hash verification
 
 Every line from `trueline_read` carries a content hash. Every edit must

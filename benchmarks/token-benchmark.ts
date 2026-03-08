@@ -5,13 +5,16 @@
  * Compares trueline-mcp tools against simulated built-in tool equivalents.
  * Run: bun run benchmark
  */
-import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { handleRead } from "../src/tools/read.ts";
 import { handleOutline } from "../src/tools/outline.ts";
 import { handleSearch } from "../src/tools/search.ts";
 import { handleVerify } from "../src/tools/verify.ts";
+import { handleDiff } from "../src/tools/diff.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -108,6 +111,63 @@ const SAMPLE_FILES = [
 ];
 
 // ---------------------------------------------------------------------------
+// Diff repo setup (shared by trueline and built-in scenarios)
+// ---------------------------------------------------------------------------
+
+const DIFF_BASE = [
+  "function add(a: number, b: number): number { return a + b; }",
+  "function subtract(a: number, b: number): number { return a - b; }",
+  "function multiply(a: number, b: number): number { return a * b; }",
+  "class Calculator {",
+  "  compute(op: string, a: number, b: number): number {",
+  "    switch (op) {",
+  '      case "add": return add(a, b);',
+  '      case "sub": return subtract(a, b);',
+  '      default: throw new Error("unknown");',
+  "    }",
+  "  }",
+  "}",
+].join("\n");
+
+const DIFF_MODIFIED = [
+  "function add(a: number, b: number): number { return a + b; }",
+  'function divide(a: number, b: number): number { if (b === 0) throw new Error("zero"); return a / b; }',
+  "function multiply(x: number, y: number): number { return x * y; }",
+  "class Calculator {",
+  "  compute(op: string, a: number, b: number): number {",
+  "    switch (op) {",
+  '      case "add": return add(a, b);',
+  '      case "div": return divide(a, b);',
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: literal code content
+  "      default: throw new Error(`unknown: ${op}`);",
+  "    }",
+  "  }",
+  "  getHistory(): number[] { return []; }",
+  "}",
+].join("\n");
+
+function setupDiffRepo(): { gitDir: string; cleanup: () => void } {
+  const gitDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-tdiff-")));
+  const testFile = join(gitDir, "app.ts");
+  const git = (cmd: string) =>
+    execSync(cmd, {
+      cwd: gitDir,
+      stdio: "pipe",
+      env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+    });
+
+  git("git init");
+  git('git config user.email "bench@test.com"');
+  git('git config user.name "Bench"');
+  writeFileSync(testFile, `${DIFF_BASE}\n`);
+  git("git add .");
+  git("git commit -m initial");
+  writeFileSync(testFile, `${DIFF_MODIFIED}\n`);
+
+  return { gitDir, cleanup: () => rmSync(gitDir, { recursive: true, force: true }) };
+}
+
+// ---------------------------------------------------------------------------
 // Scenario helpers
 // ---------------------------------------------------------------------------
 
@@ -134,8 +194,12 @@ async function truelineNavigate(): Promise<ScenarioResult> {
   const steps: StepDetail[] = [];
 
   // outline
-  const outlineCall = jsonCallBytes({ file_path: SAMPLE_FILE });
-  const outline = await handleOutline({ file_path: SAMPLE_FILE, projectDir: PROJECT_DIR, allowedDirs: ALLOWED_DIRS });
+  const outlineCall = jsonCallBytes({ file_paths: [SAMPLE_FILE] });
+  const outline = await handleOutline({
+    file_paths: [SAMPLE_FILE],
+    projectDir: PROJECT_DIR,
+    allowedDirs: ALLOWED_DIRS,
+  });
   steps.push({ tool: "outline", callBytes: outlineCall, resultBytes: outputBytes(outline) });
 
   // read targeted range
@@ -160,8 +224,12 @@ async function truelineExploreEdit(): Promise<ScenarioResult> {
   const steps: StepDetail[] = [];
 
   // outline
-  const outlineCall = jsonCallBytes({ file_path: SAMPLE_FILE });
-  const outline = await handleOutline({ file_path: SAMPLE_FILE, projectDir: PROJECT_DIR, allowedDirs: ALLOWED_DIRS });
+  const outlineCall = jsonCallBytes({ file_paths: [SAMPLE_FILE] });
+  const outline = await handleOutline({
+    file_paths: [SAMPLE_FILE],
+    projectDir: PROJECT_DIR,
+    allowedDirs: ALLOWED_DIRS,
+  });
   steps.push({ tool: "outline", callBytes: outlineCall, resultBytes: outputBytes(outline) });
 
   // exploratory read (no hashes)
@@ -324,12 +392,32 @@ async function truelineMultiFile(): Promise<ScenarioResult> {
   const steps: StepDetail[] = [];
 
   for (const file of SAMPLE_FILES) {
-    const callBytes = jsonCallBytes({ file_path: file });
-    const outline = await handleOutline({ file_path: file, projectDir: PROJECT_DIR, allowedDirs: ALLOWED_DIRS });
+    const callBytes = jsonCallBytes({ file_paths: [file] });
+    const outline = await handleOutline({ file_paths: [file], projectDir: PROJECT_DIR, allowedDirs: ALLOWED_DIRS });
     steps.push({ tool: `outline ${file.split("/").pop()}`, callBytes, resultBytes: outputBytes(outline) });
   }
 
   return buildResult("Multi-file exploration", steps);
+}
+
+async function truelineSemanticDiff(): Promise<ScenarioResult> {
+  const steps: StepDetail[] = [];
+  const { gitDir, cleanup } = setupDiffRepo();
+
+  try {
+    const callObj = { file_paths: ["app.ts"], compare_against: "HEAD" };
+    const result = await handleDiff({
+      file_paths: ["app.ts"],
+      compare_against: "HEAD",
+      projectDir: gitDir,
+      allowedDirs: [gitDir],
+    });
+    steps.push({ tool: "semantic diff", callBytes: jsonCallBytes(callObj), resultBytes: outputBytes(result) });
+  } finally {
+    cleanup();
+  }
+
+  return buildResult("Review changes (diff)", steps);
 }
 
 // ---------------------------------------------------------------------------
@@ -434,6 +522,28 @@ function builtinMultiFile(): ScenarioResult {
   return buildResult("Multi-file exploration", steps);
 }
 
+function builtinSemanticDiff(): ScenarioResult {
+  const steps: StepDetail[] = [];
+
+  // Built-in has no semantic diff — the agent would run `git diff` via Bash
+  // and receive the raw unified diff output
+  const { gitDir, cleanup } = setupDiffRepo();
+  try {
+    const rawDiff = execSync("git diff", {
+      cwd: gitDir,
+      stdio: "pipe",
+      env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+    }).toString();
+    const callBytes = Buffer.byteLength("git diff", "utf-8");
+    const resultBytes = Buffer.byteLength(rawDiff, "utf-8");
+    steps.push({ tool: "Bash(git diff)", callBytes, resultBytes });
+  } finally {
+    cleanup();
+  }
+
+  return buildResult("Review changes (diff)", steps);
+}
+
 // ---------------------------------------------------------------------------
 // Output formatting
 // ---------------------------------------------------------------------------
@@ -503,13 +613,14 @@ async function main(): Promise<void> {
   console.log(`Multi-file: ${SAMPLE_FILES.map((f) => f.split("/").pop()).join(", ")}`);
 
   // Run all trueline scenarios
-  const [tlNav, tlExplore, tlSearch, tlMultiRegion, tlMultiFile, tlVerify] = await Promise.all([
+  const [tlNav, tlExplore, tlSearch, tlMultiRegion, tlMultiFile, tlVerify, tlDiff] = await Promise.all([
     truelineNavigate(),
     truelineExploreEdit(),
     truelineSearchFix(),
     truelineMultiRegion(),
     truelineMultiFile(),
     truelineVerifyBeforeEdit(),
+    truelineSemanticDiff(),
   ]);
 
   // Run all built-in scenarios (synchronous — no IO)
@@ -519,6 +630,7 @@ async function main(): Promise<void> {
   const biMultiRegion = builtinMultiRegion();
   const biMultiFile = builtinMultiFile();
   const biVerify = builtinVerifyBeforeEdit();
+  const biDiff = builtinSemanticDiff();
 
   printComparisonTable([
     { name: "Navigate & understand", builtin: biNav, trueline: tlNav },
@@ -527,6 +639,7 @@ async function main(): Promise<void> {
     { name: "Multi-region read", builtin: biMultiRegion, trueline: tlMultiRegion },
     { name: "Multi-file exploration", builtin: biMultiFile, trueline: tlMultiFile },
     { name: "Verify before edit", builtin: biVerify, trueline: tlVerify },
+    { name: "Review changes (diff)", builtin: biDiff, trueline: tlDiff },
   ]);
 }
 

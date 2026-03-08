@@ -180,7 +180,7 @@ file is never loaded into memory as a whole.
 ```
 
 The ascending sort (opposite of the in-memory approach used by
-`trueline_diff`) works because the streaming engine never needs
+the `dry_run` path) works because the streaming engine never needs
 random access — it walks edits in lockstep with the line stream.
 
 **Backpressure.** The write stream respects Node.js backpressure:
@@ -235,12 +235,51 @@ checksum: 1-50:newchecksum
 The returned checksum covers the entire file after edits, so the agent
 can use it for subsequent edits without re-reading.
 
-## Diffing: `trueline_diff`
+### Dry-run preview
 
-`trueline_diff` accepts the same parameters as `trueline_edit` but
-writes nothing to disk. It runs the full verification pipeline, applies
-the edits in memory, and returns a unified diff. Useful for previewing
-changes before committing to them.
+`trueline_edit` accepts an optional `dry_run: true` flag. When set, it
+runs the full verification pipeline and applies edits in memory, but
+writes nothing to disk. Instead, it returns a unified diff. Useful for
+previewing changes before committing to them.
+
+## Semantic diffing: `trueline_diff`
+
+`trueline_diff` provides a semantic, AST-based summary of structural
+changes in one or more files compared to a git ref (default: `HEAD`).
+Instead of showing raw line-by-line diffs, it extracts symbols
+(functions, classes, interfaces, etc.) from both the git version and
+the working copy using tree-sitter, then compares them to detect:
+
+- **Added** symbols (present on disk but not in the ref)
+- **Removed** symbols (present in the ref but not on disk)
+- **Renamed** symbols (different name but identical body hash)
+- **Signature changes** (same name, same body, different declaration)
+- **Logic modifications** (same name, different body hash)
+
+### Body hashing
+
+Each symbol's body is hashed using the same FNV-1a accumulator as
+range checksums, but applied to the normalized body text. The
+signature line (first line of the AST node) is excluded from the hash
+so that renames don't change the body hash, enabling rename detection.
+
+Whitespace normalization is language-aware: most languages use
+"collapse" mode (trim + collapse runs to single space), while
+indentation-significant languages like Python use "preserve-indent"
+mode (keep leading whitespace, normalize trailing).
+
+### Mini-diffs
+
+For logic modifications with small changes (5 or fewer differing
+lines), the output includes an inline mini-diff showing which lines
+changed within the symbol body.
+
+### Multi-file support
+
+`trueline_diff` accepts an array of `file_paths`. Passing `["*"]`
+expands to all unstaged changed files (tracked + untracked). Each
+file produces its own section in the output. Unsupported file types
+(those without a tree-sitter grammar) are reported as such.
 
 ## Outlining: `trueline_outline`
 
