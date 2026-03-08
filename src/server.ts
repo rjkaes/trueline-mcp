@@ -15,6 +15,25 @@ import { handleSearch } from "./tools/search.ts";
 import { handleVerify } from "./tools/verify.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
 
+// MCP clients sometimes send array/object parameters as JSON strings.
+// Coerce them back universally so individual schemas don't need z.preprocess.
+function coerceJsonStrings(val: unknown): unknown {
+  if (typeof val !== "object" || val === null) return val;
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(val as Record<string, unknown>)) {
+    if (typeof value === "string" && (value.startsWith("[") || value.startsWith("{"))) {
+      try {
+        result[key] = JSON.parse(value);
+      } catch {
+        result[key] = value;
+      }
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 function safeTool<P>(handler: (params: P) => Promise<ToolResult>): (params: P) => Promise<ToolResult> {
   return async (params) => {
     try {
@@ -71,31 +90,30 @@ server.registerTool(
   "trueline_read",
   {
     description: "Read a file; returns 'N:hash\tcontent' per line plus a checksum per range.",
-    inputSchema: z.object({
-      file_path: z.string().describe("Absolute or project-relative file path."),
-      ranges: z
-        .preprocess(
-          (val) => (typeof val === "string" ? JSON.parse(val) : val),
-          z
-            .array(
-              z.object({
-                start: z.number().int().positive().describe("First line to read (1-based).").optional(),
-                end: z.number().int().positive().describe("Last line to read (1-based, inclusive).").optional(),
-              }),
-            )
-            .describe(
-              "Line ranges to read. Omit to read the whole file. Example: [{start: 10, end: 25}] or [{start: 1, end: 50}, {start: 200, end: 220}] for disjoint ranges. Each range gets its own checksum.",
-            ),
-        )
-        .optional(),
-      encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
-      hashes: z
-        .boolean()
-        .describe(
-          "Include per-line hashes in output. Defaults to true. Set to false for exploratory reads where you don't plan to edit — saves tokens. Checksums are always included.",
-        )
-        .optional(),
-    }),
+    inputSchema: z.preprocess(
+      coerceJsonStrings,
+      z.object({
+        file_path: z.string().describe("Absolute or project-relative file path."),
+        ranges: z
+          .array(
+            z.object({
+              start: z.number().int().positive().describe("First line to read (1-based).").optional(),
+              end: z.number().int().positive().describe("Last line to read (1-based, inclusive).").optional(),
+            }),
+          )
+          .describe(
+            "Line ranges to read. Omit to read the whole file. Example: [{start: 10, end: 25}] or [{start: 1, end: 50}, {start: 200, end: 220}] for disjoint ranges. Each range gets its own checksum.",
+          )
+          .optional(),
+        encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
+        hashes: z
+          .boolean()
+          .describe(
+            "Include per-line hashes in output. Defaults to true. Set to false for exploratory reads where you don't plan to edit — saves tokens. Checksums are always included.",
+          )
+          .optional(),
+      }),
+    ),
   },
   safeTool(async (params) => {
     return handleRead({ ...params, projectDir, allowedDirs });
@@ -106,11 +124,11 @@ server.registerTool(
   "trueline_edit",
   {
     description: "Apply hash-verified edits to a file. Each edit carries its own checksum.",
-    inputSchema: z.object({
-      file_path: z.string().describe("Absolute or project-relative file path."),
-      edits: z.preprocess(
-        (val) => (typeof val === "string" ? JSON.parse(val) : val),
-        z
+    inputSchema: z.preprocess(
+      coerceJsonStrings,
+      z.object({
+        file_path: z.string().describe("Absolute or project-relative file path."),
+        edits: z
           .array(
             z.object({
               checksum: z.string().describe("Checksum from trueline_read for the covering range"),
@@ -119,9 +137,9 @@ server.registerTool(
             }),
           )
           .min(1),
-      ),
-      encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
-    }),
+        encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
+      }),
+    ),
   },
   safeTool(async (params) => {
     return handleEdit({ ...params, projectDir, allowedDirs });
@@ -132,11 +150,11 @@ server.registerTool(
   "trueline_diff",
   {
     description: "Preview edits as a unified diff without writing to disk. Each edit carries its own checksum.",
-    inputSchema: z.object({
-      file_path: z.string().describe("Absolute or project-relative file path."),
-      edits: z.preprocess(
-        (val) => (typeof val === "string" ? JSON.parse(val) : val),
-        z
+    inputSchema: z.preprocess(
+      coerceJsonStrings,
+      z.object({
+        file_path: z.string().describe("Absolute or project-relative file path."),
+        edits: z
           .array(
             z.object({
               checksum: z.string().describe("Checksum from trueline_read for the covering range"),
@@ -145,9 +163,9 @@ server.registerTool(
             }),
           )
           .min(1),
-      ),
-      encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
-    }),
+        encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
+      }),
+    ),
   },
   safeTool(async (params) => {
     return handleDiff({ ...params, projectDir, allowedDirs });
@@ -160,17 +178,20 @@ server.registerTool(
     description:
       "Get a compact structural outline of source files (functions, classes, types, etc.) without reading the full content. " +
       "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections.",
-    inputSchema: z.object({
-      file_paths: z.array(z.string()).describe("One or more absolute or project-relative file paths to outline."),
-      depth: z
-        .number()
-        .int()
-        .min(0)
-        .describe(
-          "Maximum nesting depth. 0 = top-level only, 1 = include class/interface members. Omit for all levels.",
-        )
-        .optional(),
-    }),
+    inputSchema: z.preprocess(
+      coerceJsonStrings,
+      z.object({
+        file_paths: z.array(z.string()).describe("One or more absolute or project-relative file paths to outline."),
+        depth: z
+          .number()
+          .int()
+          .min(0)
+          .describe(
+            "Maximum nesting depth. 0 = top-level only, 1 = include class/interface members. Omit for all levels.",
+          )
+          .optional(),
+      }),
+    ),
   },
   safeTool(async (params) => {
     return handleOutline({ ...params, projectDir, allowedDirs });
@@ -183,19 +204,30 @@ server.registerTool(
     description:
       "Search a file for a literal string or regex pattern. Returns matching lines with context, per-line hashes, and checksums \u2014 " +
       "ready for immediate editing. Use instead of outline+read when you know what to look for.",
-    inputSchema: z.object({
-      file_path: z.string().describe("Absolute or project-relative file path."),
-      pattern: z.string().describe("Search string. Literal by default; set regex=true for regular expressions."),
-      context_lines: z
-        .number()
-        .int()
-        .min(0)
-        .describe("Lines of context above/below each match. Default: 2.")
-        .optional(),
-      max_matches: z.number().int().positive().describe("Maximum number of matches to return. Default: 10.").optional(),
-      case_insensitive: z.boolean().describe("Case-insensitive matching. Default: false.").optional(),
-      regex: z.boolean().describe("Treat pattern as a regular expression. Default: false (literal match).").optional(),
-    }),
+    inputSchema: z.preprocess(
+      coerceJsonStrings,
+      z.object({
+        file_path: z.string().describe("Absolute or project-relative file path."),
+        pattern: z.string().describe("Search string. Literal by default; set regex=true for regular expressions."),
+        context_lines: z
+          .number()
+          .int()
+          .min(0)
+          .describe("Lines of context above/below each match. Default: 2.")
+          .optional(),
+        max_matches: z
+          .number()
+          .int()
+          .positive()
+          .describe("Maximum number of matches to return. Default: 10.")
+          .optional(),
+        case_insensitive: z.boolean().describe("Case-insensitive matching. Default: false.").optional(),
+        regex: z
+          .boolean()
+          .describe("Treat pattern as a regular expression. Default: false (literal match).")
+          .optional(),
+      }),
+    ),
   },
   safeTool(async (params) => {
     return handleSearch({ ...params, projectDir, allowedDirs });
@@ -208,10 +240,13 @@ server.registerTool(
     description:
       "Validate held checksums against a file. Returns which are valid or stale. " +
       "Cheaper than re-reading \u2014 use before editing when the file may have changed.",
-    inputSchema: z.object({
-      file_path: z.string().describe("Absolute or project-relative file path."),
-      checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
-    }),
+    inputSchema: z.preprocess(
+      coerceJsonStrings,
+      z.object({
+        file_path: z.string().describe("Absolute or project-relative file path."),
+        checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
+      }),
+    ),
   },
   safeTool(async (params) => {
     return handleVerify({ ...params, projectDir, allowedDirs });
