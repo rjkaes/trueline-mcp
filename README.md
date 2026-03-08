@@ -155,4 +155,4 @@ by Seth Livingston.
 
 ## Special Thanks
 
-<a href="https://github.com/domis86"><img src="https://avatars.githubusercontent.com/u/2327600?v=4" width=32"></a>
+<a href="https://github.com/domis86"><img src="https://avatars.githubusercontent.com/u/2327600?v=4" width="32"></a>
