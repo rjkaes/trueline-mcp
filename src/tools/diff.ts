@@ -88,7 +88,8 @@ function gitExec(cmd: string, cwd: string): string {
 
 function getGitContent(filePath: string, ref: string, cwd: string): string {
   try {
-    const relPath = relative(cwd, filePath);
+    // git show requires forward slashes, even on Windows
+    const relPath = relative(cwd, filePath).replace(/\\/g, "/");
     return gitExec(`git show ${ref}:${relPath}`, cwd);
   } catch {
     return ""; // untracked or not in git
