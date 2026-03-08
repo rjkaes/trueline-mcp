@@ -1,6 +1,6 @@
 {
   "name": "trueline-mcp",
-  "version": "2.5.5",
+  "version": "2.5.6",
   "description": "Truth-verified file editing for AI coding agents via MCP",
   "author": {
     "name": "rjk",
