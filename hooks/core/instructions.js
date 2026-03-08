@@ -65,7 +65,7 @@ export function getInstructions(platform = "claude-code") {
   return `<trueline_mcp_instructions>
   <tools>
     <tool name="trueline_read">Read files. Pass hashes=false for exploratory reads. Call before editing.</tool>
-    <tool name="trueline_edit">Hash-verified edits. Needs checksum from trueline_read.</tool>
+    <tool name="trueline_edit">Hash-verified edits. Needs checksum from trueline_read or trueline_search.</tool>
     <tool name="trueline_diff">Preview edits as unified diff without writing.</tool>
     <tool name="trueline_outline">Structural outline — often enough on its own. Use to find line ranges before targeted reads.</tool>
     <tool name="trueline_search">Regex search with hashes — edit-ready results. Preferred over Grep for single-file searches.</tool>
@@ -78,7 +78,7 @@ export function getInstructions(platform = "claude-code") {
     <rule>${rules.readAdvice}</rule>
     <rule>${rules.writeAdvice}</rule>
     <rule>Prefer trueline_outline first. Only call trueline_read for specific ranges you need (to edit, debug, or understand details). Read whole files only when short and you haven't used outline.</rule>
-    <rule>When you already know the text to change, use trueline_search → trueline_edit (skips the read). This is the fastest edit path.</rule>
+    <rule>When you already know the text to change, use trueline_search → trueline_edit (skips the read). This is the fastest edit path. Each match group gets its own checksum — use it directly with trueline_edit.</rule>
     <rule>When you need to find a pattern across many files, use Grep to identify the files, then use trueline_search on individual files you need to edit.</rule>
   </rules>
 </trueline_mcp_instructions>`;
