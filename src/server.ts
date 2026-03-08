@@ -200,6 +200,7 @@ server.registerTool(
         .optional(),
       max_matches: z.number().int().positive().describe("Maximum number of matches to return. Default: 10.").optional(),
       case_insensitive: z.boolean().describe("Case-insensitive matching. Default: false.").optional(),
+      fixed_string: z.boolean().describe("Treat pattern as a literal string, not a regex. Default: false.").optional(),
     }),
   },
   safeTool(async (params) => {

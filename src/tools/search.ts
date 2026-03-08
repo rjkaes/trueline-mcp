@@ -18,6 +18,7 @@ interface SearchParams {
   context_lines?: number;
   max_matches?: number;
   case_insensitive?: boolean;
+  fixed_string?: boolean;
   projectDir?: string;
   allowedDirs?: string[];
 }
@@ -43,12 +44,23 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
-  // Validate regex
-  let regex: RegExp;
-  try {
-    regex = new RegExp(pattern, params.case_insensitive ? "i" : undefined);
-  } catch {
-    return errorResult(`Invalid regex pattern: "${pattern}"`);
+  // Build line matcher
+  let matchLine: (text: string) => boolean;
+  if (params.fixed_string) {
+    if (params.case_insensitive) {
+      const lower = pattern.toLowerCase();
+      matchLine = (text) => text.toLowerCase().includes(lower);
+    } else {
+      matchLine = (text) => text.includes(pattern);
+    }
+  } else {
+    let regex: RegExp;
+    try {
+      regex = new RegExp(pattern, params.case_insensitive ? "i" : undefined);
+    } catch {
+      return errorResult(`Invalid regex pattern: "${pattern}"`);
+    }
+    matchLine = (text) => regex.test(text);
   }
 
   const { resolvedPath } = validated;
@@ -95,13 +107,13 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
           break;
         }
         const text = lineBytes.toString("utf-8");
-        if (regex.test(text)) totalMatches++;
+        if (matchLine(text)) totalMatches++;
         continue;
       }
 
       const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
       const text = lineBytes.toString("utf-8");
-      const isMatch = regex.test(text);
+      const isMatch = matchLine(text);
       const decoded: DecodedLine = { lineNumber, text, hash: h, isMatch };
 
       if (isMatch) totalMatches++;

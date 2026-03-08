@@ -144,6 +144,32 @@ describe("trueline_search", () => {
     const text = getText(result);
     expect(text).toContain("No matches");
   });
+
+  test("fixed_string matches literal metacharacters", async () => {
+    // The test file has 'console.log("hello")' — the dot and parens are regex metacharacters
+    const result = await handleSearch({
+      file_path: testFile,
+      pattern: "console.log(",
+      fixed_string: true,
+      projectDir: testDir,
+    });
+    const text = getText(result);
+    expect(text).toContain("console.log");
+    expect(text).toContain("checksum:");
+  });
+
+  test("fixed_string does not treat pattern as regex", async () => {
+    // Without fixed_string, '(' would be an invalid regex
+    const result = await handleSearch({
+      file_path: testFile,
+      pattern: "hello(",
+      fixed_string: true,
+      projectDir: testDir,
+    });
+    const text = getText(result);
+    // Should not error — the bare '(' is escaped
+    expect(result.isError).toBeUndefined();
+  });
   test("validates file path", async () => {
     const result = await handleSearch({
       file_path: "/etc/passwd",
