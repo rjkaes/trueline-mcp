@@ -151,8 +151,9 @@ server.registerTool(
   "trueline_diff",
   {
     description:
-      "Semantic, AST-based summary of structural changes in one or more files compared to a git ref. " +
+      "Semantic, AST-based summary of structural changes compared to a git ref. " +
       "Detects added/removed/renamed symbols, signature changes, and logic modifications. " +
+      "Pass ALL files in a single call via file_paths (never call once per file). " +
       "Use instead of `git diff` to review changes with minimal token usage.",
     inputSchema: z.preprocess(
       coerceJsonStrings,
@@ -160,7 +161,7 @@ server.registerTool(
         file_paths: z
           .array(z.string())
           .min(1)
-          .describe('File paths to diff. Use ["*"] for all unstaged changed files.'),
+          .describe('Paths to diff. Pass multiple files in one call. Use ["*"] for all changed files.'),
         compare_against: z
           .string()
           .describe('Git ref to compare against. Defaults to "HEAD". Use ":0" for staged content.')

@@ -79,7 +79,7 @@ export function getInstructions(platform = "claude-code") {
   <tools>
     <tool name="trueline_read">Read files. Pass hashes=false when you only need to understand code, not edit it.</tool>
     <tool name="trueline_edit">Hash-verified edits. Needs checksum from trueline_read or trueline_search. Pass dry_run=true to preview as unified diff.</tool>
-    <tool name="trueline_diff">Semantic AST-based diff of file changes vs a git ref. Use instead of git diff.</tool>
+    <tool name="trueline_diff">Semantic AST-based diff vs a git ref. Pass all files in one call via file_paths; use ["*"] for all changed files.</tool>
     <tool name="trueline_outline">Structural outline of one or more files. Often enough on its own. Use to find line ranges before targeted reads.</tool>
     <tool name="trueline_search">Literal string search with hashes \u2014 returns edit-ready results. Set regex=true for regex. Use for single-file searches when you plan to edit the matches.</tool>
     <tool name="trueline_verify">Check if held checksums are still valid. Cheaper than re-reading.</tool>
