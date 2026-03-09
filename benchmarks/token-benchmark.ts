@@ -203,16 +203,16 @@ async function truelineNavigate(): Promise<ScenarioResult> {
   steps.push({ tool: "outline", callBytes: outlineCall, resultBytes: outputBytes(outline) });
 
   // read targeted range
-  const readCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 74, end: 150 }], hashes: false };
+  const readCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 74, end: 150 }] };
   const read = await handleRead({
     file_path: SAMPLE_FILE,
     ranges: [{ start: 74, end: 150 }],
-    hashes: false,
+
     projectDir: PROJECT_DIR,
     allowedDirs: ALLOWED_DIRS,
   });
   steps.push({
-    tool: "read 74-150 (no hashes)",
+    tool: "read 74-150",
     callBytes: jsonCallBytes(readCallObj),
     resultBytes: outputBytes(read),
   });
@@ -232,24 +232,9 @@ async function truelineExploreEdit(): Promise<ScenarioResult> {
   });
   steps.push({ tool: "outline", callBytes: outlineCall, resultBytes: outputBytes(outline) });
 
-  // exploratory read (no hashes)
-  const exploreCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 74, end: 250 }], hashes: false };
-  const explore = await handleRead({
-    file_path: SAMPLE_FILE,
-    ranges: [{ start: 74, end: 250 }],
-    hashes: false,
-    projectDir: PROJECT_DIR,
-    allowedDirs: ALLOWED_DIRS,
-  });
-  steps.push({
-    tool: "read 74-250 (exploratory)",
-    callBytes: jsonCallBytes(exploreCallObj),
-    resultBytes: outputBytes(explore),
-  });
-
-  // targeted re-read with hashes for edit
-  const targetCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 100, end: 115 }] };
-  const targeted = await handleRead({
+  // read target range for edit
+  const readCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 100, end: 115 }] };
+  const read = await handleRead({
     file_path: SAMPLE_FILE,
     ranges: [{ start: 100, end: 115 }],
     projectDir: PROJECT_DIR,
@@ -257,17 +242,17 @@ async function truelineExploreEdit(): Promise<ScenarioResult> {
   });
   steps.push({
     tool: "read 100-115 (edit target)",
-    callBytes: jsonCallBytes(targetCallObj),
-    resultBytes: outputBytes(targeted),
+    callBytes: jsonCallBytes(readCallObj),
+    resultBytes: outputBytes(read),
   });
 
-  // edit call: range:hash format (no old_string echo)
+  // edit call: hash.line format (no old_string echo)
   const editCall = jsonCallBytes({
     file_path: SAMPLE_FILE,
-    edits: [{ range: "100:ab-115:cd", checksum: "100-115:abcdef01", content: "// replaced content\n" }],
+    edits: [{ range: "ab.100-cd.115", checksum: "100-115:abcdef01", content: "// replaced content\n" }],
   });
   steps.push({
-    tool: "edit (range:hash)",
+    tool: "edit (hash.line)",
     callBytes: editCall,
     resultBytes: Buffer.byteLength("checksum: 100-115:newcheck", "utf-8"),
   });
@@ -296,7 +281,7 @@ async function truelineSearchFix(): Promise<ScenarioResult> {
   // edit from search results
   const editCall = jsonCallBytes({
     file_path: SAMPLE_FILE,
-    edits: [{ range: "10:ab-12:cd", checksum: "10-12:abcdef01", content: "// fixed\n" }],
+    edits: [{ range: "ab.10-cd.12", checksum: "10-12:abcdef01", content: "// fixed\n" }],
   });
   steps.push({
     tool: "edit (from search)",
@@ -344,7 +329,7 @@ async function truelineVerifyBeforeEdit(): Promise<ScenarioResult> {
   // Edit using held checksums (no re-read needed)
   const editCall = jsonCallBytes({
     file_path: SAMPLE_FILE,
-    edits: [{ range: "100:ab-115:cd", checksum: "74-150:abcdef01", content: "// replaced content\n" }],
+    edits: [{ range: "ab.100-cd.115", checksum: "74-150:abcdef01", content: "// replaced content\n" }],
   });
   steps.push({
     tool: "edit (cached checksums)",
@@ -366,7 +351,6 @@ async function truelineMultiRegion(): Promise<ScenarioResult> {
       { start: 200, end: 220 },
       { start: 400, end: 420 },
     ],
-    hashes: false,
   };
   const read = await handleRead({
     file_path: SAMPLE_FILE,
@@ -375,7 +359,6 @@ async function truelineMultiRegion(): Promise<ScenarioResult> {
       { start: 200, end: 220 },
       { start: 400, end: 420 },
     ],
-    hashes: false,
     projectDir: PROJECT_DIR,
     allowedDirs: ALLOWED_DIRS,
   });
