@@ -3,10 +3,14 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { routePreToolUse, estimateEditTokenSavings } from "../../hooks/core/routing.js";
+import { OUTLINEABLE_EXTENSIONS } from "../../src/outline/supported-extensions.js";
+import { supportedExtensions } from "../../src/outline/languages.js";
 
 let tmpDir: string;
 let smallFile: string;
 let largeFile: string;
+let smallNonOutlineable: string;
+let largeNonOutlineable: string;
 
 beforeAll(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "routing-test-"));
@@ -14,6 +18,10 @@ beforeAll(() => {
   writeFileSync(smallFile, "const x = 1;\n");
   largeFile = join(tmpDir, "large.ts");
   writeFileSync(largeFile, "x\n".repeat(10000)); // ~20KB
+  smallNonOutlineable = join(tmpDir, "config.json");
+  writeFileSync(smallNonOutlineable, '{"key": "value"}\n');
+  largeNonOutlineable = join(tmpDir, "data.json");
+  writeFileSync(largeNonOutlineable, '{"x": 1}\n'.repeat(2000)); // ~18KB
 });
 
 afterAll(() => {
@@ -42,6 +50,22 @@ describe("routePreToolUse — Read routing", () => {
   test("returns null for Read when trueline cannot access the file", async () => {
     const result = await routePreToolUse("Read", { file_path: largeFile }, neverAccessible);
     expect(result).toBeNull();
+  });
+
+  test("omits outline from block message for non-outlineable large files", async () => {
+    const result = await routePreToolUse("Read", { file_path: largeNonOutlineable }, alwaysAccessible);
+    expect(result).not.toBeNull();
+    expect(result!.action).toBe("block");
+    expect(result!.reason).not.toContain("trueline_outline");
+    expect(result!.reason).toContain("trueline_read");
+  });
+
+  test("omits outline from advise for non-outlineable small files", async () => {
+    const result = await routePreToolUse("Read", { file_path: smallNonOutlineable }, alwaysAccessible);
+    expect(result).not.toBeNull();
+    expect(result!.action).toBe("advise");
+    expect(result!.reason).not.toContain("trueline_outline");
+    expect(result!.reason).toContain("trueline_search");
   });
 
   test("blocks Gemini CLI read_file on large files", async () => {
@@ -231,5 +255,12 @@ describe("routePreToolUse — common cases", () => {
   test("returns null when file does not exist", async () => {
     const result = await routePreToolUse("Read", { file_path: "/nonexistent/file.ts" }, alwaysAccessible);
     expect(result).toBeNull();
+  });
+});
+
+describe("OUTLINEABLE_EXTENSIONS sync", () => {
+  test("matches LANGUAGES keys in languages.ts", () => {
+    const fromLanguages = new Set(supportedExtensions());
+    expect(OUTLINEABLE_EXTENSIONS).toEqual(fromLanguages);
   });
 });

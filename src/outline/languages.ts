@@ -331,6 +331,9 @@ const LANGUAGES: Record<string, LanguageConfig> = {
   // ".toml": toml,
 };
 
+// Re-export for consumers that only need the extension set (e.g. hooks).
+export { OUTLINEABLE_EXTENSIONS } from "./supported-extensions.js";
+
 export function getLanguageConfig(ext: string): LanguageConfig | undefined {
   return LANGUAGES[ext];
 }

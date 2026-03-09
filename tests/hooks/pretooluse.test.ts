@@ -8,6 +8,8 @@ import { clearCaches } from "../../src/security.js";
 let projectDir: string;
 let smallFile: string;
 let largeFile: string;
+let smallNonOutlineable: string;
+let largeNonOutlineable: string;
 let savedProjectDir: string | undefined;
 
 beforeAll(() => {
@@ -17,6 +19,10 @@ beforeAll(() => {
   writeFileSync(smallFile, "const x = 1;\n");
   largeFile = join(projectDir, "large.ts");
   writeFileSync(largeFile, "x\n".repeat(10000)); // ~20KB
+  smallNonOutlineable = join(projectDir, "config.json");
+  writeFileSync(smallNonOutlineable, '{"key": "value"}\n');
+  largeNonOutlineable = join(projectDir, "data.json");
+  writeFileSync(largeNonOutlineable, '{"x": 1}\n'.repeat(2000)); // ~18KB
   process.env.CLAUDE_PROJECT_DIR = projectDir;
 });
 
@@ -45,6 +51,26 @@ describe("PreToolUse hook — Read routing", () => {
       tool_input: { file_path: largeFile },
     });
     expect(result.decision).toBe("block");
+    expect(result.reason).toContain("trueline_read");
+  });
+
+  test("omits outline for non-outlineable small files", async () => {
+    const result = await processHookEvent({
+      tool_name: "Read",
+      tool_input: { file_path: smallNonOutlineable },
+    });
+    expect(result.decision).toBe("approve");
+    expect(result.reason).not.toContain("trueline_outline");
+    expect(result.reason).toContain("trueline_search");
+  });
+
+  test("omits outline from block for non-outlineable large files", async () => {
+    const result = await processHookEvent({
+      tool_name: "Read",
+      tool_input: { file_path: largeNonOutlineable },
+    });
+    expect(result.decision).toBe("block");
+    expect(result.reason).not.toContain("trueline_outline");
     expect(result.reason).toContain("trueline_read");
   });
 

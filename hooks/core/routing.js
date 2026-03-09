@@ -8,6 +8,8 @@
 // formatters translate to the right JSON shape.
 
 import { stat } from "node:fs/promises";
+import { extname } from "node:path";
+import { OUTLINEABLE_EXTENSIONS } from "../../src/outline/supported-extensions.js";
 
 // Maps platform-specific built-in tool names to canonical names.
 const TOOL_ALIASES = {
@@ -201,23 +203,38 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
 
     const size = formatSize(fileSize);
 
+    const canOutline = OUTLINEABLE_EXTENSIONS.has(extname(filePath).toLowerCase());
+
     // Large files: block and redirect to trueline.
     if (fileSize >= LARGE_FILE_THRESHOLD) {
+      const outlineHint = canOutline ? "Use trueline_outline for structure, or " : "Use ";
       return {
         action: "block",
         reason:
           `<trueline_redirect>This file is ${size}. ` +
-          "Use trueline_outline for structure, or trueline_read with targeted line ranges " +
+          outlineHint +
+          "trueline_read with targeted line ranges " +
           "to avoid loading the entire file into context.</trueline_redirect>",
       };
     }
 
     // Small files: advise outline/search but let the read through.
+    // Only mention outline when the file type has a tree-sitter grammar.
+    if (canOutline) {
+      return {
+        action: "advise",
+        reason:
+          "<trueline_advisory>trueline_outline gives a compact structural map " +
+          "and is often enough on its own. If you plan to edit, " +
+          "trueline_search returns matches with checksums ready for trueline_edit.</trueline_advisory>",
+      };
+    }
+
+    // Non-outlineable small files: advise search for edit prep only.
     return {
       action: "advise",
       reason:
-        "<trueline_advisory>trueline_outline gives a compact structural map " +
-        "and is often enough on its own. If you plan to edit, " +
+        "<trueline_advisory>If you plan to edit this file, " +
         "trueline_search returns matches with checksums ready for trueline_edit.</trueline_advisory>",
     };
   }
