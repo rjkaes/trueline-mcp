@@ -125,12 +125,13 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
       };
     }
 
-    // Small files: advise outline but let the read through.
+    // Small files: advise outline/search but let the read through.
     return {
       action: "advise",
       reason:
         "<trueline_advisory>trueline_outline gives a compact structural map " +
-        "and is often enough on its own. Use it before reading full files.</trueline_advisory>",
+        "and is often enough on its own. If you plan to edit, " +
+        "trueline_search returns matches with checksums ready for trueline_edit.</trueline_advisory>",
     };
   }
 
