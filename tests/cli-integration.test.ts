@@ -75,6 +75,19 @@ describe("CLI integration", () => {
     { timeout: 30_000 },
   );
 
+  test("--help prints usage and exits 0", () => {
+    const { stdout, exitCode } = run("--help");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Commands:");
+    expect(stdout).toContain("read");
+  });
+
+  test("command --help prints command usage", () => {
+    const { stdout, exitCode } = run("read", "--help");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--ranges");
+  });
+
   test("unknown command exits 1", () => {
     const { stderr, exitCode } = run("bogus");
     expect(exitCode).toBe(1);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseArgs } from "../src/cli.ts";
+import { HelpRequested, parseArgs } from "../src/cli.ts";
 
 describe("parseArgs", () => {
   test("read with file path", () => {
@@ -91,6 +91,28 @@ describe("parseArgs", () => {
       command: "verify",
       params: { file_path: "src/foo.ts", checksums: ["1-50:abcdef01", "51-100:12345678"] },
     });
+  });
+
+  test("--help returns top-level usage", () => {
+    const result = parseArgs(["--help"]);
+    expect(result).toBeInstanceOf(HelpRequested);
+    expect((result as HelpRequested).text).toContain("Commands:");
+  });
+
+  test("no args returns top-level usage", () => {
+    const result = parseArgs([]);
+    expect(result).toBeInstanceOf(HelpRequested);
+  });
+
+  test("command --help returns command usage", () => {
+    const result = parseArgs(["read", "--help"]);
+    expect(result).toBeInstanceOf(HelpRequested);
+    expect((result as HelpRequested).text).toContain("--ranges");
+  });
+
+  test("-h works as alias for --help", () => {
+    expect(parseArgs(["-h"])).toBeInstanceOf(HelpRequested);
+    expect(parseArgs(["search", "-h"])).toBeInstanceOf(HelpRequested);
   });
 
   test("unknown command errors", () => {

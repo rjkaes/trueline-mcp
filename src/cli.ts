@@ -21,6 +21,82 @@ export interface ParsedArgs {
   params: Record<string, unknown>;
 }
 
+// Sentinel returned by parseArgs when --help is requested.
+// main() prints the help text to stdout and exits 0.
+export class HelpRequested {
+  constructor(public text: string) {}
+}
+
+const USAGE = `trueline <command> [options]
+
+Hash-verified file operations for AI coding agents.
+
+Commands:
+  read      Read a file with per-line hashes and range checksums
+  edit      Apply hash-verified edits to a file
+  outline   Structural outline (functions, classes, types) via tree-sitter
+  search    Search a file for a string or regex, returns edit-ready hashes
+  diff      Semantic AST-based diff vs a git ref
+  verify    Check if held checksums are still valid
+
+Run trueline <command> --help for command-specific usage.`;
+
+const COMMAND_HELP: Record<string, string> = {
+  read: `trueline read <file> [options]
+
+Read a file with per-line hashes and range checksums.
+
+Options:
+  --ranges <range...>   Line ranges to read (e.g. 10-25 200-220)
+  --encoding <enc>      File encoding (default: utf-8)
+  --no-hashes           Omit per-line hashes from output`,
+
+  edit: `trueline edit <file> --edits '<json>' [options]
+
+Apply hash-verified edits to a file.
+
+Options:
+  --edits <json>        JSON array of edits (required)
+                        Each edit: {checksum, range, content}
+  --encoding <enc>      File encoding (default: utf-8)
+  --dry-run             Preview as unified diff without writing`,
+
+  outline: `trueline outline <file...> [options]
+
+Structural outline of one or more files via tree-sitter.
+Returns functions, classes, types with line ranges.
+
+Options:
+  --depth <n>           Max nesting depth (0 = top-level only)`,
+
+  search: `trueline search <file> <pattern> [options]
+
+Search a file for a literal string or regex.
+Returns matching lines with hashes, ready for editing.
+
+Options:
+  --context <n>         Lines of context around matches (default: 0)
+  --max-matches <n>     Stop after n matches
+  --regex               Treat pattern as a regex
+  --case-insensitive    Case-insensitive matching`,
+
+  diff: `trueline diff [file...] [options]
+
+Semantic AST-based diff vs a git ref.
+With no files, diffs all changed files.
+
+Options:
+  --ref <ref>           Git ref to compare against (default: working tree)`,
+
+  verify: `trueline verify <file> --checksums <checksum...>
+
+Check if held checksums are still valid.
+
+Options:
+  --checksums <cs...>   Range checksums to verify (required)
+                        Format: startLine-endLine:hexhash`,
+};
+
 // ==============================================================================
 // Arg Parsing
 // ==============================================================================
@@ -29,11 +105,19 @@ export interface ParsedArgs {
  * Parse CLI args into a command + params object matching the handle* interfaces.
  * Exported for testing; the main() function calls this with process.argv.slice(2).
  */
-export function parseArgs(argv: string[]): ParsedArgs {
+export function parseArgs(argv: string[]): ParsedArgs | HelpRequested {
   const [command, ...rest] = argv;
 
-  if (!command || !COMMANDS.has(command)) {
-    throw new Error(`Unknown command: ${command ?? "(none)"}. Available: ${[...COMMANDS].join(", ")}`);
+  if (!command || command === "--help" || command === "-h") {
+    return new HelpRequested(USAGE);
+  }
+
+  if (!COMMANDS.has(command)) {
+    throw new Error(`Unknown command: ${command}. Available: ${[...COMMANDS].join(", ")}`);
+  }
+
+  if (rest.includes("--help") || rest.includes("-h")) {
+    return new HelpRequested(COMMAND_HELP[command]);
   }
 
   switch (command) {
@@ -271,6 +355,12 @@ async function resolveAllowedDirs(projectDir: string): Promise<string[]> {
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   const parsed = parseArgs(argv);
+
+  if (parsed instanceof HelpRequested) {
+    process.stdout.write(parsed.text);
+    process.stdout.write("\n");
+    return;
+  }
 
   const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
   const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
