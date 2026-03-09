@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/rjkaes/trueline-mcp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rjkaes/trueline-mcp/actions/workflows/ci.yml)
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) plugin that cuts
-context usage and catches editing mistakes. Works with Claude Code, Gemini CLI,
-VS Code Copilot, OpenCode, and Codex CLI.
+A [Model Context Protocol](https://modelcontextprotocol.io/) plugin that reduces
+context usage on large files and catches editing mistakes. Works with Claude
+Code, Gemini CLI, VS Code Copilot, OpenCode, and Codex CLI.
 
 ## Installation
 
@@ -20,7 +20,7 @@ See [INSTALL.md](INSTALL.md) for platform-specific setup instructions.
 
 ## The problem
 
-AI agents waste tokens in two ways:
+AI agents waste tokens on large files in two ways:
 
 1. **Reading too much.** To find a function in a 500-line file, the agent
    reads all 500 lines, most of which it doesn't need.
@@ -29,16 +29,19 @@ AI agents waste tokens in two ways:
    output the old text being replaced (`old_string`) plus the new text.
    The old text is pure overhead.
 
-Both problems compound. A typical editing session reads dozens of files
-and makes multiple edits, burning through context on redundant content.
+Both problems compound on larger files. A typical editing session reads
+dozens of files and makes multiple edits, burning through context on
+redundant content.
 
 And when things go wrong (stale reads, hallucinated anchors, ambiguous
 matches) the agent silently corrupts your code.
 
 ## How trueline fixes this
 
-trueline replaces the built-in `Read` and `Edit` with six tools that
-are smaller, faster, and verified.
+trueline provides six MCP tools that are smaller, faster, and verified.
+For small files, the built-in tools work fine. For larger files, the
+savings from targeted reads and compact edits outweigh the token
+overhead of crossing the MCP protocol barrier.
 
 ### Read less: `trueline_outline` + `trueline_read`
 
@@ -59,6 +62,10 @@ classes, and declarations with their line ranges:
 
 12 lines instead of 139. The agent sees the full structure, then reads
 only the ranges it needs, skipping hundreds of irrelevant lines.
+
+The savings scale with file size. MCP tool calls have per-call framing
+overhead, so the break-even point is roughly 15KB; below that, a plain
+`Read` is cheaper. Above it, the gap widens quickly:
 
 | File size   | Full read | Outline | Savings |
 |-------------|-----------|---------|--------|
@@ -113,33 +120,6 @@ No more silent corruption. No more ambiguous string matches.
 `trueline_verify` lets the agent check whether held checksums are still
 valid without re-reading the file. When the file hasn't changed (the
 common case), the response is a single line — near-zero tokens.
-
-### Benchmarks
-
-Measured on real project files (`src/streaming-edit.ts`, 529 lines),
-comparing total bytes through the context window (call + result, ÷4 ≈
-tokens):
-
-| Workflow                | Built-in |  Trueline | Saved |
-|-------------------------|----------|-----------|-------|
-| Navigate & understand   |   22 094 |     3 609 |   84% |
-| Explore then edit       |   22 729 |     8 515 |   63% |
-| Search & fix            |   22 731 |       812 |   96% |
-| Multi-region read       |   22 094 |     2 720 |   88% |
-| Multi-file exploration  |   39 296 |     1 761 |   96% |
-| Verify before edit      |   44 823 |     3 608 |   92% |
-| **Total**               |**173 767**|  **21 025**| **88%** |
-
-The search-and-fix workflow saves the most: a single `trueline_search`
-call replaces grep + full-file read + old-string echo, cutting **96%**
-of token usage. The verify-before-edit workflow shows how
-`trueline_verify` avoids a full re-read when checking whether held
-checksums are still valid — **92%** savings over re-reading the entire
-file. Even the explore-then-edit workflow — which includes an
-exploratory read, a targeted re-read, and an edit — still saves **63%**
-over the built-in equivalent.
-
-Run the benchmark yourself: `bun run benchmarks/token-benchmark.ts`
 
 ## Design
 
