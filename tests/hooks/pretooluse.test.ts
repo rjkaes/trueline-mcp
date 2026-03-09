@@ -6,14 +6,17 @@ import { processHookEvent } from "../../hooks/pretooluse.js";
 import { clearCaches } from "../../src/security.js";
 
 let projectDir: string;
-let insideFile: string;
+let smallFile: string;
+let largeFile: string;
 let savedProjectDir: string | undefined;
 
 beforeAll(() => {
   savedProjectDir = process.env.CLAUDE_PROJECT_DIR;
   projectDir = mkdtempSync(join(tmpdir(), "hook-test-"));
-  insideFile = join(projectDir, "app.ts");
-  writeFileSync(insideFile, "const x = 1;\n");
+  smallFile = join(projectDir, "small.ts");
+  writeFileSync(smallFile, "const x = 1;\n");
+  largeFile = join(projectDir, "large.ts");
+  writeFileSync(largeFile, "x\n".repeat(10000)); // ~20KB
   process.env.CLAUDE_PROJECT_DIR = projectDir;
 });
 
@@ -26,14 +29,50 @@ afterAll(() => {
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-describe("PreToolUse hook", () => {
-  test("blocks Read for files trueline can access", async () => {
+describe("PreToolUse hook — advisory routing", () => {
+  test("silently approves Read for small files", async () => {
     const result = await processHookEvent({
       tool_name: "Read",
-      tool_input: { file_path: insideFile },
+      tool_input: { file_path: smallFile },
     });
-    expect(result.decision).toBe("block");
-    expect(result.reason).toContain("trueline_read");
+    expect(result.decision).toBe("approve");
+    expect(result.reason).toBeUndefined();
+  });
+
+  test("silently approves Edit for small files", async () => {
+    const result = await processHookEvent({
+      tool_name: "Edit",
+      tool_input: { file_path: smallFile, old_string: "x", new_string: "y" },
+    });
+    expect(result.decision).toBe("approve");
+    expect(result.reason).toBeUndefined();
+  });
+
+  test("advises trueline for Read on large files", async () => {
+    const result = await processHookEvent({
+      tool_name: "Read",
+      tool_input: { file_path: largeFile },
+    });
+    expect(result.decision).toBe("approve");
+    expect(result.reason).toContain("trueline");
+  });
+
+  test("advises trueline for Edit on large files", async () => {
+    const result = await processHookEvent({
+      tool_name: "Edit",
+      tool_input: { file_path: largeFile, old_string: "x", new_string: "y" },
+    });
+    expect(result.decision).toBe("approve");
+    expect(result.reason).toContain("trueline");
+  });
+
+  test("advises trueline for MultiEdit on large files", async () => {
+    const result = await processHookEvent({
+      tool_name: "MultiEdit",
+      tool_input: { file_path: largeFile, edits: [] },
+    });
+    expect(result.decision).toBe("approve");
+    expect(result.reason).toContain("trueline");
   });
 
   test("approves Read for files outside project", async () => {
@@ -42,6 +81,7 @@ describe("PreToolUse hook", () => {
       tool_input: { file_path: "/nonexistent/outside/file.ts" },
     });
     expect(result.decision).toBe("approve");
+    expect(result.reason).toBeUndefined();
   });
 
   test("approves Read when no file_path", async () => {
@@ -50,24 +90,7 @@ describe("PreToolUse hook", () => {
       tool_input: {},
     });
     expect(result.decision).toBe("approve");
-  });
-
-  test("blocks Edit for files trueline can read and write", async () => {
-    const result = await processHookEvent({
-      tool_name: "Edit",
-      tool_input: { file_path: insideFile, old_string: "x", new_string: "y" },
-    });
-    expect(result.decision).toBe("block");
-    expect(result.reason).toContain("trueline_edit");
-  });
-
-  test("blocks MultiEdit for files trueline can read and write", async () => {
-    const result = await processHookEvent({
-      tool_name: "MultiEdit",
-      tool_input: { file_path: insideFile, edits: [] },
-    });
-    expect(result.decision).toBe("block");
-    expect(result.reason).toContain("trueline_edit");
+    expect(result.reason).toBeUndefined();
   });
 
   test("approves Edit for files outside project", async () => {
@@ -76,14 +99,7 @@ describe("PreToolUse hook", () => {
       tool_input: { file_path: "/nonexistent/outside/file.ts", old_string: "x", new_string: "y" },
     });
     expect(result.decision).toBe("approve");
-  });
-
-  test("approves MultiEdit for files outside project", async () => {
-    const result = await processHookEvent({
-      tool_name: "MultiEdit",
-      tool_input: { file_path: "/nonexistent/outside/file.ts", edits: [] },
-    });
-    expect(result.decision).toBe("approve");
+    expect(result.reason).toBeUndefined();
   });
 
   test("approves Edit when Read access is denied", async () => {
@@ -91,7 +107,8 @@ describe("PreToolUse hook", () => {
     mkdirSync(claudeDir, { recursive: true });
     const settingsPath = join(claudeDir, "settings.json");
     const secretFile = join(projectDir, "data.secret");
-    writeFileSync(secretFile, "secret data\n");
+    // Make it large enough to trigger advisory
+    writeFileSync(secretFile, "secret data\n".repeat(2000));
     writeFileSync(settingsPath, JSON.stringify({ permissions: { deny: ["Read(**/*.secret)"] } }));
 
     try {
@@ -99,8 +116,9 @@ describe("PreToolUse hook", () => {
         tool_name: "Edit",
         tool_input: { file_path: secretFile, old_string: "secret", new_string: "public" },
       });
-      // trueline can't read .secret files, so Edit falls through to built-in
+      // trueline can't read .secret files, so no advisory
       expect(result.decision).toBe("approve");
+      expect(result.reason).toBeUndefined();
     } finally {
       rmSync(claudeDir, { recursive: true, force: true });
     }
@@ -112,7 +130,8 @@ describe("PreToolUse hook", () => {
     mkdirSync(claudeDir, { recursive: true });
     const settingsPath = join(claudeDir, "settings.json");
     const lockedFile = join(projectDir, "locked.cfg");
-    writeFileSync(lockedFile, "config\n");
+    // Make it large enough to trigger advisory
+    writeFileSync(lockedFile, "config\n".repeat(3000));
     writeFileSync(settingsPath, JSON.stringify({ permissions: { deny: ["Edit(**/*.cfg)"] } }));
 
     try {
@@ -120,8 +139,9 @@ describe("PreToolUse hook", () => {
         tool_name: "Edit",
         tool_input: { file_path: lockedFile, old_string: "config", new_string: "updated" },
       });
-      // trueline can't edit .cfg files, so Edit falls through to built-in
+      // trueline can't edit .cfg files, so no advisory
       expect(result.decision).toBe("approve");
+      expect(result.reason).toBeUndefined();
     } finally {
       rmSync(claudeDir, { recursive: true, force: true });
     }
