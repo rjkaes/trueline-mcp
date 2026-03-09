@@ -49,8 +49,8 @@ describe("trueline_search", () => {
     expect(text).toContain("world");
     // Should have checksums
     expect(text).toContain("checksum:");
-    // Should have per-line hashes
-    expect(text).toMatch(/\d+:[a-z]{2}\t/);
+    // Should have line number + tab format
+    expect(text).toMatch(/^\d+\t/m);
   });
 
   test("respects context_lines parameter", async () => {

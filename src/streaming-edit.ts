@@ -23,14 +23,7 @@
 import { randomBytes } from "node:crypto";
 import { chmod, open, rename, stat, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import {
-  EMPTY_FILE_CHECKSUM,
-  FNV_OFFSET_BASIS,
-  fnv1aHashBytes,
-  foldHash,
-  formatChecksum,
-  hashToLetters,
-} from "./hash.ts";
+import { EMPTY_FILE_CHECKSUM, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, formatChecksum } from "./hash.ts";
 import { EMPTY_BUF, LF_BUF, splitLines } from "./line-splitter.ts";
 import type { DiffCollector } from "./diff-collector.ts";
 import type { ChecksumRef } from "./parse.ts";
@@ -44,8 +37,6 @@ export interface StreamEditOp {
   endLine: number;
   content: string[];
   insertAfter: boolean;
-  startHash: string;
-  endHash: string;
 }
 
 // ==============================================================================
@@ -235,10 +226,6 @@ export async function streamingEdit(
     return outputLineCount > 0 ? formatChecksum(1, outputLineCount, outputChecksumAcc) : EMPTY_FILE_CHECKSUM;
   }
 
-  function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
-    return `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}`;
-  }
-
   // ---- Handle line-0 insert_after (prepend) before streaming ----
   const line0Ops = opsByStartLine.get(0);
   if (line0Ops) {
@@ -262,9 +249,8 @@ export async function streamingEdit(
         eolDetected = true;
       }
 
-      // Compute line hash for checksum accumulators and boundary verification
+      // Compute line hash for checksum accumulators
       const lineH = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
-      const letters = hashToLetters(lineH);
 
       // Feed into checksum accumulators
       while (csIdx < csAccumulators.length) {
@@ -282,13 +268,6 @@ export async function streamingEdit(
 
       // Check if we're inside an active replace range (skipping lines)
       if (activeReplace && lineNumber <= activeReplace.endLine) {
-        // Verify end boundary hash
-        if (lineNumber === activeReplace.endLine && activeReplace.endHash !== "") {
-          if (letters !== activeReplace.endHash) {
-            return await fail(hashMismatchMsg(lineNumber, activeReplace.endHash, letters));
-          }
-        }
-
         activeReplaceOrigBytes.push(lineBytes);
 
         // End of replace range: write replacement content
@@ -331,11 +310,6 @@ export async function streamingEdit(
         }
 
         if (replaceOp) {
-          // Verify start boundary hash
-          if (replaceOp.startHash !== "" && letters !== replaceOp.startHash) {
-            return await fail(hashMismatchMsg(lineNumber, replaceOp.startHash, letters));
-          }
-
           if (replaceOp.startLine === replaceOp.endLine) {
             // Single-line replace: handle immediately
             await writeReplaceOrOriginal(replaceOp, [lineBytes]);
@@ -350,21 +324,9 @@ export async function streamingEdit(
             // Multi-line replace: enter active replace mode
             activeReplace = replaceOp;
             activeReplaceOrigBytes = [lineBytes];
-
-            // Verify start boundary hash for the end line too (done when we reach it)
-            // insert_after ops at endLine will be handled when we reach it
-            // But insert_after ops at startLine that aren't the end? Not meaningful
-            // for multi-line replace starting at startLine.
           }
         } else {
           // No replace op — just write the line and process insert_after
-          // Verify boundary hash for insert_after ops
-          for (const iaOp of insertOps) {
-            if (iaOp.startHash !== "" && letters !== iaOp.startHash) {
-              return await fail(hashMismatchMsg(lineNumber, iaOp.startHash, letters));
-            }
-          }
-
           await enqueueLine(lineBytes, lineH);
           if (collector) collector.context(lineBytes.toString(encoding));
 

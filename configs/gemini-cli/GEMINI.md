@@ -6,7 +6,7 @@ built-in file operations.
 
 ## Tools
 
-- **trueline_read** — Read a file with per-line hashes and range checksums. Call before editing.
+- **trueline_read** — Read a file with range checksums. Call before editing.
 - **trueline_edit** — Apply hash-verified edits. Each edit needs a checksum from trueline_read.
 - **trueline_diff** — Preview edits as a unified diff without writing to disk.
 - **trueline_outline** — Get a compact structural outline of a source file.

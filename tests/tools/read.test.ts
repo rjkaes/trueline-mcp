@@ -40,9 +40,9 @@ describe("handleRead", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter(Boolean);
     // Should have 3 content lines + blank + checksum line
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\tconst a = 1;$/);
-    expect(lines[1]).toMatch(/^2:[a-z]{2}\tconst b = 2;$/);
-    expect(lines[2]).toMatch(/^3:[a-z]{2}\tconst c = 3;$/);
+    expect(lines[0]).toMatch(/^1\tconst a = 1;$/);
+    expect(lines[1]).toMatch(/^2\tconst b = 2;$/);
+    expect(lines[2]).toMatch(/^3\tconst c = 3;$/);
   });
 
   test("returns checksum in result", async () => {
@@ -62,9 +62,9 @@ describe("handleRead", () => {
       projectDir: testDir,
     });
     const text = result.content[0].text;
-    const contentLines = text.split("\n").filter((l) => l.match(/^\d+:/));
+    const contentLines = text.split("\n").filter((l) => l.match(/^\d+\t/));
     expect(contentLines).toHaveLength(1);
-    expect(contentLines[0]).toMatch(/^2:[a-z]{2}\tconst b = 2;$/);
+    expect(contentLines[0]).toMatch(/^2\tconst b = 2;$/);
   });
 
   test("denies reading .env file", async () => {
@@ -102,12 +102,12 @@ describe("handleRead", () => {
     expect(checksumMatches).toHaveLength(2);
 
     // Should contain lines 3-5 and 15-17 but not lines 6-14
-    expect(text).toMatch(/^3:/m);
-    expect(text).toMatch(/^5:/m);
-    expect(text).toMatch(/^15:/m);
-    expect(text).toMatch(/^17:/m);
-    expect(text).not.toMatch(/^6:/m);
-    expect(text).not.toMatch(/^14:/m);
+    expect(text).toMatch(/^3\t/m);
+    expect(text).toMatch(/^5\t/m);
+    expect(text).toMatch(/^15\t/m);
+    expect(text).toMatch(/^17\t/m);
+    expect(text).not.toMatch(/^6\t/m);
+    expect(text).not.toMatch(/^14\t/m);
   });
 
   test("reads whole file when ranges omitted", async () => {
@@ -118,8 +118,8 @@ describe("handleRead", () => {
       projectDir: testDir,
     });
     const text = result.content[0].text;
-    expect(text).toContain("1:");
-    expect(text).toContain("3:");
+    expect(text).toMatch(/^1\t/m);
+    expect(text).toMatch(/^3\t/m);
     const checksumMatches = text.match(/^checksum: /gm);
     expect(checksumMatches).toHaveLength(1);
   });
@@ -134,8 +134,8 @@ describe("handleRead", () => {
     });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    expect(text).toContain("1:");
-    expect(text).toContain("4:");
+    expect(text).toMatch(/^1\t/m);
+    expect(text).toMatch(/^4\t/m);
     expect(text).toContain("checksum: 1-4:");
   });
 
@@ -156,7 +156,7 @@ describe("handleRead", () => {
     // The decoded content should show "café"
     expect(text).toContain("café");
     // And the hash should be present
-    expect(text).toMatch(/^1:[a-z]{2}\tcafé$/m);
+    expect(text).toMatch(/^1\tcafé$/m);
   });
 
   test("truncates output at 2000 lines", async () => {
@@ -192,16 +192,15 @@ describe("handleRead", () => {
     expect(text).toMatch(/checksum: 100-199:[0-9a-f]{8}/);
   });
 
-  test("hashes=false omits per-line hashes", async () => {
+  test("output format is lineNumber tab content", async () => {
     const result = await handleRead({
       file_path: testFile,
-      hashes: false,
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     const lines = text.split("\n").filter(Boolean);
-    // Format should be N\tcontent (no hash)
+    // Format should be N\tcontent (no per-line hash)
     expect(lines[0]).toMatch(/^1\tconst a = 1;$/);
     expect(lines[1]).toMatch(/^2\tconst b = 2;$/);
     expect(lines[2]).toMatch(/^3\tconst c = 3;$/);
@@ -209,10 +208,9 @@ describe("handleRead", () => {
     expect(text).toContain("checksum:");
   });
 
-  test("hashes=false with ranges still has checksums", async () => {
+  test("ranges output still has checksums", async () => {
     const result = await handleRead({
       file_path: testFile,
-      hashes: false,
       ranges: ["1-2"],
       projectDir: testDir,
     });
@@ -220,15 +218,5 @@ describe("handleRead", () => {
     const text = result.content[0].text;
     expect(text).toMatch(/^1\tconst a = 1;\n2\tconst b = 2;\n/);
     expect(text).toContain("checksum: 1-2:");
-  });
-
-  test("hashes defaults to true", async () => {
-    const result = await handleRead({
-      file_path: testFile,
-      projectDir: testDir,
-    });
-    const text = result.content[0].text;
-    // Default should include hashes
-    expect(text.split("\n")[0]).toMatch(/^1:[a-z]{2}\t/);
   });
 });

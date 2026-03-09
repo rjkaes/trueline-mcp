@@ -1,14 +1,14 @@
 /**
  * trueline_search tool handler.
  *
- * Searches a file by regex and returns matching lines with context,
- * per-line hashes, and checksums — ready for immediate editing.
+ * Searches a file by regex and returns matching lines with context
+ * and checksums — ready for immediate editing.
  *
  * Uses a single-pass sliding window so memory is O(contextLines) instead
  * of O(file_size). Decodes each line to a string exactly once.
  */
 import { splitLines } from "../line-splitter.ts";
-import { fnv1aHashBytes, hashToLetters, foldHash, FNV_OFFSET_BASIS, formatChecksum } from "../hash.ts";
+import { fnv1aHashBytes, foldHash, FNV_OFFSET_BASIS, formatChecksum } from "../hash.ts";
 import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
@@ -204,7 +204,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   }
 
   // ===========================================================================
-  // Format output with hashes and checksums
+  // Format output with checksums
   // ===========================================================================
 
   const parts: string[] = [];
@@ -223,7 +223,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
       checksumHash = foldHash(checksumHash, line.hash);
 
       const marker = line.isMatch ? "  ← match" : "";
-      parts.push(`${line.lineNumber}:${hashToLetters(line.hash)}	${line.text}${marker}`);
+      parts.push(`${line.lineNumber}\t${line.text}${marker}`);
     }
 
     parts.push("");

@@ -4,57 +4,30 @@
 
 const DECIMAL_INT = /^\d+$/;
 
-interface LineRef {
-  line: number;
-  hash: string;
-}
-
-/**
- * Parse a `line:hash` reference string like "4:mp".
- *
- * Special case: "0:" is valid (insert at file start, empty hash).
- * Throws on invalid format.
- */
-function parseLineHash(ref: string): LineRef {
-  const colonIdx = ref.indexOf(":");
-  if (colonIdx === -1) {
-    throw new Error(`Invalid line:hash reference "${ref}" — missing colon`);
-  }
-
-  const lineStr = ref.slice(0, colonIdx);
-  const hash = ref.slice(colonIdx + 1);
-
-  // Reject non-decimal strings before Number() conversion — without this,
-  // Number("") === 0 and Number(" ") === 0 would silently parse as line 0.
-  if (!DECIMAL_INT.test(lineStr)) {
-    throw new Error(`Invalid line number in "${ref}" — must be a non-negative integer`);
-  }
-
-  const line = Number(lineStr);
-
-  if (line === 0 && hash !== "") {
-    throw new Error(`Invalid line:hash reference "${ref}" — line 0 must have empty hash`);
-  }
-  if (line > 0 && !/^[a-z]{2}$/.test(hash)) {
-    throw new Error(`Invalid hash in "${ref}" — must be exactly 2 lowercase letters`);
-  }
-
-  return { line, hash };
-}
-
 interface RangeRef {
-  start: LineRef;
-  end: LineRef;
+  start: number;
+  end: number;
   insertAfter: boolean;
 }
 
 /**
- * Parse a range string into start/end LineRefs.
+ * Parse a line number string, validating it's a non-negative decimal integer.
+ * Throws on invalid format.
+ */
+function parseLineNumber(s: string): number {
+  if (!DECIMAL_INT.test(s)) {
+    throw new Error(`Invalid line number "${s}" — must be a non-negative integer`);
+  }
+  return Number(s);
+}
+
+/**
+ * Parse a range string into start/end line numbers.
  *
  * Accepts three forms:
- *   - "12:gh-21:yz"  — explicit start-end range (replace)
- *   - "5:ab"          — single-line shorthand, equivalent to "5:ab-5:ab"
- *   - "+5:ab"         — insert-after line 5 (single-line only)
+ *   - "12-21"   — explicit start-end range (replace)
+ *   - "5"       — single-line shorthand, equivalent to "5-5"
+ *   - "+5"      — insert-after line 5 (single-line only)
  *
  * The `+` prefix signals insert-after and is only valid on single-line
  * ranges (no `-`). Throws on invalid format or if start line > end line.
@@ -68,8 +41,6 @@ export function parseRange(range: string): RangeRef {
     raw = raw.slice(1);
   }
 
-  // Find "-" separator between two line:hash refs. Since neither line numbers
-  // (digits) nor hashes ([a-z]{2}) contain "-", indexOf is unambiguous.
   const dashIdx = raw.indexOf("-");
 
   if (insertAfter && dashIdx !== -1) {
@@ -77,15 +48,15 @@ export function parseRange(range: string): RangeRef {
   }
 
   if (dashIdx === -1) {
-    const ref = parseLineHash(raw);
-    return { start: ref, end: { ...ref }, insertAfter };
+    const line = parseLineNumber(raw);
+    return { start: line, end: line, insertAfter };
   }
 
-  const start = parseLineHash(raw.slice(0, dashIdx));
-  const end = parseLineHash(raw.slice(dashIdx + 1));
+  const start = parseLineNumber(raw.slice(0, dashIdx));
+  const end = parseLineNumber(raw.slice(dashIdx + 1));
 
-  if (start.line > end.line) {
-    throw new Error(`Invalid range "${range}" — start line ${start.line} must be ≤ end line ${end.line}`);
+  if (start > end) {
+    throw new Error(`Invalid range "${range}" — start line ${start} must be ≤ end line ${end}`);
   }
 
   return { start, end, insertAfter };

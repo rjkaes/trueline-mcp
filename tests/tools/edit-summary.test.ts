@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
-import { lineHash, rangeChecksum } from "../helpers.ts";
+import { rangeChecksum } from "../helpers.ts";
 import { EMPTY_FILE_CHECKSUM } from "../../src/hash.ts";
 
 let testDir: string;
@@ -38,7 +38,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("a.txt", "aaa\nbbb\nccc\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${lineHash("bbb")}`, content: "xxx\nyyy\nzzz" }],
+      edits: [{ checksum: cs, range: `2`, content: "xxx\nyyy\nzzz" }],
     });
 
     const text = result.content[0].text;
@@ -47,11 +47,9 @@ describe("edit summary", () => {
 
   test("multi-line replace shows range and delta", async () => {
     const { path, cs } = setupFile("b.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    const h2 = lineHash("bbb");
-    const h4 = lineHash("ddd");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${h2}-4:${h4}`, content: "xxx" }],
+      edits: [{ checksum: cs, range: `2-4`, content: "xxx" }],
     });
 
     const text = result.content[0].text;
@@ -62,7 +60,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("c.txt", "aaa\nbbb\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${lineHash("aaa")}`, content: "xxx" }],
+      edits: [{ checksum: cs, range: `1`, content: "xxx" }],
     });
 
     const text = result.content[0].text;
@@ -71,11 +69,9 @@ describe("edit summary", () => {
 
   test("deletion shows deleted with line count", async () => {
     const { path, cs } = setupFile("d.txt", "aaa\nbbb\nccc\n");
-    const h1 = lineHash("aaa");
-    const h2 = lineHash("bbb");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${h1}-2:${h2}`, content: "" }],
+      edits: [{ checksum: cs, range: `1-2`, content: "" }],
     });
 
     const text = result.content[0].text;
@@ -86,7 +82,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("e.txt", "aaa\nbbb\nccc\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${lineHash("bbb")}`, content: "" }],
+      edits: [{ checksum: cs, range: `2`, content: "" }],
     });
 
     const text = result.content[0].text;
@@ -97,7 +93,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("f.txt", "aaa\nbbb\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `+1:${lineHash("aaa")}`, content: "xxx\nyyy\nzzz" }],
+      edits: [{ checksum: cs, range: `+1`, content: "xxx\nyyy\nzzz" }],
     });
 
     const text = result.content[0].text;
@@ -108,7 +104,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("g.txt", "aaa\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: "+0:", content: "xxx\nyyy" }],
+      edits: [{ checksum: cs, range: "+0", content: "xxx\nyyy" }],
     });
 
     const text = result.content[0].text;
@@ -119,7 +115,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("h.txt", "aaa\nbbb\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${lineHash("aaa")}`, content: "aaa" }],
+      edits: [{ checksum: cs, range: `1`, content: "aaa" }],
     });
 
     const text = result.content[0].text;
@@ -129,13 +125,11 @@ describe("edit summary", () => {
 
   test("batch edit shows one summary line per op", async () => {
     const { path, cs } = setupFile("i.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    const h1 = lineHash("aaa");
-    const h3 = lineHash("ccc");
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `1:${h1}`, content: "xxx" },
-        { checksum: cs, range: `+3:${h3}`, content: "yyy" },
+        { checksum: cs, range: `1`, content: "xxx" },
+        { checksum: cs, range: `+3`, content: "yyy" },
       ],
     });
 

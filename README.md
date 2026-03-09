@@ -73,9 +73,7 @@ overhead, so the break-even point is roughly 15KB; below that, a plain
 | 245 lines   | 245 tokens | 14 tokens | 94% |
 | 504 lines   | 504 tokens | 4 tokens  | 99% |
 
-`trueline_read` supports multiple disjoint ranges in a single call and
-an optional `hashes: false` mode for exploratory reads that saves ~3
-tokens per line.
+`trueline_read` supports multiple disjoint ranges in a single call.
 
 ### Find and fix: `trueline_search`
 
@@ -107,13 +105,13 @@ modifications with inline mini-diffs for small changes.
 Pass `["*"]` to diff all changed files at once. The output is compact
 enough to review an entire feature branch in a single tool call.
 
-### Never corrupt: hash verification
+### Never corrupt: checksum verification
 
-Every line from `trueline_read` carries a content hash. Every edit must
-present those hashes back, proving the agent is working against the
-file's actual content. If anything changed (concurrent edits, model
-hallucination, stale context) the edit is rejected before any bytes hit
-disk.
+Every range from `trueline_read` carries a checksum covering its
+content. Every edit must present a valid checksum back, proving the
+agent is working against the file's actual content. If anything changed
+(concurrent edits, model hallucination, stale context) the edit is
+rejected before any bytes hit disk.
 
 No more silent corruption. No more ambiguous string matches.
 

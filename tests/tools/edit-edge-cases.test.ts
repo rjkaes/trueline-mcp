@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
-import { lineHash, rangeChecksum } from "../helpers.ts";
+import { rangeChecksum } from "../helpers.ts";
 import { EMPTY_FILE_CHECKSUM } from "../../src/hash.ts";
 
 let testDir: string;
@@ -41,7 +41,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("only")}`,
+          range: `1`,
           content: "replaced",
         },
       ],
@@ -60,7 +60,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("only")}`,
+          range: `1`,
           content: "replaced",
         },
       ],
@@ -80,7 +80,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}`,
+          range: `2`,
           content: "x1\nx2\nx3",
         },
       ],
@@ -99,7 +99,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}-3:${lineHash("ccc")}`,
+          range: `2-3`,
           content: "merged",
         },
       ],
@@ -118,7 +118,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}`,
+          range: `2`,
           content: "",
         },
       ],
@@ -135,7 +135,7 @@ describe("single-line file edits", () => {
 // =============================================================================
 
 describe("empty file operations", () => {
-  test("insert into empty file via +0: prefix", async () => {
+  test("insert into empty file via +0 prefix", async () => {
     const { path } = setupFile("empty.txt", "");
 
     const result = await handleEdit({
@@ -143,7 +143,7 @@ describe("empty file operations", () => {
       edits: [
         {
           checksum: EMPTY_FILE_CHECKSUM,
-          range: "+0:",
+          range: "+0",
           content: "first\nsecond",
         },
       ],
@@ -164,7 +164,7 @@ describe("empty file operations", () => {
       edits: [
         {
           checksum: EMPTY_FILE_CHECKSUM,
-          range: "0:",
+          range: "0",
           content: "nope",
         },
       ],
@@ -183,7 +183,7 @@ describe("empty file operations", () => {
       edits: [
         {
           checksum: EMPTY_FILE_CHECKSUM,
-          range: "+0:",
+          range: "+0",
           content: "prepend",
         },
       ],
@@ -207,7 +207,7 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           checksum: cs,
-          range: `+2:${lineHash("bbb")}`,
+          range: `+2`,
           content: "appended",
         },
       ],
@@ -226,7 +226,7 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           checksum: cs,
-          range: `+1:${lineHash("aaa")}`,
+          range: `+1`,
           content: "inserted",
         },
       ],
@@ -237,7 +237,7 @@ describe("insert-after (+ prefix)", () => {
     expect(readFileSync(path, "utf-8")).toBe("aaa\ninserted\nbbb\n");
   });
 
-  test("+0: prefix prepends before all content", async () => {
+  test("+0 prefix prepends before all content", async () => {
     const { path, cs } = setupFile("prepend.txt", "existing\n");
 
     const result = await handleEdit({
@@ -245,7 +245,7 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           checksum: cs,
-          range: "+0:",
+          range: "+0",
           content: "prepended",
         },
       ],
@@ -265,12 +265,12 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           checksum: cs,
-          range: `+1:${lineHash("aaa")}`,
+          range: `+1`,
           content: "after-1",
         },
         {
           checksum: cs,
-          range: `+3:${lineHash("ccc")}`,
+          range: `+3`,
           content: "after-3",
         },
       ],
@@ -289,12 +289,12 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}`,
+          range: `2`,
           content: "BBB",
         },
         {
           checksum: cs,
-          range: `+2:${lineHash("bbb")}`,
+          range: `+2`,
           content: "inserted",
         },
       ],
@@ -319,7 +319,7 @@ describe("multi-line replacements", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}-3:${lineHash("ccc")}`,
+          range: `1-3`,
           content: "entirely\nnew",
         },
       ],
@@ -338,12 +338,12 @@ describe("multi-line replacements", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}`,
+          range: `1`,
           content: "AAA",
         },
         {
           checksum: cs,
-          range: `3:${lineHash("ccc")}`,
+          range: `3`,
           content: "CCC",
         },
       ],
@@ -362,7 +362,7 @@ describe("multi-line replacements", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}-3:${lineHash("ccc")}`,
+          range: `1-3`,
           content: "",
         },
       ],
@@ -389,7 +389,7 @@ describe("no-op detection", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}`,
+          range: `2`,
           content: "bbb",
         },
       ],
@@ -409,7 +409,7 @@ describe("no-op detection", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}-3:${lineHash("ccc")}`,
+          range: `1-3`,
           content: "aaa\nbbb\nccc",
         },
       ],
@@ -435,7 +435,7 @@ describe("checksum validation", () => {
       edits: [
         {
           checksum: narrowCs,
-          range: `3:${lineHash("ccc")}`,
+          range: `3`,
           content: "CCC",
         },
       ],
@@ -455,7 +455,7 @@ describe("checksum validation", () => {
       edits: [
         {
           checksum: narrowCs,
-          range: `4:${lineHash("ddd")}`,
+          range: `4`,
           content: "DDD",
         },
       ],
@@ -474,12 +474,12 @@ describe("checksum validation", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}`,
+          range: `1`,
           content: "AAA",
         },
         {
           checksum: cs,
-          range: `4:${lineHash("ddd")}`,
+          range: `4`,
           content: "DDD",
         },
       ],
@@ -500,7 +500,7 @@ describe("checksum validation", () => {
       edits: [
         {
           checksum: fakeCs,
-          range: `1:${lineHash("aaa")}`,
+          range: `1`,
           content: "AAA",
         },
       ],
@@ -529,7 +529,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}`,
+          range: `2`,
           content: "BBB",
         },
       ],
@@ -554,7 +554,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}-2:${lineHash("bbb")}`,
+          range: `1-2`,
           content: "XXX\nYYY\nZZZ",
         },
       ],
@@ -578,7 +578,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           checksum: cs,
-          range: `+2:${lineHash("bbb")}`,
+          range: `+2`,
           content: "appended",
         },
       ],
@@ -606,7 +606,7 @@ describe("unicode in edits", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("hello")}`,
+          range: `1`,
           content: "🎉 héllo 𝕳",
         },
       ],
@@ -625,7 +625,7 @@ describe("unicode in edits", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("中文")}`,
+          range: `2`,
           content: "中文（修正済み）",
         },
       ],
@@ -656,18 +656,13 @@ describe("read-then-edit round-trip", () => {
     expect(csMatch).toBeTruthy();
     const cs = csMatch![1];
 
-    // Extract line hash for line 2
-    const lineMatch = text.match(/^2:([a-z]{2})\t/m);
-    expect(lineMatch).toBeTruthy();
-    const lh = lineMatch![1];
-
     // Edit using the extracted values
     const editResult = await handleEdit({
       file_path: f,
       edits: [
         {
           checksum: cs,
-          range: `2:${lh}`,
+          range: `2`,
           content: "BETA",
         },
       ],
@@ -694,15 +689,13 @@ describe("read-then-edit round-trip", () => {
 
     const csMatch = text.match(/checksum: (.+)/);
     const cs = csMatch![1];
-    const lineMatch = text.match(/^3:([a-z]{2})\t/m);
-    const lh = lineMatch![1];
 
     const editResult = await handleEdit({
       file_path: f,
       edits: [
         {
           checksum: cs,
-          range: `3:${lh}`,
+          range: `3`,
           content: "CCC",
         },
       ],
@@ -724,7 +717,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}`,
+          range: `2`,
           content: "BBB",
         },
       ],
@@ -737,8 +730,6 @@ describe("read-then-edit round-trip", () => {
     const text = readResult.content[0].text;
     const csMatch = text.match(/checksum: (.+)/);
     const newCs = csMatch![1];
-    const lineMatch = text.match(/^3:([a-z]{2})\t/m);
-    const lh = lineMatch![1];
 
     // Second edit using new checksum
     const edit2 = await handleEdit({
@@ -746,7 +737,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           checksum: newCs,
-          range: `3:${lh}`,
+          range: `3`,
           content: "CCC",
         },
       ],
@@ -769,8 +760,8 @@ describe("overlap detection", () => {
     const result = await handleEdit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `2:${lineHash("bbb")}`, content: "X" },
-        { checksum: cs, range: `2:${lineHash("bbb")}`, content: "Y" },
+        { checksum: cs, range: `2`, content: "X" },
+        { checksum: cs, range: `2`, content: "Y" },
       ],
       projectDir: testDir,
     });
@@ -785,8 +776,8 @@ describe("overlap detection", () => {
     const result = await handleEdit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `1:${lineHash("aaa")}-2:${lineHash("bbb")}`, content: "AB" },
-        { checksum: cs, range: `3:${lineHash("ccc")}-4:${lineHash("ddd")}`, content: "CD" },
+        { checksum: cs, range: `1-2`, content: "AB" },
+        { checksum: cs, range: `3-4`, content: "CD" },
       ],
       projectDir: testDir,
     });
@@ -803,12 +794,12 @@ describe("overlap detection", () => {
       edits: [
         {
           checksum: cs,
-          range: `+1:${lineHash("aaa")}`,
+          range: `+1`,
           content: "ins1",
         },
         {
           checksum: cs,
-          range: `+1:${lineHash("aaa")}`,
+          range: `+1`,
           content: "ins2",
         },
       ],
@@ -819,70 +810,6 @@ describe("overlap detection", () => {
     const written = readFileSync(path, "utf-8");
     expect(written).toContain("ins1");
     expect(written).toContain("ins2");
-  });
-});
-
-// =============================================================================
-// Hash verification
-// =============================================================================
-
-describe("hash verification", () => {
-  test("wrong start hash on multi-line range is rejected", async () => {
-    const { path, cs } = setupFile("bad-start.txt", "aaa\nbbb\nccc\n");
-
-    const result = await handleEdit({
-      file_path: path,
-      edits: [
-        {
-          checksum: cs,
-          range: `1:zz-3:${lineHash("ccc")}`,
-
-          content: "new",
-        },
-      ],
-      projectDir: testDir,
-    });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("mismatch");
-  });
-
-  test("wrong end hash on multi-line range is rejected", async () => {
-    const { path, cs } = setupFile("bad-end.txt", "aaa\nbbb\nccc\n");
-
-    const result = await handleEdit({
-      file_path: path,
-      edits: [
-        {
-          checksum: cs,
-          range: `1:${lineHash("aaa")}-3:zz`,
-          content: "new",
-        },
-      ],
-      projectDir: testDir,
-    });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("mismatch");
-  });
-
-  test("correct hashes on multi-line range pass", async () => {
-    const { path, cs } = setupFile("good-hash.txt", "aaa\nbbb\nccc\n");
-
-    const result = await handleEdit({
-      file_path: path,
-      edits: [
-        {
-          checksum: cs,
-          range: `1:${lineHash("aaa")}-3:${lineHash("ccc")}`,
-          content: "only",
-        },
-      ],
-      projectDir: testDir,
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("only\n");
   });
 });
 
@@ -902,7 +829,7 @@ describe("stale file detection", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}`,
+          range: `2`,
           content: "BBB",
         },
       ],
@@ -928,7 +855,7 @@ describe("special content", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("a|b|c")}`,
+          range: `1`,
           content: "x|y|z",
         },
       ],
@@ -947,7 +874,7 @@ describe("special content", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("key: value")}`,
+          range: `1`,
           content: "key: new_value",
         },
       ],
@@ -966,7 +893,7 @@ describe("special content", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("  indented  ")}`,
+          range: `1`,
           content: "    more indented    ",
         },
       ],
@@ -985,7 +912,7 @@ describe("special content", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}`,
+          range: `2`,
           content: "\n\n",
         },
       ],
@@ -1017,7 +944,7 @@ describe("file metadata", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}`,
+          range: `1`,
           content: "AAA",
         },
       ],

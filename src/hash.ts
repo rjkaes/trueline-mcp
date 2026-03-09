@@ -88,27 +88,3 @@ export function foldHash(accumulator: number, h: number): number {
 export function formatChecksum(startLine: number, endLine: number, hash: number): string {
   return `${startLine}-${endLine}:${hash.toString(16).padStart(8, "0")}`;
 }
-
-/**
- * 26-char alphabet: lowercase a-z only.
- * Fewer combinations (676) than the prior base32 alphabet (1024),
- * but LLMs transcribe pure-letter hashes more reliably.
- */
-const HASH_CHARS = "abcdefghijklmnopqrstuvwxyz";
-
-/**
- * Pre-computed lookup table of all 676 two-character hash tags.
- * Avoids per-call string concatenation in the hot loop.
- */
-const LETTER_TABLE: string[] = /* @__PURE__ */ (() => {
-  const t = new Array<string>(676);
-  for (let i = 0; i < 26; i++) for (let j = 0; j < 26; j++) t[i * 26 + j] = HASH_CHARS[i] + HASH_CHARS[j];
-  return t;
-})();
-
-/**
- * Map an FNV-1a hash to a two-character tag (676 possible values).
- */
-export function hashToLetters(h: number): string {
-  return LETTER_TABLE[((h >>> 0) % 26) * 26 + (((h >>> 8) >>> 0) % 26)];
-}

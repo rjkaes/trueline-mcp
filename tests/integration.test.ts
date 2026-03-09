@@ -33,11 +33,6 @@ describe("read → diff → edit roundtrip", () => {
     expect(checksumMatch).not.toBeNull();
     const checksum = checksumMatch![1];
 
-    // Extract line 2 hash from read result
-    const line2Match = readText.match(/^2:([a-z]{2})\t/m);
-    expect(line2Match).not.toBeNull();
-    const line2Hash = line2Match![1];
-
     // Step 2: Preview the edit with dry_run
     const diffResult = await handleEdit({
       file_path: testFile,
@@ -45,7 +40,7 @@ describe("read → diff → edit roundtrip", () => {
       edits: [
         {
           checksum,
-          range: `2:${line2Hash}-2:${line2Hash}`,
+          range: "2-2",
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: "  return `Hello, ${name}!`;",
         },
@@ -67,7 +62,7 @@ describe("read → diff → edit roundtrip", () => {
       edits: [
         {
           checksum,
-          range: `2:${line2Hash}-2:${line2Hash}`,
+          range: "2-2",
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: "  return `Hello, ${name}!`;",
         },
@@ -82,7 +77,7 @@ describe("read → diff → edit roundtrip", () => {
     expect(afterEdit).toContain("`Hello, ${name}!`");
     expect(afterEdit).not.toContain('"Hello, " + name');
 
-    // Step 5: Re-read and verify new hashes work
+    // Step 5: Re-read and verify new checksums work
     const rereadResult = await handleRead({
       file_path: testFile,
       projectDir: testDir,

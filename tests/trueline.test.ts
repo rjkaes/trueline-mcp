@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { fnv1aHash } from "../src/hash.ts";
 import { parseRange, parseChecksum } from "../src/parse.ts";
-import { lineHash, rangeChecksum } from "./helpers.ts";
+import { rangeChecksum } from "./helpers.ts";
 
 describe("fnv1aHash", () => {
   test("empty string produces FNV offset basis", () => {
@@ -26,21 +26,6 @@ describe("fnv1aHash", () => {
     const h = fnv1aHash("🎉");
     expect(typeof h).toBe("number");
     expect(h).toBeGreaterThan(0);
-  });
-});
-
-describe("lineHash", () => {
-  test("returns exactly 2 lowercase letters", () => {
-    const h = lineHash("console.log('hello')");
-    expect(h).toMatch(/^[a-z]{2}$/);
-  });
-
-  test("deterministic", () => {
-    expect(lineHash("foo")).toBe(lineHash("foo"));
-  });
-
-  test("empty line produces valid hash", () => {
-    expect(lineHash("")).toMatch(/^[a-z]{2}$/);
   });
 });
 
@@ -72,37 +57,31 @@ describe("rangeChecksum", () => {
 
 describe("parseRange", () => {
   test("parses valid range", () => {
-    const r = parseRange("12:gh-21:yz");
-    expect(r.start).toEqual({ line: 12, hash: "gh" });
-    expect(r.end).toEqual({ line: 21, hash: "yz" });
+    const r = parseRange("12-21");
+    expect(r.start).toBe(12);
+    expect(r.end).toBe(21);
   });
 
   test("parses single-line range", () => {
-    const r = parseRange("5:ab-5:ab");
-    expect(r.start.line).toBe(5);
-    expect(r.end.line).toBe(5);
+    const r = parseRange("5-5");
+    expect(r.start).toBe(5);
+    expect(r.end).toBe(5);
   });
 
-  test("parses single line:hash as self-range", () => {
-    const r = parseRange("5:ab");
-    expect(r.start).toEqual({ line: 5, hash: "ab" });
-    expect(r.end).toEqual({ line: 5, hash: "ab" });
-  });
-
-  test("single-line shorthand returns independent start/end objects", () => {
-    const r = parseRange("5:ab");
-    expect(r.start).toEqual(r.end);
-    expect(r.start).not.toBe(r.end); // must be distinct objects
+  test("parses single line number as self-range", () => {
+    const r = parseRange("5");
+    expect(r.start).toBe(5);
+    expect(r.end).toBe(5);
   });
 
   test("parses dash-separated range", () => {
-    const r = parseRange("12:gh-21:yz");
-    expect(r.start).toEqual({ line: 12, hash: "gh" });
-    expect(r.end).toEqual({ line: 21, hash: "yz" });
+    const r = parseRange("12-21");
+    expect(r.start).toBe(12);
+    expect(r.end).toBe(21);
   });
 
   test("throws when start > end", () => {
-    expect(() => parseRange("21:ab-12:cd")).toThrow("must be ≤");
+    expect(() => parseRange("21-12")).toThrow("must be ≤");
   });
 });
 

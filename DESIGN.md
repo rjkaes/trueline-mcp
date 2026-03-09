@@ -1,8 +1,8 @@
 # trueline Protocol Design
 
-trueline is a file-editing protocol for AI agents. Every line the agent
-reads carries a short content hash, and every edit must present those
-hashes back — proving the agent is working against the file's actual
+trueline is a file-editing protocol for AI agents. Every read returns
+range checksums over the lines, and every edit must present those
+checksums back, proving the agent is working against the file's actual
 content rather than a stale or hallucinated version.
 
 This document explains how the core tools — `trueline_read`,
@@ -22,41 +22,33 @@ tool-use setups), two things can go wrong silently:
    text it's trying to match. The edit either fails to find a match or
    matches an unintended location.
 
-trueline prevents both by requiring the agent to echo back per-line
-hashes and a range checksum. If anything is wrong, the edit is rejected
-before any bytes hit disk.
+trueline prevents both by requiring the agent to echo back a range
+checksum. If anything is wrong, the edit is rejected before any bytes
+hit disk.
 
 ## Line format
 
 `trueline_read` returns each line in this format:
 
 ```
-{lineNumber}:{hash}|{content}
+{lineNumber}|{content}
 ```
 
 For example, reading a three-line file:
 
 ```
-1:ab|#!/usr/bin/env node
-2:mp|import { readFile } from "fs/promises";
-3:qk|console.log("hello");
+1|#!/usr/bin/env node
+2|import { readFile } from "fs/promises";
+3|console.log("hello");
 
 checksum: 1-3:f7e2a1b0
 ```
 
-The **hash** is two characters from a 32-symbol alphabet (`a-z` plus
-`2-7`) derived from the line's content via FNV-1a (a fast,
-non-cryptographic hash). Two characters give 1024 possible values —
-enough to catch accidental mismatches, not enough to be a security
-mechanism.
-
 The **checksum** covers the entire range of lines returned. Its format
 is `startLine-endLine:8hex`, where the hex is an FNV-1a accumulator
-over the full 32-bit hashes of each line in the range. This is
-deliberately stronger than the 2-letter per-line hashes: the
-accumulator feeds all four bytes of each line's hash into a second
-FNV-1a pass, giving much better collision resistance over the whole
-range.
+over the full 32-bit hashes of each line in the range. This feeds all
+four bytes of each line's hash into a second FNV-1a pass, giving good
+collision resistance over the whole range.
 
 ## Reading: `trueline_read`
 
@@ -77,7 +69,7 @@ file into memory. The pipeline:
    `\r`), yielding one decoded string per line. Lines before
    `start_line` are counted and skipped; lines after `end_line` stop
    the stream early.
-4. Computes FNV-1a hashes and formats as truelines.
+4. Computes FNV-1a hashes per line and accumulates the range checksum.
 5. Computes and appends the range checksum.
 
 ### Partial reads
@@ -92,15 +84,6 @@ Multiple disjoint ranges can be read in a single call, each producing
 its own checksum. This is useful when editing lines in different parts
 of a file — one read call provides all the checksums needed.
 
-### Compact reads
-
-When the agent is exploring code without planning to edit, it can pass
-`hashes: false` to omit the per-line 2-letter hashes. The output format
-changes from `N:hash\tcontent` to `N\tcontent`, saving ~3 tokens per line.
-Checksums are always included regardless of the `hashes` setting, so the
-agent can still reference the output for a subsequent targeted re-read
-before editing.
-
 ### Empty files
 
 An empty file returns the sentinel checksum `0-0:00000000`. This
@@ -114,7 +97,7 @@ trueline_edit({
   file_path: "src/main.ts",
   edits: [{
     checksum: "10-25:f7e2a1b0",
-    range: "12:mp..14:qk",
+    range: "12-14",
     content: "  const x = 1;\n  const y = 2;",
   }]
 })
@@ -122,10 +105,10 @@ trueline_edit({
 
 Each edit specifies:
 
-- **`range`** — which lines to replace, as `startLine:hash..endLine:hash`.
-  A single-line shorthand `12:mp` is equivalent to `12:mp..12:mp`.
-  Prefix `+` for insert-after: `+5:ab` inserts content after line 5.
-  Use `+0:` to prepend to the file.
+- **`range`** — which lines to replace, as `startLine-endLine`.
+  A single-line shorthand `12` is equivalent to `12-12`.
+  Prefix `+` for insert-after: `+5` inserts content after line 5.
+  Use `+0` to prepend to the file.
 - **`content`** — the replacement lines as a single newline-separated
   string. The resulting lines can be fewer or more than the range
   (shrinking or growing the file). An empty string deletes the range.
@@ -164,7 +147,7 @@ file is never loaded into memory as a whole.
 2. Open a read stream on the source and a write stream to a temp file.
 3. For each source line:
    a. Hash raw bytes (FNV-1a on the Buffer, no string decode).
-   b. Verify boundary hashes at edit start/end lines.
+   b. Feed the line's hash into the range checksum accumulator.
    c. If the line falls in a replace range, buffer it for no-op
       detection but don't write it to the temp file.
    d. At the end of a replace range, write replacement content.
@@ -369,7 +352,7 @@ trueline_search({
 ```
 
 `trueline_search` searches a file by regex and returns matching lines
-with context, per-line hashes, and checksums — ready for immediate
+with context and checksums — ready for immediate
 editing. It replaces the outline → read → find workflow when the agent
 knows what pattern to look for.
 
@@ -389,13 +372,13 @@ The pipeline:
 5. Early termination: once `max_matches` matches have been captured and
    their post-context is complete, the engine stops decoding lines
    (remaining lines are only scanned for the total match count).
-6. Formats output with per-line hashes and a checksum per context
+6. Formats output with line numbers and a checksum per context
    window.
 
 If `max_matches` is exceeded, the output includes a truncation notice
 with the total match count.
 
-The output is identical in format to `trueline_read` — same `N:hash\t`
+The output is identical in format to `trueline_read` — same `N|`
 prefix, same checksums — so the agent can pass results directly to
 `trueline_edit` without a re-read step.
 
@@ -453,7 +436,7 @@ For each byte `b` of input:
 hash = (hash XOR b) * prime  (mod 2^32)
 ```
 
-### Per-line hash: `fnv1aHash`
+### Line hash: `fnv1aHash`
 
 Input: the line's content as a string, with trailing `\n`, `\r\n`, or
 `\r` stripped. The string is encoded as UTF-8 bytes inline (handling
@@ -464,24 +447,6 @@ The streaming edit engine has a byte-level equivalent,
 `fnv1aHashBytes(buf, start, end)`, that hashes raw UTF-8 bytes from a
 Buffer directly — identical output, no string decode/encode
 round-trip.
-
-### Two-character tag: `hashToLetters`
-
-The 32-bit per-line hash is projected into two characters from a
-32-symbol alphabet (`a-z` plus `2-7`, 1024 combinations) for the
-`N:xy|content` display format:
-
-```
-c1 = HASH_CHARS[hash & 0x1f]          // bits 0-4
-c2 = HASH_CHARS[(hash >>> 8) & 0x1f]  // bits 8-12
-```
-
-The power-of-2 alphabet size allows bitwise AND (`& 0x1f`) instead of
-integer division (`% 26`), which is measurably faster in the hot loop.
-
-This is a lossy mapping to 1024 possible values — a typo detector, not
-a security boundary.
-
 ### Range checksum: `foldHash`
 
 The range checksum is an FNV-1a hash *of hashes*. Starting from the
@@ -500,20 +465,16 @@ is the same.
 
 The result is formatted as `startLine-endLine:8hex`
 (e.g. `1-50:f7e2a1b0`). The 8 hex digits are the full 32-bit
-accumulator, giving much stronger collision resistance than the
-2-letter per-line tags.
+accumulator.
 
-### Three layers of edit protection
+### Two layers of edit protection
 
 | Layer | What it checks | Granularity | Detects |
-|-------|---------------|-------------|---------|
-| Boundary hash | Two-letter tag at edit start/end lines | Single line | Change to the specific lines being replaced |
+|-------|---------------|-------------|--------|
 | Range checksum | FNV-1a accumulator over all lines in the read window | Entire read range | Change to *any* line in the window, even lines not being edited |
 | mtime guard | File modification time before atomic rename | Whole file | Concurrent modification by another process between read and write |
 
-The boundary hash is a fast-fail: the streaming engine checks it the
-moment it reaches an edit's start or end line. The range checksum is
-verified after the full stream completes — it catches changes to lines
-the agent isn't editing but that were included in the `trueline_read`
-window. The mtime guard narrows the TOCTOU window for external
-writers.
+The range checksum is verified after the full stream completes; it
+catches changes to lines the agent isn't editing but that were included
+in the `trueline_read` window. The mtime guard narrows the TOCTOU
+window for external writers.

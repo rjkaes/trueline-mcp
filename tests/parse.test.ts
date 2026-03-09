@@ -73,25 +73,25 @@ describe("parseRanges", () => {
 
 describe("parseRange", () => {
   test("parses dash-separated range", () => {
-    const result = parseRange("16:kq-17:yx");
-    expect(result.start).toEqual({ line: 16, hash: "kq" });
-    expect(result.end).toEqual({ line: 17, hash: "yx" });
+    const result = parseRange("16-17");
+    expect(result.start).toBe(16);
+    expect(result.end).toBe(17);
     expect(result.insertAfter).toBe(false);
   });
 
   test("parses single line reference", () => {
-    const result = parseRange("5:ab");
-    expect(result.start).toEqual({ line: 5, hash: "ab" });
-    expect(result.end).toEqual({ line: 5, hash: "ab" });
+    const result = parseRange("5");
+    expect(result.start).toBe(5);
+    expect(result.end).toBe(5);
   });
 
   test("parses insert-after prefix", () => {
-    const result = parseRange("+10:cd");
+    const result = parseRange("+10");
     expect(result.insertAfter).toBe(true);
-    expect(result.start).toEqual({ line: 10, hash: "cd" });
+    expect(result.start).toBe(10);
   });
 
   test("rejects insert-after with range", () => {
-    expect(() => parseRange("+10:cd-20:ef")).toThrow(/insert-after/);
+    expect(() => parseRange("+10-20")).toThrow(/insert-after/);
   });
 });

@@ -124,7 +124,7 @@ type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
  *
  * Performs range parsing, line-0 constraints, checksum-range coverage,
  * and overlap detection. File-content verification (checksum match,
- * boundary hash match) is deferred to the streaming pass.
+ * checksum match) is deferred to the streaming pass.
  */
 export function validateEdits(edits: EditInput[]): ValidateEditsResult {
   const ops: StreamEditOp[] = [];
@@ -137,21 +137,21 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
     const rangeRef = parseRange(edit.range);
 
     // line 0 only valid for insert-after (encoded as + prefix in range)
-    if (rangeRef.start.line === 0 && !rangeRef.insertAfter) {
+    if (rangeRef.start === 0 && !rangeRef.insertAfter) {
       return {
         ok: false,
-        error: errorResult("range starting at line 0 requires insert-after (use +0: prefix)"),
+        error: errorResult("range starting at line 0 requires insert-after (use +0 prefix)"),
       };
     }
 
     // Verify checksum range covers edit target
-    if (rangeRef.start.line > 0) {
-      if (checksumRef.startLine > rangeRef.start.line || checksumRef.endLine < rangeRef.end.line) {
+    if (rangeRef.start > 0) {
+      if (checksumRef.startLine > rangeRef.start || checksumRef.endLine < rangeRef.end) {
         return {
           ok: false,
           error: errorResult(
             `Checksum range ${checksumRef.startLine}-${checksumRef.endLine} does not cover ` +
-              `edit range ${rangeRef.start.line}-${rangeRef.end.line}. ` +
+              `edit range ${rangeRef.start}-${rangeRef.end}. ` +
               `Re-read with trueline_read to get a checksum covering the target lines.`,
           ),
         };
@@ -159,12 +159,10 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
     }
 
     ops.push({
-      startLine: rangeRef.start.line,
-      endLine: rangeRef.end.line,
+      startLine: rangeRef.start,
+      endLine: rangeRef.end,
       content: edit.content === "" ? [] : edit.content.split("\n"),
       insertAfter: rangeRef.insertAfter,
-      startHash: rangeRef.start.hash,
-      endHash: rangeRef.end.hash,
     });
   }
 

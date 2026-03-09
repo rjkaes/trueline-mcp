@@ -203,16 +203,15 @@ async function truelineNavigate(): Promise<ScenarioResult> {
   steps.push({ tool: "outline", callBytes: outlineCall, resultBytes: outputBytes(outline) });
 
   // read targeted range
-  const readCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 74, end: 150 }], hashes: false };
+  const readCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 74, end: 150 }] };
   const read = await handleRead({
     file_path: SAMPLE_FILE,
     ranges: [{ start: 74, end: 150 }],
-    hashes: false,
     projectDir: PROJECT_DIR,
     allowedDirs: ALLOWED_DIRS,
   });
   steps.push({
-    tool: "read 74-150 (no hashes)",
+    tool: "read 74-150",
     callBytes: jsonCallBytes(readCallObj),
     resultBytes: outputBytes(read),
   });
@@ -232,12 +231,11 @@ async function truelineExploreEdit(): Promise<ScenarioResult> {
   });
   steps.push({ tool: "outline", callBytes: outlineCall, resultBytes: outputBytes(outline) });
 
-  // exploratory read (no hashes)
-  const exploreCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 74, end: 250 }], hashes: false };
+  // exploratory read
+  const exploreCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 74, end: 250 }] };
   const explore = await handleRead({
     file_path: SAMPLE_FILE,
     ranges: [{ start: 74, end: 250 }],
-    hashes: false,
     projectDir: PROJECT_DIR,
     allowedDirs: ALLOWED_DIRS,
   });
@@ -247,7 +245,7 @@ async function truelineExploreEdit(): Promise<ScenarioResult> {
     resultBytes: outputBytes(explore),
   });
 
-  // targeted re-read with hashes for edit
+  // targeted re-read for edit
   const targetCallObj = { file_path: SAMPLE_FILE, ranges: [{ start: 100, end: 115 }] };
   const targeted = await handleRead({
     file_path: SAMPLE_FILE,
@@ -366,7 +364,6 @@ async function truelineMultiRegion(): Promise<ScenarioResult> {
       { start: 200, end: 220 },
       { start: 400, end: 420 },
     ],
-    hashes: false,
   };
   const read = await handleRead({
     file_path: SAMPLE_FILE,
@@ -375,7 +372,6 @@ async function truelineMultiRegion(): Promise<ScenarioResult> {
       { start: 200, end: 220 },
       { start: 400, end: 420 },
     ],
-    hashes: false,
     projectDir: PROJECT_DIR,
     allowedDirs: ALLOWED_DIRS,
   });

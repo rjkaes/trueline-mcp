@@ -65,16 +65,16 @@ describe("coerceParams", () => {
 
   describe("boolean coercion", () => {
     test('coerces "true" → true', () => {
-      expect(coerceParams({ hashes: "true" })).toEqual({ hashes: true });
+      expect(coerceParams({ dry_run: "true" })).toEqual({ dry_run: true });
     });
 
     test('coerces "false" → false', () => {
-      expect(coerceParams({ hashes: "false" })).toEqual({ hashes: false });
+      expect(coerceParams({ dry_run: "false" })).toEqual({ dry_run: false });
     });
 
     test("leaves actual booleans unchanged", () => {
-      expect(coerceParams({ hashes: true })).toEqual({ hashes: true });
-      expect(coerceParams({ hashes: false })).toEqual({ hashes: false });
+      expect(coerceParams({ dry_run: true })).toEqual({ dry_run: true });
+      expect(coerceParams({ dry_run: false })).toEqual({ dry_run: false });
     });
   });
 
@@ -94,10 +94,9 @@ describe("coerceParams", () => {
     });
 
     test("realistic trueline_read call with string ranges", () => {
-      expect(coerceParams({ file_path: "src/server.ts", ranges: ["149-173"], hashes: "false" })).toEqual({
+      expect(coerceParams({ file_path: "src/server.ts", ranges: ["149-173"] })).toEqual({
         file_path: "src/server.ts",
         ranges: ["149-173"],
-        hashes: false,
       });
     });
   });
@@ -108,7 +107,7 @@ describe("coerceParams", () => {
     });
 
     test("alias + boolean coercion together", () => {
-      expect(coerceParams({ path: "a.ts", hashes: "false" })).toEqual({ file_path: "a.ts", hashes: false });
+      expect(coerceParams({ path: "a.ts", dry_run: "false" })).toEqual({ file_path: "a.ts", dry_run: false });
     });
 
     test("realistic trueline_outline call with paths alias", () => {
