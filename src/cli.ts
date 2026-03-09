@@ -6,6 +6,7 @@
 // server, printing results to stdout/stderr. No arg-parser dependency.
 
 import { realpath } from "node:fs/promises";
+import { delimiter } from "node:path";
 import { handleRead } from "./tools/read.ts";
 import { handleEdit } from "./tools/edit.ts";
 import { handleDiff } from "./tools/diff.ts";
@@ -345,7 +346,7 @@ async function resolveAllowedDirs(projectDir: string): Promise<string[]> {
   const dirs = [projectDir];
   const envDirs = process.env.TRUELINE_ALLOWED_DIRS;
   if (envDirs) {
-    for (const d of envDirs.split(":")) {
+    for (const d of envDirs.split(delimiter).filter(Boolean)) {
       const trimmed = d.trim();
       if (trimmed) dirs.push(await realpath(trimmed).catch(() => trimmed));
     }
