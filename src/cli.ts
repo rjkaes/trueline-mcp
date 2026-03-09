@@ -60,7 +60,12 @@ Options:
   --edits <json>        JSON array of edits (required)
                         Each edit: {checksum, range, content}
   --encoding <enc>      File encoding (default: utf-8)
-  --dry-run             Preview as unified diff without writing`,
+  --dry-run             Preview as unified diff without writing
+
+Range formats:
+  startLine:hash-endLine:hash   Replace lines (from trueline read/search)
+  +lineNum:hash                 Insert after line
+  +0:                           Insert at beginning of file`,
 
   outline: `trueline outline <file...> [options]
 

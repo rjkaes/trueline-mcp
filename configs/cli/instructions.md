@@ -37,7 +37,10 @@ Run `trueline --help` or `trueline <command> --help` for full usage.
 The `--edits` flag takes a JSON array. Each edit object has:
 
 - `checksum` — Range checksum from a prior read (format: `startLine-endLine:hexhash`)
-- `range` — Lines to replace (format: `startLine:lineHash-endLine:lineHash`)
+- `range` — Target lines, in one of three formats:
+  - `startLine:lineHash-endLine:lineHash` — replace lines
+  - `+lineNum:hash` — insert after line
+  - `+0:` — insert at beginning of file
 - `content` — New content for those lines
 
 Example:
@@ -57,5 +60,15 @@ trueline edit src/foo.ts --edits '[{
   "checksum": "10-15:a1b2c3d4",
   "range": "+12:ef",
   "content": "// inserted after line 12"
+}]'
+```
+
+To insert at the beginning of a file, use `+0:` as the range:
+
+```sh
+trueline edit src/foo.ts --edits '[{
+  "checksum": "1-1:a1b2c3d4",
+  "range": "+0:",
+  "content": "// Copyright 2025 Acme Corp\n// SPDX-License-Identifier: MIT\n"
 }]'
 ```
