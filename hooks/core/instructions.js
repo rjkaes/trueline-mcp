@@ -78,6 +78,11 @@ export function getInstructions(platform = "claude-code") {
     <path name="surgical" default="true">When you know the target (a function name, variable, string): use trueline_search to find lines with verification hashes, then trueline_edit. This is the fastest path and guarantees edits land on the right content.</path>
     <path name="exploratory">When you need context first: trueline_outline \u2192 trueline_read (targeted ranges) to understand, then trueline_search or trueline_read \u2192 trueline_edit.</path>
     <path name="small-edit">For files under ~200 lines or trivial one-line changes: ${p.readTool} and ${p.editTool} are fine. The MCP round-trip overhead outweighs hash verification savings on small files.</path>
+    <example name="search-then-edit">
+      trueline_search output shows: ab.10 old line one / cd.11 old line two / checksum: 8-12:f7e2abcd
+      \u2192 trueline_edit: range="ab.10-cd.11", checksum="8-12:f7e2abcd", content="new line one\\nnew line two"
+      Key: range uses the hash.line identifiers (ab.10, cd.11) from the output. checksum is always required.
+    </example>
   </editing>
   <workflow>trueline_outline \u2192 understand structure (any file, any size)</workflow>
   <workflow>trueline_search \u2192 trueline_edit (fastest edit path, no read needed)</workflow>

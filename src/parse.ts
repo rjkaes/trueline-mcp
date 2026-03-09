@@ -25,11 +25,17 @@ function parseHashLine(ref: string): LineRef {
   if (dotIdx === -1) {
     // No dot — must be bare "0" for insert-at-start
     if (!DECIMAL_INT.test(ref)) {
-      throw new Error(`Invalid hash.line reference "${ref}" — expected format "hash.line" (e.g. "ab.12")`);
+      throw new Error(
+        `Invalid hash.line reference "${ref}" — expected format "hash.line" (e.g. "ab.12"). ` +
+          "Copy the 2-letter prefix and line number from trueline_read/trueline_search output.",
+      );
     }
     const line = Number(ref);
     if (line !== 0) {
-      throw new Error(`Invalid hash.line reference "${ref}" — bare line number only allowed for 0`);
+      throw new Error(
+        `Invalid hash.line reference "${ref}" — bare line number only allowed for 0. ` +
+          `Use the hash.line format from trueline_read/trueline_search output (e.g. "ab.${ref}").`,
+      );
     }
     return { line: 0, hash: "" };
   }

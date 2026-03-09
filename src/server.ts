@@ -100,7 +100,10 @@ server.registerTool(
 server.registerTool(
   "trueline_edit",
   {
-    description: "Apply hash-verified edits to a file. Each edit carries its own checksum.",
+    description:
+      "Apply hash-verified edits to a file. Each edit needs both a checksum and a range in hash.line format. " +
+      'Example edit: {range: "ab.10-cd.20", checksum: "8-25:f7e2abcd", content: "new text"}. ' +
+      "Copy the 2-letter hash prefix (ab, cd, ...) from trueline_read/trueline_search output.",
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
@@ -115,9 +118,15 @@ server.registerTool(
               checksum: z
                 .string()
                 .describe(
-                  "Checksum from trueline_read or trueline_search whose line range covers this edit's target lines",
+                  'Required. Checksum from trueline_read or trueline_search (e.g. "1-50:f7e2abcd"). ' +
+                    "Must cover this edit's target lines.",
                 ),
-              range: z.string().describe("hash.startLine-hash.endLine or hash.line; prefix + for insert-after"),
+              range: z
+                .string()
+                .describe(
+                  'Lines to replace in hash.line format copied from output: "ab.10-cd.20" (range), "ab.10" (single line), "+ab.10" (insert after). ' +
+                    "The 2-letter hash before each line number is required.",
+                ),
 
               content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
             }),
