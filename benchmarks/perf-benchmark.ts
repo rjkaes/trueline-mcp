@@ -113,7 +113,7 @@ async function benchReadRanged(): Promise<BenchResult> {
   return bench("read-ranged", 50, async () => {
     await handleRead({
       file_path: LARGE_FILE,
-      ranges: [{ start: 5000, end: 5050 }],
+      ranges: ["5000-5050"],
       projectDir: tmpDir,
       allowedDirs: [tmpDir],
     });
@@ -147,7 +147,7 @@ async function benchSearchManyMatches(): Promise<BenchResult> {
 async function benchEditSingleLine(): Promise<BenchResult> {
   const readResult = await handleRead({
     file_path: LARGE_FILE,
-    ranges: [{ start: 100, end: 100 }],
+    ranges: ["100-100"],
     projectDir: tmpDir,
     allowedDirs: [tmpDir],
   });
@@ -188,7 +188,7 @@ async function benchEditSingleLine(): Promise<BenchResult> {
 async function benchEditMultiLine(): Promise<BenchResult> {
   const readResult = await handleRead({
     file_path: LARGE_FILE,
-    ranges: [{ start: 100, end: 119 }],
+    ranges: ["100-119"],
     projectDir: tmpDir,
     allowedDirs: [tmpDir],
   });
