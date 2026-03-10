@@ -171,33 +171,53 @@ function formatDiffSection(relPath: string, diff: SymbolDiff, ref: string): stri
 }
 
 /** Compute a mini inline diff if the change is small enough. */
-function computeMiniDiff(oldBody?: string, newBody?: string): string | null {
+export function computeMiniDiff(oldBody?: string, newBody?: string): string | null {
   if (!oldBody || !newBody) return null;
 
   const oldLines = oldBody.split("\n");
   const newLines = newBody.split("\n");
 
+  // Use LCS (longest common subsequence) to find the minimal diff.
+  // The greedy approach fails for insertions that shift all lines.
+  const m = oldLines.length;
+  const n = newLines.length;
+
+  // Build LCS length table
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+
+  // Backtrack to find removed/added lines
   const removed: string[] = [];
   const added: string[] = [];
-
-  // Simple line-by-line comparison for small diffs
-  let i = 0;
-  let j = 0;
-  while (i < oldLines.length || j < newLines.length) {
-    if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
-      i++;
-      j++;
-    } else if (i < oldLines.length) {
-      removed.push(oldLines[i]);
-      i++;
+  let i = m;
+  let j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      added.push(newLines[j - 1]);
+      j--;
     } else {
-      added.push(newLines[j]);
-      j++;
+      removed.push(oldLines[i - 1]);
+      i--;
     }
   }
 
   const totalDiffLines = removed.length + added.length;
   if (totalDiffLines === 0 || totalDiffLines > INLINE_DIFF_THRESHOLD) return null;
+
+  // Reverse since we backtracked from the end
+  removed.reverse();
+  added.reverse();
 
   const lines: string[] = [];
   for (const r of removed) lines.push(`  - ${r.trim()}`);

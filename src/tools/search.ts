@@ -215,6 +215,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 
   const parts: string[] = [];
 
+  let matchesEmitted = 0;
   for (let i = 0; i < windows.length; i++) {
     const window = windows[i];
     let checksumHash = FNV_OFFSET_BASIS;
@@ -228,7 +229,8 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
       lastLine = line.lineNumber;
       checksumHash = foldHash(checksumHash, line.hash);
 
-      const marker = line.isMatch ? "  ← match" : "";
+      const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
+      if (line.isMatch && marker !== "") matchesEmitted++;
       parts.push(`${hashToLetters(line.hash)}.${line.lineNumber}\t${line.text}${marker}`);
     }
 

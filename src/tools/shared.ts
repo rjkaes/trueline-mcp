@@ -94,6 +94,17 @@ export async function validatePath(
     };
   }
 
+  // Reject files over 10 MB to avoid unbounded memory/time in downstream tools.
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  if (fileStat.size > MAX_FILE_SIZE) {
+    return {
+      ok: false,
+      error: errorResult(
+        `"${file_path}" exceeds the 10 MB size limit (${(fileStat.size / 1024 / 1024).toFixed(1)} MB)`,
+      ),
+    };
+  }
+
   return {
     ok: true,
     resolvedPath: realPath,

@@ -149,6 +149,7 @@ export async function streamingEdit(
   let contentChanged = false;
   let totalLines = 0;
   let pendingWrite: Buffer | null = null; // buffered output line (no EOL)
+  let pendingEol: Buffer = LF_BUF; // EOL to use when flushing pendingWrite
   let lastEolBytes: Buffer = EMPTY_BUF; // EOL of the last source line seen
   let outputLineCount = 0;
   let outputChecksumAcc = FNV_OFFSET_BASIS; // full-file checksum of output
@@ -162,14 +163,15 @@ export async function streamingEdit(
   async function flushPending(): Promise<void> {
     if (pendingWrite !== null) {
       await writeBytes(pendingWrite);
-      await writeBytes(detectedEol);
+      await writeBytes(pendingEol);
       pendingWrite = null;
     }
   }
 
-  async function enqueueLine(buf: Buffer, precomputedHash?: number): Promise<void> {
+  async function enqueueLine(buf: Buffer, precomputedHash?: number, eol?: Buffer): Promise<void> {
     await flushPending();
     pendingWrite = buf;
+    pendingEol = eol ?? detectedEol;
     const lineH = precomputedHash ?? fnv1aHashBytes(buf, 0, buf.length);
     outputChecksumAcc = foldHash(outputChecksumAcc, lineH);
     outputLineCount++;
@@ -365,7 +367,7 @@ export async function streamingEdit(
             }
           }
 
-          await enqueueLine(lineBytes, lineH);
+          await enqueueLine(lineBytes, lineH, eolBytes.length > 0 ? eolBytes : undefined);
           if (collector) collector.context(lineBytes.toString(encoding));
 
           for (const iaOp of insertOps) {
@@ -376,7 +378,7 @@ export async function streamingEdit(
         }
       } else {
         // No ops at this line — write raw bytes unchanged
-        await enqueueLine(lineBytes, lineH);
+        await enqueueLine(lineBytes, lineH, eolBytes.length > 0 ? eolBytes : undefined);
         if (collector) collector.context(lineBytes.toString(encoding));
       }
     }
