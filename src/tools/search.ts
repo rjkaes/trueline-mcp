@@ -154,11 +154,11 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
         // Collecting post-context
         currentWindow.lines.push(decoded);
 
-        if (isMatch) {
-          // Another match within post-context range — extend the window
-          // (matchesCaptured was already incremented above if under limit)
+        if (isMatch && matchesCaptured < maxMatches) {
+          // Another captured match within post-context range — extend the window
           postRemaining = contextLines; // reset
         } else {
+          // Non-match line, or a match beyond the capture limit (treat as context)
           postRemaining--;
           if (postRemaining === 0 && matchesCaptured >= maxMatches) {
             // Done collecting post-context for the last captured match

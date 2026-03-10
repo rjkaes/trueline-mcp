@@ -182,11 +182,34 @@ export function computeMiniDiff(oldBody?: string, newBody?: string): string | nu
   const m = oldLines.length;
   const n = newLines.length;
 
-  // Build LCS length table
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (oldLines[i - 1] === newLines[j - 1]) {
+  // Strip common prefix and suffix to shrink the DP table. For typical
+  // diffs (a few lines changed in a large function) this makes the
+  // O(m*n) LCS tractable.
+  let prefixLen = 0;
+  while (prefixLen < m && prefixLen < n && oldLines[prefixLen] === newLines[prefixLen]) prefixLen++;
+
+  let suffixLen = 0;
+  while (
+    suffixLen < m - prefixLen &&
+    suffixLen < n - prefixLen &&
+    oldLines[m - 1 - suffixLen] === newLines[n - 1 - suffixLen]
+  )
+    suffixLen++;
+
+  const oldMid = oldLines.slice(prefixLen, m - suffixLen);
+  const newMid = newLines.slice(prefixLen, n - suffixLen);
+  const mm = oldMid.length;
+  const nn = newMid.length;
+
+  // If the remaining region is still too large, bail out.
+  const MAX_DP_CELLS = 1_000_000;
+  if (mm * nn > MAX_DP_CELLS) return null;
+
+  // Build LCS length table on the trimmed middle region
+  const dp: number[][] = Array.from({ length: mm + 1 }, () => new Array(nn + 1).fill(0));
+  for (let i = 1; i <= mm; i++) {
+    for (let j = 1; j <= nn; j++) {
+      if (oldMid[i - 1] === newMid[j - 1]) {
         dp[i][j] = dp[i - 1][j - 1] + 1;
       } else {
         dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
@@ -197,17 +220,17 @@ export function computeMiniDiff(oldBody?: string, newBody?: string): string | nu
   // Backtrack to find removed/added lines
   const removed: string[] = [];
   const added: string[] = [];
-  let i = m;
-  let j = n;
+  let i = mm;
+  let j = nn;
   while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+    if (i > 0 && j > 0 && oldMid[i - 1] === newMid[j - 1]) {
       i--;
       j--;
     } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      added.push(newLines[j - 1]);
+      added.push(newMid[j - 1]);
       j--;
     } else {
-      removed.push(oldLines[i - 1]);
+      removed.push(oldMid[i - 1]);
       i--;
     }
   }

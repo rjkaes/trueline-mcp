@@ -157,6 +157,7 @@ export async function streamingEdit(
   // Track which replace op we're currently inside (skipping source lines)
   let activeReplace: StreamEditOp | null = null;
   let activeReplaceOrigBytes: Buffer[] = []; // original line bytes for no-op detection
+  let activeReplaceOrigEols: Buffer[] = []; // original EOL bytes for each replaced line
 
   // ---- Helpers ----
 
@@ -208,7 +209,7 @@ export async function streamingEdit(
   //
   // Fast path: when line counts differ, skip Buffer allocation entirely —
   // the content is definitely changed.
-  async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[]): Promise<void> {
+  async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[], origEols?: Buffer[]): Promise<void> {
     if (op.content.length !== origBytes.length) {
       contentChanged = true;
       for (const s of op.content) await enqueueString(s);
@@ -221,7 +222,11 @@ export async function streamingEdit(
     // Same line count — encode and compare byte-by-byte
     const replacementBufs = op.content.map((s) => Buffer.from(s, encoding));
     if (buffersEqual(replacementBufs, origBytes)) {
-      for (const buf of origBytes) await enqueueLine(buf);
+      for (let k = 0; k < origBytes.length; k++) {
+        const eol = origEols?.[k];
+        await enqueueLine(origBytes[k], undefined, eol && eol.length > 0 ? eol : undefined);
+      }
+      if (collector) for (const buf of origBytes) collector.context(buf.toString(encoding));
       if (collector) for (const buf of origBytes) collector.context(buf.toString(encoding));
     } else {
       contentChanged = true;
@@ -292,15 +297,17 @@ export async function streamingEdit(
         }
 
         activeReplaceOrigBytes.push(lineBytes);
+        activeReplaceOrigEols.push(eolBytes);
 
         // End of replace range: write replacement content
         if (lineNumber === activeReplace.endLine) {
           const op = activeReplace;
           activeReplace = null;
 
-          await writeReplaceOrOriginal(op, activeReplaceOrigBytes);
+          await writeReplaceOrOriginal(op, activeReplaceOrigBytes, activeReplaceOrigEols);
 
           activeReplaceOrigBytes = [];
+          activeReplaceOrigEols = [];
 
           // Process insert_after ops at this line
           const opsAtLine = opsByStartLine.get(lineNumber);
@@ -340,7 +347,7 @@ export async function streamingEdit(
 
           if (replaceOp.startLine === replaceOp.endLine) {
             // Single-line replace: handle immediately
-            await writeReplaceOrOriginal(replaceOp, [lineBytes]);
+            await writeReplaceOrOriginal(replaceOp, [lineBytes], [eolBytes]);
 
             // Process insert_after ops at this line
             for (const iaOp of insertOps) {
@@ -352,6 +359,7 @@ export async function streamingEdit(
             // Multi-line replace: enter active replace mode
             activeReplace = replaceOp;
             activeReplaceOrigBytes = [lineBytes];
+            activeReplaceOrigEols = [eolBytes];
 
             // Verify start boundary hash for the end line too (done when we reach it)
             // insert_after ops at endLine will be handled when we reach it
