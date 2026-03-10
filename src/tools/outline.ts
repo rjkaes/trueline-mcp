@@ -85,7 +85,19 @@ async function outlineOneFile(
 
   const ext = extname(validated.resolvedPath).toLowerCase();
 
-  // XML: streaming SAX-style extraction (no tree-sitter grammar, no full-file load)
+  // Streaming extractors (no tree-sitter, no full-file load)
+  if (MARKDOWN_EXTENSIONS.has(ext)) {
+    try {
+      const { entries, totalLines } = await extractMarkdownOutline(validated.resolvedPath);
+      if (entries.length === 0) {
+        return textResult(`(no outline entries found in ${totalLines}-line file)`);
+      }
+      return textResult(formatOutline(entries, totalLines));
+    } catch (err: unknown) {
+      return errorResult(`Markdown outline extraction failed: ${(err as Error).message}`);
+    }
+  }
+
   if (XML_EXTENSIONS.has(ext)) {
     try {
       const { entries, totalLines } = await extractXmlOutline(validated.resolvedPath, depth);
@@ -111,15 +123,6 @@ async function outlineOneFile(
 
   let totalLines = 1;
   for (let i = 0; i < source.length; i++) if (source.charCodeAt(i) === 10) totalLines++;
-
-  // Markdown: regex-based heading extraction (no tree-sitter grammar available)
-  if (MARKDOWN_EXTENSIONS.has(ext)) {
-    const entries = extractMarkdownOutline(source);
-    if (entries.length === 0) {
-      return textResult(`(no outline entries found in ${totalLines}-line file)`);
-    }
-    return textResult(formatOutline(entries, totalLines));
-  }
 
   const config = getLanguageConfig(ext);
   if (!config) {

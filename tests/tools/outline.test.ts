@@ -444,7 +444,7 @@ describe("trueline_outline", () => {
     expect(text).toContain("## Setup");
     expect(text).toContain("### Prerequisites");
     expect(text).toContain("3 symbols");
-    expect(text).toContain("12 source lines");
+    expect(text).toContain("11 source lines"); // streaming counts actual lines (trailing newline terminates line 11)
   });
 
   test("markdown with no headings reports no entries", async () => {
