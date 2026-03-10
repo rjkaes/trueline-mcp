@@ -47,11 +47,7 @@ qk.3	console.log("hello");
 checksum: 1-3:f7e2a1b0
 ```
 
-The **hash** is two characters from a 32-symbol alphabet (`a-z` plus
-`2-7`) derived from the line's content via FNV-1a (a fast,
-non-cryptographic hash). Two characters give 1024 possible values —
-enough to catch accidental mismatches, not enough to be a security
-mechanism.
+The **hash** is two characters from a 26-symbol alphabet (`a-z`) derived from the line's content via FNV-1a (a fast, non-cryptographic hash). Two characters give 676 possible values — enough to catch accidental mismatches, not enough to be a security mechanism.
 
 The **checksum** covers the entire range of lines returned. Its format
 is `startLine-endLine:8hex`, where the hex is an FNV-1a accumulator
