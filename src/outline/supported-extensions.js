@@ -34,4 +34,6 @@ export const OUTLINEABLE_EXTENSIONS = new Set([
   ".zig",
   ".sh",
   ".bash",
+  ".md",
+  ".markdown",
 ]);

@@ -259,8 +259,9 @@ describe("routePreToolUse — common cases", () => {
 });
 
 describe("OUTLINEABLE_EXTENSIONS sync", () => {
-  test("matches LANGUAGES keys in languages.ts", () => {
-    const fromLanguages = new Set(supportedExtensions());
-    expect(OUTLINEABLE_EXTENSIONS).toEqual(fromLanguages);
+  test("contains all LANGUAGES keys from languages.ts", () => {
+    for (const ext of supportedExtensions()) {
+      expect(OUTLINEABLE_EXTENSIONS.has(ext)).toBe(true);
+    }
   });
 });

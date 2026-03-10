@@ -417,6 +417,44 @@ describe("trueline_outline", () => {
     expect(text).toContain("No outline support");
   });
 
+  test("extracts markdown headings", async () => {
+    const file = writeTestFile(
+      "doc.md",
+      [
+        "# Title",
+        "",
+        "Intro paragraph.",
+        "",
+        "## Setup",
+        "",
+        "Instructions.",
+        "",
+        "### Prerequisites",
+        "",
+        "Details.",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+    expect(result.isError).toBeUndefined();
+    const text = getText(result);
+
+    expect(text).toContain("# Title");
+    expect(text).toContain("## Setup");
+    expect(text).toContain("### Prerequisites");
+    expect(text).toContain("3 symbols");
+    expect(text).toContain("12 source lines");
+  });
+
+  test("markdown with no headings reports no entries", async () => {
+    const file = writeTestFile("no-headings.md", "Just plain text.\nNo headings here.\n");
+
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+    expect(result.isError).toBeUndefined();
+    expect(getText(result)).toContain("no outline entries");
+  });
+
   test("errors when file_paths is empty", async () => {
     const result = await handleOutline({ file_paths: [], projectDir: testDir });
     expect(result.isError).toBe(true);

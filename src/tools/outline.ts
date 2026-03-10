@@ -9,6 +9,9 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { extractOutline, formatOutline } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
+import { extractMarkdownOutline } from "../outline/markdown.ts";
+
+const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
@@ -67,10 +70,6 @@ async function outlineOneFile(
   if (!validated.ok) return validated.error;
 
   const ext = extname(validated.resolvedPath).toLowerCase();
-  const config = getLanguageConfig(ext);
-  if (!config) {
-    return textResult(`No outline support for "${ext}" files \u2014 use trueline_read to read this file directly.`);
-  }
 
   let source: string;
   try {
@@ -85,6 +84,20 @@ async function outlineOneFile(
 
   let totalLines = 1;
   for (let i = 0; i < source.length; i++) if (source.charCodeAt(i) === 10) totalLines++;
+
+  // Markdown: regex-based heading extraction (no tree-sitter grammar available)
+  if (MARKDOWN_EXTENSIONS.has(ext)) {
+    const entries = extractMarkdownOutline(source);
+    if (entries.length === 0) {
+      return textResult(`(no outline entries found in ${totalLines}-line file)`);
+    }
+    return textResult(formatOutline(entries, totalLines));
+  }
+
+  const config = getLanguageConfig(ext);
+  if (!config) {
+    return textResult(`No outline support for "${ext}" files \u2014 use trueline_read to read this file directly.`);
+  }
 
   try {
     const entries = await extractOutline(source, config, depth);
