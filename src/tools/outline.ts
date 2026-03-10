@@ -10,8 +10,22 @@ import { extname } from "node:path";
 import { extractOutline, formatOutline } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { extractMarkdownOutline } from "../outline/markdown.ts";
+import { extractXmlOutline } from "../outline/xml.ts";
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
+const XML_EXTENSIONS = new Set([
+  ".xml",
+  ".xsl",
+  ".xslt",
+  ".xhtml",
+  ".svg",
+  ".pom",
+  ".csproj",
+  ".props",
+  ".targets",
+  ".fxml",
+  ".xaml",
+]);
 import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
@@ -70,6 +84,19 @@ async function outlineOneFile(
   if (!validated.ok) return validated.error;
 
   const ext = extname(validated.resolvedPath).toLowerCase();
+
+  // XML: streaming SAX-style extraction (no tree-sitter grammar, no full-file load)
+  if (XML_EXTENSIONS.has(ext)) {
+    try {
+      const { entries, totalLines } = await extractXmlOutline(validated.resolvedPath, depth);
+      if (entries.length === 0) {
+        return textResult(`(no outline entries found in ${totalLines}-line file)`);
+      }
+      return textResult(formatOutline(entries, totalLines));
+    } catch (err: unknown) {
+      return errorResult(`XML outline extraction failed: ${(err as Error).message}`);
+    }
+  }
 
   let source: string;
   try {
