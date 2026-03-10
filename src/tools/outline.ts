@@ -74,7 +74,11 @@ async function outlineOneFile(
 
   let source: string;
   try {
-    source = readFileSync(validated.resolvedPath, "utf-8");
+    const buf = readFileSync(validated.resolvedPath);
+    if (buf.includes(0)) {
+      return errorResult(`"${file_path}" appears to be a binary file`);
+    }
+    source = buf.toString("utf-8");
   } catch (err: unknown) {
     return errorResult(`Error reading file: ${(err as Error).message}`);
   }

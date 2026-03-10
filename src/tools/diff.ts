@@ -4,7 +4,7 @@ import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { validatePath } from "./shared.ts";
-import { type ToolResult, textResult } from "./types.ts";
+import { type ToolResult, textResult, errorResult } from "./types.ts";
 
 interface DiffParams {
   file_paths: string[];
@@ -41,7 +41,11 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     // Read disk content
     let diskContent: string;
     try {
-      diskContent = await readFile(resolvedPath, "utf-8");
+      const buf = await readFile(resolvedPath);
+      if (buf.includes(0)) {
+        return errorResult(`"${filePath}" appears to be a binary file`);
+      }
+      diskContent = buf.toString("utf-8");
     } catch {
       sections.push(`## ${relPath}\n\nFile not readable.`);
       continue;

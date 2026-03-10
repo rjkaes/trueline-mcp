@@ -273,18 +273,17 @@ export async function streamingEdit(
       const lineH = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
       const letters = hashToLetters(lineH);
 
-      // Feed into checksum accumulators
-      while (csIdx < csAccumulators.length) {
-        const acc = csAccumulators[csIdx];
+      // Feed into checksum accumulators. Overlapping ranges are supported:
+      // advance csIdx past fully consumed accumulators, then fold lineH into
+      // every accumulator whose range covers this line.
+      while (csIdx < csAccumulators.length && csAccumulators[csIdx].ref.endLine < lineNumber) {
+        csAccumulators[csIdx].verified = true;
+        csIdx++;
+      }
+      for (let ci = csIdx; ci < csAccumulators.length; ci++) {
+        const acc = csAccumulators[ci];
         if (lineNumber < acc.ref.startLine) break;
-        if (lineNumber > acc.ref.endLine) {
-          acc.verified = true;
-          csIdx++;
-          continue;
-        }
-        // Within this accumulator's range
         acc.hash = foldHash(acc.hash, lineH);
-        break;
       }
 
       // Check if we're inside an active replace range (skipping lines)

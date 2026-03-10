@@ -41,6 +41,11 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   const contextLines = params.context_lines ?? 2;
   const maxMatches = params.max_matches ?? 10;
 
+  const MAX_CONTEXT_LINES = 100_000;
+  if (contextLines < 0 || contextLines > MAX_CONTEXT_LINES || !Number.isFinite(contextLines)) {
+    return errorResult(`context_lines must be between 0 and ${MAX_CONTEXT_LINES}`);
+  }
+
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
