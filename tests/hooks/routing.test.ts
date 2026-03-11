@@ -2,7 +2,7 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { routePreToolUse, estimateEditTokenSavings } from "../../hooks/core/routing.js";
+import { routePreToolUse, estimateEditTokenSavings, isPartialRead } from "../../hooks/core/routing.js";
 import { OUTLINEABLE_EXTENSIONS } from "../../src/outline/supported-extensions.js";
 import { supportedExtensions } from "../../src/outline/languages.js";
 
@@ -70,6 +70,74 @@ describe("routePreToolUse — Read routing", () => {
 
   test("blocks Gemini CLI read_file on large files", async () => {
     const result = await routePreToolUse("read_file", { file_path: largeFile }, alwaysAccessible);
+    expect(result).not.toBeNull();
+    expect(result!.action).toBe("block");
+  });
+});
+
+describe("isPartialRead", () => {
+  test("returns false for undefined/null input", () => {
+    expect(isPartialRead(undefined)).toBe(false);
+    expect(isPartialRead(null as unknown as undefined)).toBe(false);
+  });
+
+  test("returns false for full read (no range fields)", () => {
+    expect(isPartialRead({ file_path: "/tmp/foo.ts" })).toBe(false);
+  });
+
+  test("detects Claude Code / OpenCode offset", () => {
+    expect(isPartialRead({ file_path: "/tmp/foo.ts", offset: 50 })).toBe(true);
+  });
+
+  test("detects Claude Code / OpenCode limit", () => {
+    expect(isPartialRead({ file_path: "/tmp/foo.ts", limit: 100 })).toBe(true);
+  });
+
+  test("detects Gemini CLI start_line", () => {
+    expect(isPartialRead({ file_path: "/tmp/foo.ts", start_line: 10 })).toBe(true);
+  });
+
+  test("detects Gemini CLI end_line", () => {
+    expect(isPartialRead({ file_path: "/tmp/foo.ts", end_line: 50 })).toBe(true);
+  });
+
+  test("ignores zero values (equivalent to full read)", () => {
+    expect(isPartialRead({ file_path: "/tmp/foo.ts", offset: 0 })).toBe(false);
+    expect(isPartialRead({ file_path: "/tmp/foo.ts", start_line: 0 })).toBe(false);
+  });
+
+  test("ignores non-numeric values", () => {
+    expect(isPartialRead({ file_path: "/tmp/foo.ts", offset: "50" })).toBe(false);
+  });
+});
+
+describe("routePreToolUse — partial Read pass-through", () => {
+  test("passes through partial Read on large files (Claude Code offset)", async () => {
+    const result = await routePreToolUse("Read", { file_path: largeFile, offset: 100 }, alwaysAccessible);
+    expect(result).toBeNull();
+  });
+
+  test("passes through partial Read on large files (Claude Code limit)", async () => {
+    const result = await routePreToolUse("Read", { file_path: largeFile, limit: 50 }, alwaysAccessible);
+    expect(result).toBeNull();
+  });
+
+  test("passes through partial Read on large files (Gemini CLI start_line/end_line)", async () => {
+    const result = await routePreToolUse(
+      "read_file",
+      { file_path: largeFile, start_line: 10, end_line: 50 },
+      alwaysAccessible,
+    );
+    expect(result).toBeNull();
+  });
+
+  test("passes through partial Read on large files (OpenCode view offset)", async () => {
+    const result = await routePreToolUse("view", { file_path: largeFile, offset: 200 }, alwaysAccessible);
+    expect(result).toBeNull();
+  });
+
+  test("still blocks full Read on large files", async () => {
+    const result = await routePreToolUse("Read", { file_path: largeFile }, alwaysAccessible);
     expect(result).not.toBeNull();
     expect(result!.action).toBe("block");
   });

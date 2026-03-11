@@ -32,6 +32,11 @@ const TOOL_ALIASES = {
 // Different platforms use different field names for file paths in tool input.
 const FILE_PATH_FIELDS = ["file_path", "path", "target_file"];
 
+// Fields that indicate a partial/ranged read across platforms:
+//   Claude Code / OpenCode: offset, limit
+//   Gemini CLI: start_line, end_line
+const PARTIAL_READ_FIELDS = ["offset", "limit", "start_line", "end_line"];
+
 // Files below this threshold are small enough for built-in tools.
 const LARGE_FILE_THRESHOLD = 15360; // 15KB
 
@@ -62,6 +67,29 @@ export function extractFilePath(toolInput) {
     if (typeof val === "string") return val;
   }
   return null;
+}
+
+/**
+ * Check whether a Read tool call is requesting a partial/ranged read.
+ *
+ * Partial reads already limit context consumption, which is what trueline_read
+ * with targeted ranges accomplishes. Passing them through avoids blocking
+ * reads that are already well-scoped.
+ *
+ * Platform conventions:
+ *   Claude Code / OpenCode: offset (line number), limit (line count)
+ *   Gemini CLI: start_line, end_line (1-based, inclusive)
+ *
+ * @param {Record<string, unknown> | undefined} toolInput
+ * @returns {boolean}
+ */
+export function isPartialRead(toolInput) {
+  if (!toolInput || typeof toolInput !== "object") return false;
+  for (const field of PARTIAL_READ_FIELDS) {
+    const val = toolInput[field];
+    if (typeof val === "number" && val > 0) return true;
+  }
+  return false;
 }
 
 /**
@@ -198,6 +226,11 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
   }
 
   if (canonical === "Read") {
+    // Partial reads (offset/limit, start_line/end_line) already limit context
+    // consumption, which is the same goal as trueline_read with ranges. Let
+    // them through unconditionally.
+    if (isPartialRead(toolInput)) return null;
+
     const canRead = await canAccessFn(filePath, "Read");
     if (!canRead) return null;
 
