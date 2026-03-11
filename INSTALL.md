@@ -148,6 +148,44 @@ to use trueline tools instead of `read_file` and `shell cat`.
 Codex CLI does not support hooks. The instruction file is the only mechanism
 for tool redirection (~60% compliance).
 
+## CLI (no MCP)
+
+For agents that can run shell commands but don't support MCP, trueline
+provides a standalone CLI with the same hash-verified operations.
+
+### 1. Install
+
+```sh
+npm i -g trueline-mcp
+```
+
+This puts the `trueline` command on your PATH.
+
+### 2. Verify
+
+```sh
+trueline --help
+```
+
+### 3. Configure your agent
+
+Add the contents of `configs/cli/instructions.md` to your agent's system
+prompt or instruction file. This teaches the agent the trueline workflow:
+outline, read targeted ranges, search for edit targets, edit with checksums.
+
+The key rules for the agent:
+
+- Use `trueline read` instead of `cat`
+- Use `trueline edit` instead of `sed` or manual file writes
+- Use `trueline outline` to navigate before reading full files
+- Use `trueline search` to find lines with checksums before editing
+
+### 4. Path access
+
+By default the CLI allows access to the current working directory. Set
+`TRUELINE_ALLOWED_DIRS` to a colon-separated list of additional paths,
+or set `CLAUDE_PROJECT_DIR` to override the project root.
+
 ## CLI hook dispatcher
 
 The `trueline-hook` command is the universal entry point for hook integration:

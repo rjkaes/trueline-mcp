@@ -18,6 +18,10 @@ CLI, VS Code Copilot, OpenCode, and Codex CLI.
 **Other platforms** (Gemini CLI, VS Code Copilot, OpenCode, Codex CLI):
 See [INSTALL.md](INSTALL.md) for platform-specific setup.
 
+**CLI (no MCP):** For agents that use shell commands instead of MCP, install
+globally with `npm i -g trueline-mcp` and add `configs/cli/instructions.md`
+to your agent's system prompt. See [INSTALL.md](INSTALL.md#cli-no-mcp).
+
 ## Why
 
 AI coding agents read entire files to find one function, then echo back

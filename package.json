@@ -23,12 +23,14 @@
   ],
   "bin": {
     "trueline-mcp": "./bin/trueline-mcp.js",
-    "trueline-hook": "./bin/trueline-hook.js"
+    "trueline-hook": "./bin/trueline-hook.js",
+    "trueline": "./bin/trueline.js"
   },
   "files": [
     "dist/",
     "bin/",
     "scripts/resolve-binary.cjs",
+    "scripts/resolve-binary-cli.cjs",
     "hooks/",
     "configs/",
     "src/security.js",
@@ -38,7 +40,7 @@
   ],
   "scripts": {
     "dev": "bun run src/server.ts",
-    "build": "bun build src/server.ts --target=node --minify --outfile dist/server.js",
+    "build": "bun build src/server.ts --target=node --minify --outfile dist/server.js && bun build src/cli.ts --target=node --minify --outfile dist/cli.js",
     "prepublishOnly": "bun run build",
     "typecheck": "bun x tsc --noEmit",
     "test": "bun test",
