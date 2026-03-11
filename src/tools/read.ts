@@ -32,6 +32,14 @@ interface ReadParams {
   allowedDirs?: string[];
 }
 
+export interface ReadMultiParams {
+  file_paths: string[];
+  encoding?: string;
+  ranges?: string[];
+  projectDir?: string;
+  allowedDirs?: string[];
+}
+
 export async function handleRead(params: ReadParams): Promise<ToolResult> {
   const { file_path, projectDir, allowedDirs } = params;
 
@@ -150,4 +158,18 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   }
 
   return textResult(Buffer.concat(outputChunks, outputLen).toString(enc));
+}
+
+export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResult> {
+  const { file_paths, ...rest } = params;
+  if (file_paths.length === 1) {
+    return handleRead({ ...rest, file_path: file_paths[0] });
+  }
+  const parts: string[] = [];
+  for (const fp of file_paths) {
+    const result = await handleRead({ ...rest, file_path: fp });
+    const text = result.content[0].text;
+    parts.push(`--- ${fp} ---\n${text}`);
+  }
+  return textResult(parts.join("\n\n"));
 }

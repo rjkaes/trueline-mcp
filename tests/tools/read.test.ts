@@ -2,7 +2,7 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { handleRead } from "../../src/tools/read.ts";
+import { handleRead, handleReadMulti } from "../../src/tools/read.ts";
 import { LINE_PATTERN } from "../helpers.ts";
 
 let testDir: string;
@@ -201,5 +201,38 @@ describe("handleRead", () => {
     const text = result.content[0].text;
     // Format should be hash.lineNumber\tcontent
     expect(text.split("\n")[0]).toMatch(/^[a-z]{2}\.1\t/);
+  });
+
+  test("multi-file read returns all files with headers", async () => {
+    const file2 = join(testDir, "second.ts");
+    writeFileSync(file2, "export const x = 42;\n");
+    const result = await handleReadMulti({
+      file_paths: [testFile, file2],
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain(`--- ${testFile} ---`);
+    expect(text).toContain(`--- ${file2} ---`);
+    expect(text).toContain("const a = 1;");
+    expect(text).toContain("export const x = 42;");
+    // Each file section should have its own checksum
+    const checksums = text.match(/checksum: \d+-\d+:[0-9a-f]+/g);
+    expect(checksums).toHaveLength(2);
+  });
+
+  test("single-file via handleReadMulti delegates to handleRead", async () => {
+    const single = await handleReadMulti({
+      file_paths: [testFile],
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+    const direct = await handleRead({
+      file_path: testFile,
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+    expect(single.content[0].text).toBe(direct.content[0].text);
   });
 });

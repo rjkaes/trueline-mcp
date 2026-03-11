@@ -9,7 +9,7 @@ import type { ToolResult } from "./tools/types.ts";
 import { errorResult } from "./tools/types.ts";
 import { handleDiff } from "./tools/diff.ts";
 import { handleEdit } from "./tools/edit.ts";
-import { handleRead } from "./tools/read.ts";
+import { handleReadMulti } from "./tools/read.ts";
 import { handleOutline } from "./tools/outline.ts";
 import { handleSearch } from "./tools/search.ts";
 import { handleVerify } from "./tools/verify.ts";
@@ -72,19 +72,18 @@ server.registerTool(
   "trueline_read",
   {
     description:
-      'Read a file. Example: {"file_paths": ["src/main.ts"], "ranges": ["10-25"]}. Returns per-line hashes and checksums for editing.',
+      'Read files. Example: {"file_paths": ["src/main.ts"], "ranges": ["10-25"]}. Returns per-line hashes and checksums for editing. Supports multiple files in one call.',
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
         file_paths: z
           .array(z.string(), { required_error: "file_paths is required" })
           .min(1)
-          .max(1)
-          .describe("File to read (single-element array). Accepts file_path as alias."),
+          .describe("One or more files to read. Accepts file_path as alias."),
         ranges: z
           .array(z.string())
           .describe(
-            'Line ranges to read. Omit to read the whole file. Examples: ["10-25"], ["1-50", "200-220"], ["10"] (single line), ["10-"] (to EOF). Each range gets its own checksum.',
+            'Line ranges to read (applied to each file). Omit to read the whole file. Examples: ["10-25"], ["1-50", "200-220"], ["10"] (single line), ["10-"] (to EOF). Each range gets its own checksum.',
           )
           .optional(),
         encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
@@ -92,8 +91,7 @@ server.registerTool(
     ),
   },
   safeTool(async (params) => {
-    const { file_paths, ...rest } = params;
-    return handleRead({ ...rest, file_path: file_paths[0], projectDir, allowedDirs });
+    return handleReadMulti({ ...params, projectDir, allowedDirs });
   }),
 );
 
