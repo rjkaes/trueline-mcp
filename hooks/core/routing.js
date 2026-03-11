@@ -240,14 +240,17 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
 
     // Large files: block and redirect to trueline.
     if (fileSize >= LARGE_FILE_THRESHOLD) {
-      const outlineHint = canOutline ? "Use trueline_outline for structure, or " : "Use ";
+      const outlineHint = canOutline
+        ? "Use trueline_outline for structure or trueline_search to find specific content, then "
+        : "Use trueline_search to find specific content, then ";
       return {
         action: "block",
         reason:
           `<trueline_redirect>This file is ${size}. ` +
           outlineHint +
-          "trueline_read with targeted line ranges " +
-          "to avoid loading the entire file into context.</trueline_redirect>",
+          "trueline_read with targeted line ranges to read only what you need. " +
+          "If you do need the whole file, use a single trueline_read call with no range " +
+          "rather than multiple ranged calls.</trueline_redirect>",
       };
     }
 
