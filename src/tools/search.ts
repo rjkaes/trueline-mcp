@@ -9,7 +9,7 @@
  */
 import { splitLines } from "../line-splitter.ts";
 import { fnv1aHashBytes, hashToLetters, foldHash, FNV_OFFSET_BASIS, formatChecksum } from "../hash.ts";
-import { validatePath } from "./shared.ts";
+import { binaryFileError, isBinaryError, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
 interface SearchParams {
@@ -193,9 +193,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
       }
     }
   } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes("binary")) {
-      return errorResult(`"${file_path}" appears to be a binary file`);
-    }
+    if (isBinaryError(err)) return binaryFileError(file_path);
     throw err;
   }
 

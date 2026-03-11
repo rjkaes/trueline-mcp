@@ -20,7 +20,7 @@ import {
   hashToLetters,
 } from "../hash.ts";
 import { parseRanges, type ReadRange } from "../parse.ts";
-import { validateEncoding, validatePath } from "./shared.ts";
+import { binaryFileError, isBinaryError, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 interface ReadParams {
@@ -97,6 +97,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
         rangeIdx++;
         rangeChecksumHash = FNV_OFFSET_BASIS;
         rangeFirstLine = 0;
+        rangeLastLine = 0;
 
         // Check if new range starts at this line
         if (rangeIdx >= ranges.length) break;
@@ -124,9 +125,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       outputLen += lineLen;
     }
   } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes("binary")) {
-      return errorResult(`"${file_path}" appears to be a binary file`);
-    }
+    if (isBinaryError(err)) return binaryFileError(file_path);
     throw err;
   }
 

@@ -75,8 +75,8 @@ export async function validatePath(
       error: errorResult("Project directory not found or inaccessible"),
     };
   }
-  const resolvedAllowed = await Promise.all(allowedDirs.map((d) => realpath(d).catch(() => d)));
-  const allBases = [realBase, ...resolvedAllowed];
+  // allowedDirs are already resolved to real paths by the caller (server.ts).
+  const allBases = [realBase, ...allowedDirs];
   const isContained = allBases.some((base) => realPath === base || realPath.startsWith(base + sep));
   if (!isContained) {
     return {
@@ -111,6 +111,20 @@ export async function validatePath(
     size: fileStat.size,
     mtimeMs: fileStat.mtimeMs,
   };
+}
+
+// ==============================================================================
+// Binary file detection helper
+// ==============================================================================
+
+/** Check whether an error from `splitLines` indicates a binary file. */
+export function isBinaryError(err: unknown): err is Error {
+  return err instanceof Error && err.message.includes("binary");
+}
+
+/** Return a standard error result for binary file access. */
+export function binaryFileError(filePath: string): ToolResult {
+  return errorResult(`"${filePath}" appears to be a binary file`);
 }
 
 // ==============================================================================

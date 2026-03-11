@@ -488,16 +488,8 @@ export async function streamingEdit(
 
   // ---- No-op: skip write if nothing changed ----
   if (!contentChanged) {
-    if (!dryRun) {
-      await cleanupTmp();
-      return { ok: true, newChecksum: outputChecksumStr(), changed: false };
-    }
-    return {
-      ok: true,
-      newChecksum: outputChecksumStr(),
-      changed: false,
-      tmpPath,
-    };
+    await cleanupTmp();
+    return { ok: true, newChecksum: outputChecksumStr(), changed: false };
   }
 
   // ---- Atomic rename with mtime check ----
