@@ -142,13 +142,13 @@ server.registerTool(
 );
 
 server.registerTool(
-  "trueline_diff",
+  "trueline_changes",
   {
     description:
       "Semantic, AST-based summary of structural changes compared to a git ref. " +
       "Detects added/removed/renamed symbols, signature changes, and logic modifications. " +
       "Pass ALL files in a single call via file_paths (never call once per file). " +
-      "Use instead of `git diff` to review changes with minimal token usage.",
+      "Returns a compact structural summary, not a line-by-line diff.",
     inputSchema: z.preprocess(
       coerceParams,
       z.object({

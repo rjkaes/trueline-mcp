@@ -79,7 +79,7 @@ Multiple edits can be batched in a single call and applied atomically.
 
 ### Review: semantic diffs
 
-`trueline_diff` provides an AST-based summary of structural changes
+`trueline_changes` provides an AST-based summary of structural changes
 compared to a git ref. Instead of raw line diffs, it reports
 added/removed/renamed symbols, signature changes, and logic modifications
 with inline mini-diffs. Pass `["*"]` to diff all changed files at once.

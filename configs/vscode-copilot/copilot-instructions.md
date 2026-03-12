@@ -8,12 +8,12 @@ built-in file operations.
 
 - **trueline_read** — Read a file with per-line hashes and range checksums. Call before editing.
 - **trueline_edit** — Apply hash-verified edits. Each edit needs a checksum from trueline_read.
-- **trueline_diff** — Preview edits as a unified diff without writing to disk.
+- **trueline_changes** — Semantic AST-based summary of structural changes vs a git ref.
 - **trueline_outline** — Get a compact structural outline of a source file.
 
 ## Workflow
 
-trueline_outline (navigate) → trueline_read (targeted ranges) → trueline_diff (optional) → trueline_edit
+trueline_outline (navigate) → trueline_read (targeted ranges) → trueline_changes (optional) → trueline_edit
 
 ## Rules
 

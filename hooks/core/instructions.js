@@ -63,7 +63,7 @@ export function getInstructions(platform = "claude-code") {
   return `<trueline_mcp_instructions>
   <tools>
     <tool name="trueline_outline">Structural outline of one or more files. Returns functions, classes, and declarations with line ranges. Always cheaper than reading the full file.</tool>
-    <tool name="trueline_diff">Semantic AST-based diff vs a git ref. Pass all files in one call via file_paths; use ["*"] for all changed files. No built-in equivalent.</tool>
+    <tool name="trueline_changes">Semantic AST-based diff vs a git ref. Pass all files in one call via file_paths; use ["*"] for all changed files. No built-in equivalent.</tool>
     <tool name="trueline_read">Read files with checksums for editing. Use trueline_outline instead when you only need to understand structure.</tool>
     <tool name="trueline_edit">Hash-verified edits. Needs checksum from trueline_read or trueline_search. Pass dry_run=true to preview as unified diff.</tool>
     <tool name="trueline_search">Literal string search with verification checksums \u2014 returns edit-ready results. Set regex=true for regex. Use for single-file searches when you plan to edit the matches.</tool>
@@ -71,7 +71,7 @@ export function getInstructions(platform = "claude-code") {
   </tools>
   <exploration>
     <rule>To understand a file's structure, use trueline_outline instead of ${p.readTool}. Outline returns ~10-20 lines for a typical file vs hundreds from a full read. This applies to all files, not just large ones.</rule>
-    <rule>To review changes, use trueline_diff. It provides a semantic summary of structural changes (added/removed/renamed symbols, signature changes) that no built-in tool can produce.</rule>
+    <rule>To review changes, use trueline_changes. It provides a semantic summary of structural changes (added/removed/renamed symbols, signature changes) that no built-in tool can produce.</rule>
     <rule>Only use ${p.readTool} for files you need to see in full (short configs, READMEs, files under ~50 lines).</rule>
   </exploration>
   <editing>
@@ -88,7 +88,7 @@ export function getInstructions(platform = "claude-code") {
   <workflow>trueline_search \u2192 trueline_edit (fastest edit path, no read needed)</workflow>
   <workflow>trueline_outline \u2192 trueline_read (targeted ranges) \u2192 trueline_edit</workflow>
   <workflow>trueline_verify \u2192 trueline_read (re-read only stale ranges) \u2192 trueline_edit</workflow>
-  <workflow>trueline_diff \u2192 review structural changes vs git state</workflow>${deferredHint}
+  <workflow>trueline_changes \u2192 review structural changes vs git state</workflow>${deferredHint}
 
   <tips>
     <tip>If you already have hash.line identifiers and a checksum from a prior trueline_read or trueline_search, go straight to trueline_edit. Do not re-read or re-search for data you already have.</tip>

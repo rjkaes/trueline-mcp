@@ -464,7 +464,7 @@ describe("coerceParams", () => {
       });
     });
 
-    test("realistic trueline_diff call with ref alias", () => {
+    test("realistic trueline_changes call with ref alias", () => {
       expect(coerceParams({ file_paths: ["src/server.ts"], ref: "HEAD~1" })).toEqual({
         file_paths: ["src/server.ts"],
         compare_against: "HEAD~1",

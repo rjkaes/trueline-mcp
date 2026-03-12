@@ -35,7 +35,7 @@ describe("Binary file security", () => {
     expect(result.content[0].text).toContain("binary");
   });
 
-  test("trueline_diff should reject binary files", async () => {
+  test("trueline_changes should reject binary files", async () => {
     const result = await handleDiff({
       file_paths: [binaryFile],
       projectDir: testDir,

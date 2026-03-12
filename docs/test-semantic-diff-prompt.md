@@ -1,7 +1,7 @@
 # Test Prompt: Semantic Diff
 
 Use this in a separate Claude Code session pointed at a test project to
-exercise `trueline_diff`. Copy the setup commands first, then paste the
+exercise `trueline_changes`. Copy the setup commands first, then paste the
 test prompt.
 
 ## Setup (run in a temp directory)
@@ -114,7 +114,7 @@ Paste this into a Claude Code session in `/tmp/sdiff-test`:
 
 ---
 
-Use `trueline_diff` to review my changes. Try these scenarios:
+Use `trueline_changes` to review my changes. Try these scenarios:
 
 1. Diff `math.ts` against HEAD
 2. Diff `utils.ts` against HEAD

@@ -12,7 +12,7 @@ describe("getInstructions", () => {
     const out = getInstructions();
     expect(out).toContain("trueline_read");
     expect(out).toContain("trueline_edit");
-    expect(out).toContain("trueline_diff");
+    expect(out).toContain("trueline_changes");
     expect(out).toContain("trueline_outline");
     expect(out).toContain("trueline_search");
     expect(out).toContain("trueline_verify");
@@ -22,7 +22,7 @@ describe("getInstructions", () => {
     const out = getInstructions();
     expect(out).toContain("<exploration>");
     expect(out).toContain("trueline_outline instead of");
-    expect(out).toContain("trueline_diff");
+    expect(out).toContain("trueline_changes");
   });
 
   test("has editing paths: surgical, exploratory, small-edit", () => {

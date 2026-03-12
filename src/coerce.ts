@@ -11,7 +11,7 @@ const PARAM_ALIASES: Record<string, string> = {
   filePaths: "file_paths",
   files: "file_paths",
 
-  // compare_against (trueline_diff)
+  // compare_against (trueline_changes)
   ref: "compare_against",
   base: "compare_against",
   branch: "compare_against",

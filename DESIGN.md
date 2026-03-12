@@ -6,7 +6,7 @@ hashes back — proving the agent is working against the file's actual
 content rather than a stale or hallucinated version.
 
 This document explains how the core tools — `trueline_read`,
-`trueline_edit`, `trueline_diff`, `trueline_outline`, and
+`trueline_edit`, `trueline_changes`, `trueline_outline`, and
 `trueline_search` — work together.
 
 ## The problem
@@ -234,9 +234,9 @@ runs the full verification pipeline and applies edits in memory, but
 writes nothing to disk. Instead, it returns a unified diff. Useful for
 previewing changes before committing to them.
 
-## Semantic diffing: `trueline_diff`
+## Semantic diffing: `trueline_changes`
 
-`trueline_diff` provides a semantic, AST-based summary of structural
+`trueline_changes` provides a semantic, AST-based summary of structural
 changes in one or more files compared to a git ref (default: `HEAD`).
 Instead of showing raw line-by-line diffs, it extracts symbols
 (functions, classes, interfaces, etc.) from both the git version and
@@ -268,7 +268,7 @@ changed within the symbol body.
 
 ### Multi-file support
 
-`trueline_diff` accepts an array of `file_paths`. Passing `["*"]`
+`trueline_changes` accepts an array of `file_paths`. Passing `["*"]`
 expands to all unstaged changed files (tracked + untracked). Each
 file produces its own section in the output. Unsupported file types
 (those without a tree-sitter grammar) are reported as such.

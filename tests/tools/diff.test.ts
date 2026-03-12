@@ -26,7 +26,7 @@ afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
-describe("semantic trueline_diff", () => {
+describe("semantic trueline_changes", () => {
   test("detects added function", async () => {
     const file = join(testDir, "test.ts");
     writeFileSync(file, "function foo() { return 1; }\n");

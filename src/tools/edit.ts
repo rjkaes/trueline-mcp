@@ -30,7 +30,7 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const t0 = performance.now();
   const { file_path, edits, dry_run, projectDir, allowedDirs } = params;
 
-  // dry_run uses Read deny patterns: it's a read-only preview, same as the old trueline_diff
+  // dry_run uses Read deny patterns: it's a read-only preview, same as the old trueline_changes
   const toolName = dry_run ? "Read" : "Edit";
   const validated = await validatePath(file_path, toolName, projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
