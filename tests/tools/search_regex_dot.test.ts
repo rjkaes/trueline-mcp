@@ -3,6 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleSearch } from "../../src/tools/search.ts";
+import { getText } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -18,11 +19,6 @@ beforeAll(() => {
 afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
-
-// biome-ignore lint/suspicious/noExplicitAny: test helper
-function getText(result: any): string {
-  return result.content[0].text;
-}
 
 test("trueline_search with dot regex and max_matches should not return entire file as context", async () => {
   // If we search for "." with max_matches: 2 and context_lines: 5.

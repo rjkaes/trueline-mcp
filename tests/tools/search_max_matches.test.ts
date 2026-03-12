@@ -3,6 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleSearch } from "../../src/tools/search.ts";
+import { getText } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -16,11 +17,6 @@ beforeAll(() => {
 afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
-
-// biome-ignore lint/suspicious/noExplicitAny: test helper
-function getText(result: any): string {
-  return result.content[0].text;
-}
 
 describe("trueline_search max_matches strictness", () => {
   test("max_matches should strictly limit the number of matches shown", async () => {

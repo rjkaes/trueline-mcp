@@ -3,6 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleSearch } from "../../src/tools/search.ts";
+import { getText } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -30,10 +31,6 @@ beforeAll(() => {
 afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
-
-function getText(result: { content: Array<{ text: string }> }): string {
-  return result.content[0].text;
-}
 
 describe("trueline_search", () => {
   test("finds matching lines with context", async () => {

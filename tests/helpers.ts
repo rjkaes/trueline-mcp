@@ -1,4 +1,6 @@
 import { FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, fnv1aHash, formatChecksum, hashToLetters } from "../src/hash.ts";
+import { join } from "node:path";
+import { writeFileSync } from "node:fs";
 
 /**
  * Compute a read-range checksum over a slice of file lines.
@@ -62,3 +64,19 @@ export function hashDotLine(line: string, lineNumber: number): string {
  * trueline_read / trueline_search.
  */
 export const LINE_PATTERN = /^[a-z]{2}\.\d+\t/;
+
+/**
+ * Extract the text string from an MCP tool result.
+ */
+export function getText(result: { content: Array<{ text: string }> }): string {
+  return result.content[0].text;
+}
+
+/**
+ * Write a file into a test directory and return its absolute path.
+ */
+export function writeTestFile(testDir: string, name: string, content: string): string {
+  const path = join(testDir, name);
+  writeFileSync(path, content);
+  return path;
+}

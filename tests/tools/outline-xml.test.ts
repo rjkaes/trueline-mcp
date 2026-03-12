@@ -1,10 +1,12 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleOutline } from "../../src/tools/outline.ts";
+import { getText, writeTestFile as _writeTestFile } from "../helpers.ts";
 
 let testDir: string;
+const writeTestFile = (name: string, content: string) => _writeTestFile(testDir, name, content);
 
 beforeAll(() => {
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-outline-xml-test-")));
@@ -13,16 +15,6 @@ beforeAll(() => {
 afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
-
-function writeTestFile(name: string, content: string): string {
-  const path = join(testDir, name);
-  writeFileSync(path, content);
-  return path;
-}
-
-function getText(result: { content: Array<{ text: string }> }): string {
-  return result.content[0].text;
-}
 
 describe("XML outline", () => {
   test("extracts nested elements with depth", async () => {

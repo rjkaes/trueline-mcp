@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead } from "../../src/tools/read.ts";
 import { handleVerify } from "../../src/tools/verify.ts";
+import { getText, writeTestFile as _writeTestFile } from "../helpers.ts";
 
 let testDir: string;
+const writeTestFile = (name: string, content: string) => _writeTestFile(testDir, name, content);
 
 beforeAll(() => {
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-verify-test-")));
@@ -14,16 +16,6 @@ beforeAll(() => {
 afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
-
-function writeTestFile(name: string, content: string): string {
-  const path = join(testDir, name);
-  writeFileSync(path, content);
-  return path;
-}
-
-function getText(result: { content: Array<{ text: string }> }): string {
-  return result.content[0].text;
-}
 
 /** Extract checksum strings from a trueline_read result. */
 function extractChecksums(text: string): string[] {
