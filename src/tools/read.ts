@@ -156,6 +156,11 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     outputLen += nb.length;
   }
 
+  // Steer agents toward trueline_edit instead of the built-in Edit tool.
+  const hint = Buffer.from("\n\nTo edit: trueline_edit (not Edit tool)");
+  outputChunks.push(hint);
+  outputLen += hint.length;
+
   return textResult(Buffer.concat(outputChunks, outputLen).toString(enc));
 }
 
