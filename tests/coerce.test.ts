@@ -495,4 +495,198 @@ describe("coerceParams", () => {
       });
     });
   });
+
+  // ===========================================================================
+  // Whitespace stripping in ranges and checksums
+  // ===========================================================================
+
+  describe("whitespace stripping", () => {
+    test("strips whitespace from range strings", () => {
+      expect(coerceParams({ ranges: ["10 - 25"] })).toEqual({ ranges: ["10-25"] });
+    });
+
+    test("strips whitespace around dash in range", () => {
+      expect(coerceParams({ ranges: [" 10 - 25 "] })).toEqual({ ranges: ["10-25"] });
+    });
+
+    test("strips whitespace from bare range string", () => {
+      expect(coerceParams({ range: " 10-25 " })).toEqual({ ranges: ["10-25"] });
+    });
+
+    test("strips whitespace from checksum strings", () => {
+      expect(coerceParams({ checksums: ["10 - 25 : f7e2abcd"] })).toEqual({
+        checksums: ["10-25:f7e2abcd"],
+      });
+    });
+
+    test("strips whitespace from edit range", () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab.10 - cd.20", checksum: "1-50:abcd1234", content: "x" }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: "x" }],
+      });
+    });
+
+    test("strips whitespace from edit checksum", () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab.10-cd.20", checksum: "1 - 50 : abcd1234", content: "x" }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: "x" }],
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Checksum # prefix removal
+  // ===========================================================================
+
+  describe("checksum # prefix removal", () => {
+    test("removes # before hex in checksums array", () => {
+      expect(coerceParams({ checksums: ["10-25:#f7e2abcd"] })).toEqual({
+        checksums: ["10-25:f7e2abcd"],
+      });
+    });
+
+    test("removes # before hex in edit checksum", () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab.10", checksum: "1-50:#ABCD1234", content: "x" }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "x" }],
+      });
+    });
+
+    test("combines # removal with whitespace stripping", () => {
+      expect(coerceParams({ checksums: ["10 - 25 : #F7E2ABCD"] })).toEqual({
+        checksums: ["10-25:f7e2abcd"],
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Uppercase hex lowercasing in checksums
+  // ===========================================================================
+
+  describe("checksum hex lowercasing", () => {
+    test("lowercases hex in checksums array", () => {
+      expect(coerceParams({ checksums: ["10-25:F7E2ABCD"] })).toEqual({
+        checksums: ["10-25:f7e2abcd"],
+      });
+    });
+
+    test("lowercases hex in edit checksum", () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab.10", checksum: "1-50:ABCD1234", content: "x" }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "x" }],
+      });
+    });
+
+    test("lowercases mixed-case hex", () => {
+      expect(coerceParams({ checksums: ["1-10:AbCd1234"] })).toEqual({
+        checksums: ["1-10:abcd1234"],
+      });
+    });
+
+    test("lowercases top-level checksum pushed into edits", () => {
+      expect(
+        coerceParams({
+          checksum: "1-50:ABCD1234",
+          edits: [{ range: "ab.10", content: "x" }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "x" }],
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Null/undefined content in edits
+  // ===========================================================================
+
+  describe("null/undefined content in edits", () => {
+    test("coerces null content to empty string", () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: null }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: "" }],
+      });
+    });
+
+    test("coerces undefined content to empty string", () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: undefined }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: "" }],
+      });
+    });
+
+    test("does not coerce empty string content", () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "" }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "" }],
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Built-in Edit tool shape detection
+  // ===========================================================================
+
+  describe("old_string/new_string detection", () => {
+    test("throws when edit has old_string but no range", () => {
+      expect(() =>
+        coerceParams({
+          edits: [{ old_string: "foo", new_string: "bar" }],
+        }),
+      ).toThrow("old_string/new_string");
+    });
+
+    test("throws when edit has only old_string", () => {
+      expect(() =>
+        coerceParams({
+          edits: [{ old_string: "foo" }],
+        }),
+      ).toThrow("old_string/new_string");
+    });
+
+    test("throws when edit has only new_string", () => {
+      expect(() =>
+        coerceParams({
+          edits: [{ new_string: "bar" }],
+        }),
+      ).toThrow("old_string/new_string");
+    });
+
+    test("does not throw when edit has range alongside old_string", () => {
+      // Weird but not the confused-tool-shape case — Zod will strip old_string
+      expect(() =>
+        coerceParams({
+          edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "x", old_string: "foo" }],
+        }),
+      ).not.toThrow();
+    });
+
+    test("error message mentions trueline_search", () => {
+      expect(() =>
+        coerceParams({
+          edits: [{ old_string: "foo", new_string: "bar" }],
+        }),
+      ).toThrow("trueline_search");
+    });
+  });
 });

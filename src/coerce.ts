@@ -50,6 +50,15 @@ const PARAM_ALIASES: Record<string, string> = {
 const NUMERIC_KEYS = ["depth", "context_lines", "max_matches"];
 
 /**
+ * Normalize a checksum string: strip whitespace, remove `#` prefix on the
+ * hex portion (e.g. `"10-25:#F7E2ABCD"` → `"10-25:f7e2abcd"`), and
+ * lowercase hex digits.
+ */
+function normalizeChecksumStr(s: string): string {
+  return s.replace(/\s+/g, "").replace(/:#/, ":").toLowerCase();
+}
+
+/**
  * Preprocess MCP tool parameters to be more permissive about what agents send:
  *
  * 1. **Alias mapping** — `paths` → `file_paths`, `path` → `file_path`, etc.
@@ -111,12 +120,22 @@ export function coerceParams(val: unknown): unknown {
     result.ranges = Object.values(result.ranges as Record<string, unknown>).flat();
   }
   if (Array.isArray(result.ranges)) {
-    result.ranges = (result.ranges as unknown[]).map((r) => (typeof r === "number" ? String(r) : r));
+    result.ranges = (result.ranges as unknown[]).map((r) => {
+      if (typeof r === "number") return String(r);
+      if (typeof r === "string") return r.replace(/\s+/g, "");
+      return r;
+    });
   }
 
-  // Normalize checksums: bare string → single-element array
+  // Normalize checksums: bare string → single-element array, then strip
+  // whitespace, remove # prefix on hex, and lowercase.
   if (typeof result.checksums === "string") {
     result.checksums = [result.checksums];
+  }
+  if (Array.isArray(result.checksums)) {
+    result.checksums = (result.checksums as unknown[]).map((c) =>
+      typeof c === "string" ? normalizeChecksumStr(c) : c,
+    );
   }
 
   // Normalize edits: bare object → single-element array
@@ -134,18 +153,6 @@ export function coerceParams(val: unknown): unknown {
     }
   }
 
-  // Coerce edit sub-objects: join content arrays into newline-separated strings.
-  if (Array.isArray(result.edits)) {
-    for (const edit of result.edits) {
-      if (typeof edit === "object" && edit !== null) {
-        const e = edit as Record<string, unknown>;
-        if (Array.isArray(e.content)) {
-          e.content = (e.content as unknown[]).map(String).join("\n");
-        }
-      }
-    }
-  }
-
   // Push top-level checksum into edits that are missing one.
   // Models sometimes pass {checksum: "...", edits: [{range, content}]}
   // instead of {edits: [{range, content, checksum: "..."}]}.
@@ -156,6 +163,42 @@ export function coerceParams(val: unknown): unknown {
       }
     }
     delete result.checksum;
+  }
+
+  // Coerce edit sub-objects: normalize checksums, ranges, and content.
+  if (Array.isArray(result.edits)) {
+    for (const edit of result.edits) {
+      if (typeof edit === "object" && edit !== null) {
+        const e = edit as Record<string, unknown>;
+
+        // Detect built-in Edit tool shape (old_string/new_string instead of
+        // range/checksum/content). Can't recover, but give a helpful error.
+        if (("old_string" in e || "new_string" in e) && !("range" in e)) {
+          throw new Error(
+            "Edit uses old_string/new_string format (from the built-in Edit tool). " +
+              "trueline_edit requires {range, checksum, content}. " +
+              "Use trueline_search to find the target lines, then pass the range and checksum from its output.",
+          );
+        }
+
+        // content: null/undefined → "" (delete lines)
+        if (e.content === null || e.content === undefined) {
+          e.content = "";
+        }
+        // content: array → newline-joined string
+        if (Array.isArray(e.content)) {
+          e.content = (e.content as unknown[]).map(String).join("\n");
+        }
+        // Normalize checksum: strip whitespace, remove # prefix, lowercase hex
+        if (typeof e.checksum === "string") {
+          e.checksum = normalizeChecksumStr(e.checksum);
+        }
+        // Strip whitespace from range
+        if (typeof e.range === "string") {
+          e.range = (e.range as string).replace(/\s+/g, "");
+        }
+      }
+    }
   }
 
   return result;

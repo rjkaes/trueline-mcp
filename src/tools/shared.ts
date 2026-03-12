@@ -39,6 +39,14 @@ export async function validatePath(
   projectDir: string | undefined,
   allowedDirs: string[] = [],
 ): Promise<ValidatePathResult> {
+  // Reject wildcard — only trueline_changes supports "*" via its own handler.
+  if (file_path === "*") {
+    return {
+      ok: false,
+      error: errorResult('Wildcard "*" is only supported by trueline_changes. Pass an explicit file path.'),
+    };
+  }
+
   const resolvedPath = file_path.startsWith("/") ? file_path : resolve(projectDir ?? process.cwd(), file_path);
 
   // Resolve symlinks and check containment to prevent path traversal (#4/#5).
