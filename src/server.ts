@@ -77,8 +77,9 @@ server.registerTool(
       coerceParams,
       z.object({
         file_paths: z
-          .array(z.string(), { required_error: "file_paths is required" })
-          .min(1)
+          .array(z.string())
+          .min(1, 'file_paths is required — pass an array of file paths to read, e.g. {"file_paths": ["src/main.ts"]}')
+          .default([])
           .describe("One or more files to read. Accepts file_path as alias."),
         ranges: z
           .array(z.string())
@@ -106,9 +107,10 @@ server.registerTool(
       coerceParams,
       z.object({
         file_paths: z
-          .array(z.string(), { required_error: "file_paths is required" })
-          .min(1)
+          .array(z.string())
+          .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
           .max(1)
+          .default([])
           .describe("File to edit (single-element array). Accepts file_path as alias."),
         edits: z
           .array(
@@ -153,8 +155,12 @@ server.registerTool(
       coerceParams,
       z.object({
         file_paths: z
-          .array(z.string({ required_error: "file_paths is required" }))
-          .min(1)
+          .array(z.string())
+          .min(
+            1,
+            'file_paths is required — pass an array of file paths, e.g. {"file_paths": ["src/app.ts"]}. Use ["*"] for all changed files.',
+          )
+          .default([])
           .describe('Paths to diff. Pass multiple files in one call. Use ["*"] for all changed files.'),
         compare_against: z
           .string()
@@ -178,7 +184,12 @@ server.registerTool(
       coerceParams,
       z.object({
         file_paths: z
-          .array(z.string({ required_error: "file_paths is required" }))
+          .array(z.string())
+          .min(
+            1,
+            'file_paths is required — pass an array of file paths to outline, e.g. {"file_paths": ["src/main.ts"]}',
+          )
+          .default([])
           .describe("One or more absolute or project-relative file paths to outline."),
         depth: z
           .number()
@@ -206,9 +217,10 @@ server.registerTool(
       coerceParams,
       z.object({
         file_paths: z
-          .array(z.string(), { required_error: "file_paths is required" })
-          .min(1)
+          .array(z.string())
+          .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
           .max(1)
+          .default([])
           .describe("File to search (single-element array). Accepts file_path as alias."),
         pattern: z
           .string({ required_error: "pattern is required" })
@@ -249,9 +261,10 @@ server.registerTool(
       coerceParams,
       z.object({
         file_paths: z
-          .array(z.string(), { required_error: "file_paths is required" })
-          .min(1)
+          .array(z.string())
+          .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
           .max(1)
+          .default([])
           .describe("File to verify (single-element array). Accepts file_path as alias."),
         checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
       }),
