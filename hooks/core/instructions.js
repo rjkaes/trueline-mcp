@@ -62,7 +62,7 @@ export function getInstructions(platform = "claude-code") {
 
   return `<trueline_mcp_instructions>
   <tools>
-    <tool name="trueline_outline">Structural outline of one or more files. Returns functions, classes, and declarations with line ranges. Always cheaper than reading the full file.</tool>
+    <tool name="trueline_outline">List functions, classes, types, and key structures in the specified files (requires file_paths). Supports code, markdown (headings), and XML (elements). Returns line ranges. Always cheaper than reading the full file.</tool>
     <tool name="trueline_changes">Semantic AST-based diff vs a git ref. Pass all files in one call via file_paths; use ["*"] for all changed files. No built-in equivalent.</tool>
     <tool name="trueline_read">Read files with checksums for editing. Use trueline_outline instead when you only need to understand structure.</tool>
     <tool name="trueline_edit">Hash-verified edits. Needs checksum from trueline_read or trueline_search. Pass dry_run=true to preview as unified diff.</tool>

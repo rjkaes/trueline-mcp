@@ -178,7 +178,8 @@ server.registerTool(
   "trueline_outline",
   {
     description:
-      "Get a compact structural outline of source files (functions, classes, types, etc.) without reading the full content. " +
+      "List functions, classes, types, and key structures in the specified files (requires file_paths). " +
+      "Supports code (functions/classes), markdown (headings), and XML (elements). " +
       "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections.",
     inputSchema: z.preprocess(
       coerceParams,

@@ -1,4 +1,4 @@
-// Extensions with tree-sitter grammar support for trueline_outline.
+// Extensions supported by trueline_outline (tree-sitter grammars + custom parsers for md/xml).
 // Single source of truth: imported by both src/outline/languages.ts and hooks/core/routing.js.
 export const OUTLINEABLE_EXTENSIONS = new Set([
   ".ts",

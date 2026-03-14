@@ -255,7 +255,7 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
     }
 
     // Small files: advise outline/search but let the read through.
-    // Only mention outline when the file type has a tree-sitter grammar.
+    // Only mention outline when the file type supports it (tree-sitter or custom parser).
     if (canOutline) {
       return {
         action: "advise",
