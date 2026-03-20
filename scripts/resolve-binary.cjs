@@ -66,10 +66,18 @@ function ensureDeps() {
 
 ensureDeps();
 
+const srcEntry = path.join(pluginRoot, "src", "server.ts");
+const distEntry = path.join(pluginRoot, "dist", "server.js");
+
 let cmd, args;
-if (hasBun()) {
+if (hasBun() && existsSync(srcEntry)) {
+  // Dev / plugin-clone context: run TypeScript source directly.
   cmd = "bun";
-  args = [path.join(pluginRoot, "src", "server.ts")];
+  args = [srcEntry];
+} else if (hasBun()) {
+  // npx / npm-install context: src/ isn't published, use bundled JS.
+  cmd = "bun";
+  args = [distEntry];
 } else if (hasDeno()) {
   cmd = "deno";
   args = ["run", "-A", path.join(pluginRoot, "dist", "server.js")];
