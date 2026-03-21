@@ -23,11 +23,12 @@ function run(...args: string[]): { stdout: string; stderr: string; exitCode: num
       env: { ...process.env, TRUELINE_ALLOWED_DIRS: tmpDir },
     });
     return { stdout, stderr: "", exitCode: 0 };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const e = err as { stdout?: Buffer; stderr?: Buffer; status?: number };
     return {
-      stdout: err.stdout?.toString() ?? "",
-      stderr: err.stderr?.toString() ?? "",
-      exitCode: err.status ?? 1,
+      stdout: e.stdout?.toString() ?? "",
+      stderr: e.stderr?.toString() ?? "",
+      exitCode: e.status ?? 1,
     };
   }
 }

@@ -20,7 +20,10 @@ function laxify(schema: z.AnyZodObject): z.AnyZodObject {
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const [key, value] of Object.entries(schema.shape as Record<string, z.ZodTypeAny>)) {
     if (key === "file_paths") {
-      shape[key] = z.array(z.string()).optional().describe(value.description ?? "");
+      shape[key] = z
+        .array(z.string())
+        .optional()
+        .describe(value.description ?? "");
     } else {
       shape[key] = value;
     }
@@ -30,7 +33,12 @@ function laxify(schema: z.AnyZodObject): z.AnyZodObject {
 
 // Simulate the MCP SDK's normalizeObjectSchema check
 function hasVisibleShape(schema: unknown): boolean {
-  return typeof schema === "object" && schema !== null && "shape" in schema && (schema as any).shape !== undefined;
+  return (
+    typeof schema === "object" &&
+    schema !== null &&
+    "shape" in schema &&
+    (schema as Record<string, unknown>).shape !== undefined
+  );
 }
 
 describe("tools/list JSON Schema generation", () => {
@@ -57,7 +65,9 @@ describe("tools/list JSON Schema generation", () => {
       encoding: z.string().optional().describe("Encoding."),
     });
     const lax = laxify(inner);
-    const jsonSchema = zodToJsonSchema(lax, { strictUnions: true }) as any;
+    const jsonSchema = zodToJsonSchema(lax, { strictUnions: true }) as {
+      properties: Record<string, Record<string, unknown>>;
+    };
 
     expect(jsonSchema.properties).toBeDefined();
     expect(Object.keys(jsonSchema.properties).length).toBeGreaterThan(0);
@@ -73,7 +83,9 @@ describe("tools/list JSON Schema generation", () => {
       depth: z.number().optional().describe("Nesting depth."),
     });
     const lax = laxify(inner);
-    const jsonSchema = zodToJsonSchema(lax, { strictUnions: true }) as any;
+    const jsonSchema = zodToJsonSchema(lax, { strictUnions: true }) as {
+      properties: Record<string, Record<string, unknown>>;
+    };
 
     expect(jsonSchema.properties.file_paths.description).toBe("Files to process.");
     expect(jsonSchema.properties.depth.description).toBe("Nesting depth.");

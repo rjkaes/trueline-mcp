@@ -42,7 +42,10 @@ function laxify(schema: z.AnyZodObject): z.AnyZodObject {
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const [key, value] of Object.entries(schema.shape as Record<string, z.ZodTypeAny>)) {
     if (key === "file_paths") {
-      shape[key] = z.array(z.string()).optional().describe(value.description ?? "");
+      shape[key] = z
+        .array(z.string())
+        .optional()
+        .describe(value.description ?? "");
     } else {
       shape[key] = value;
     }
@@ -199,19 +202,14 @@ server.registerTool(
 const outlineSchema = z.object({
   file_paths: z
     .array(z.string())
-    .min(
-      1,
-      'file_paths is required — pass an array of file paths to outline, e.g. {"file_paths": ["src/main.ts"]}',
-    )
+    .min(1, 'file_paths is required — pass an array of file paths to outline, e.g. {"file_paths": ["src/main.ts"]}')
     .default([])
     .describe("One or more absolute or project-relative file paths to outline."),
   depth: z
     .number()
     .int()
     .min(0)
-    .describe(
-      "Maximum nesting depth. 0 = top-level only, 1 = include class/interface members. Omit for all levels.",
-    )
+    .describe("Maximum nesting depth. 0 = top-level only, 1 = include class/interface members. Omit for all levels.")
     .optional(),
 });
 
@@ -240,23 +238,10 @@ const searchSchema = z.object({
   pattern: z
     .string({ required_error: "pattern is required" })
     .describe("Search string. Literal by default; set regex=true for regular expressions."),
-  context_lines: z
-    .number()
-    .int()
-    .min(0)
-    .describe("Lines of context above/below each match. Default: 2.")
-    .optional(),
-  max_matches: z
-    .number()
-    .int()
-    .positive()
-    .describe("Maximum number of matches to return. Default: 10.")
-    .optional(),
+  context_lines: z.number().int().min(0).describe("Lines of context above/below each match. Default: 2.").optional(),
+  max_matches: z.number().int().positive().describe("Maximum number of matches to return. Default: 10.").optional(),
   case_insensitive: z.boolean().describe("Case-insensitive matching. Default: false.").optional(),
-  regex: z
-    .boolean()
-    .describe("Treat pattern as a regular expression. Default: false (literal match).")
-    .optional(),
+  regex: z.boolean().describe("Treat pattern as a regular expression. Default: false (literal match).").optional(),
 });
 
 server.registerTool(

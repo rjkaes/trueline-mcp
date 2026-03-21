@@ -162,7 +162,7 @@ describe("logical bugs and edge cases", () => {
   test("coerceParams standardizes singular file_path to file_paths array", () => {
     const { coerceParams } = require("../src/coerce.ts");
     const input = { file_path: "foo.ts", edits: "[]" };
-    const output: any = coerceParams(input);
+    const output: Record<string, unknown> = coerceParams(input);
     expect(Array.isArray(output.file_paths)).toBe(true);
     expect(output.file_paths[0]).toBe("foo.ts");
     // Should also parse stringified JSON for edits
