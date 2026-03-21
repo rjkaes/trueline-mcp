@@ -28,6 +28,28 @@ function safeTool<P>(handler: (params: P) => Promise<ToolResult>): (params: P) =
   };
 }
 
+/**
+ * Create a lenient version of a tool schema for the MCP SDK's tools/list response.
+ *
+ * The MCP SDK's normalizeObjectSchema() can't see through z.preprocess() (ZodEffects),
+ * so tools/list emits empty `{type: "object", properties: {}}` for all our tools.
+ * This function takes the raw z.object() schema and:
+ * 1. Adds .passthrough() so alias keys (file_path, path, etc.) survive SDK validation
+ * 2. Makes file_paths optional (strips min/default) so validation doesn't reject
+ *    requests that provide file paths via an alias — coercion happens in the handler
+ */
+function laxify(schema: z.AnyZodObject): z.AnyZodObject {
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const [key, value] of Object.entries(schema.shape as Record<string, z.ZodTypeAny>)) {
+    if (key === "file_paths") {
+      shape[key] = z.array(z.string()).optional().describe(value.description ?? "");
+    } else {
+      shape[key] = value;
+    }
+  }
+  return z.object(shape).passthrough();
+}
+
 const VERSION = pkg.version;
 
 const server = new McpServer({
@@ -68,33 +90,64 @@ async function resolveAllowedDirs(): Promise<string[]> {
 
 const allowedDirs = await resolveAllowedDirs();
 
+const readSchema = z.object({
+  file_paths: z
+    .array(z.string())
+    .min(1, 'file_paths is required — pass an array of file paths to read, e.g. {"file_paths": ["src/main.ts"]}')
+    .default([])
+    .describe("One or more files to read. Accepts file_path as alias."),
+  ranges: z
+    .array(z.string())
+    .describe(
+      'Line ranges to read (applied to each file). Omit to read the whole file. Examples: ["10-25"], ["1-50", "200-220"], ["10"] (single line), ["10-"] (to EOF). Each range gets its own checksum.',
+    )
+    .optional(),
+  encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
+});
+
 server.registerTool(
   "trueline_read",
   {
     description:
       'Read files. Example: {"file_paths": ["src/main.ts"], "ranges": ["10-25"]}. Returns per-line hashes and checksums for editing. Supports multiple files in one call.',
-    inputSchema: z.preprocess(
-      coerceParams,
-      z.object({
-        file_paths: z
-          .array(z.string())
-          .min(1, 'file_paths is required — pass an array of file paths to read, e.g. {"file_paths": ["src/main.ts"]}')
-          .default([])
-          .describe("One or more files to read. Accepts file_path as alias."),
-        ranges: z
-          .array(z.string())
-          .describe(
-            'Line ranges to read (applied to each file). Omit to read the whole file. Examples: ["10-25"], ["1-50", "200-220"], ["10"] (single line), ["10-"] (to EOF). Each range gets its own checksum.',
-          )
-          .optional(),
-        encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
-      }),
-    ),
+    inputSchema: laxify(readSchema),
   },
-  safeTool(async (params) => {
+  safeTool(async (rawParams) => {
+    const params = readSchema.parse(coerceParams(rawParams));
     return handleReadMulti({ ...params, projectDir, allowedDirs });
   }),
 );
+
+const editSchema = z.object({
+  file_paths: z
+    .array(z.string())
+    .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
+    .max(1)
+    .default([])
+    .describe("File to edit (single-element array). Accepts file_path as alias."),
+  edits: z
+    .array(
+      z.object({
+        checksum: z
+          .string()
+          .describe(
+            'Required. Checksum from trueline_read or trueline_search (e.g. "1-50:f7e2abcd"). ' +
+              "Must cover this edit's target lines.",
+          ),
+        range: z
+          .string()
+          .describe(
+            'Lines to replace in hash.line format copied from output: "ab.10-cd.20" (range), "ab.10" (single line), "+ab.10" (insert after). ' +
+              "The 2-letter hash before each line number is required.",
+          ),
+
+        content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
+      }),
+    )
+    .min(1),
+  encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
+  dry_run: z.boolean().describe("Preview edits as unified diff without writing. Defaults to false.").optional(),
+});
 
 server.registerTool(
   "trueline_edit",
@@ -103,45 +156,29 @@ server.registerTool(
       "Apply hash-verified edits to a file. Edits go in the edits array. " +
       'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", checksum: "8-25:f7e2abcd", content: "new text"}]}. ' +
       "Copy the 2-letter hash prefix (ab, cd, ...) from trueline_read/trueline_search output.",
-    inputSchema: z.preprocess(
-      coerceParams,
-      z.object({
-        file_paths: z
-          .array(z.string())
-          .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
-          .max(1)
-          .default([])
-          .describe("File to edit (single-element array). Accepts file_path as alias."),
-        edits: z
-          .array(
-            z.object({
-              checksum: z
-                .string()
-                .describe(
-                  'Required. Checksum from trueline_read or trueline_search (e.g. "1-50:f7e2abcd"). ' +
-                    "Must cover this edit's target lines.",
-                ),
-              range: z
-                .string()
-                .describe(
-                  'Lines to replace in hash.line format copied from output: "ab.10-cd.20" (range), "ab.10" (single line), "+ab.10" (insert after). ' +
-                    "The 2-letter hash before each line number is required.",
-                ),
-
-              content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
-            }),
-          )
-          .min(1),
-        encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
-        dry_run: z.boolean().describe("Preview edits as unified diff without writing. Defaults to false.").optional(),
-      }),
-    ),
+    inputSchema: laxify(editSchema),
   },
-  safeTool(async (params) => {
+  safeTool(async (rawParams) => {
+    const params = editSchema.parse(coerceParams(rawParams));
     const { file_paths, ...rest } = params;
     return handleEdit({ ...rest, file_path: file_paths[0], projectDir, allowedDirs });
   }),
 );
+
+const changesSchema = z.object({
+  file_paths: z
+    .array(z.string())
+    .min(
+      1,
+      'file_paths is required — pass an array of file paths, e.g. {"file_paths": ["src/app.ts"]}. Use ["*"] for all changed files.',
+    )
+    .default([])
+    .describe('Paths to diff. Pass multiple files in one call. Use ["*"] for all changed files.'),
+  compare_against: z
+    .string()
+    .describe('Git ref to compare against. Defaults to "HEAD". Use ":0" for staged content.')
+    .optional(),
+});
 
 server.registerTool(
   "trueline_changes",
@@ -151,28 +188,32 @@ server.registerTool(
       "Detects added/removed/renamed symbols, signature changes, and logic modifications. " +
       "Pass ALL files in a single call via file_paths (never call once per file). " +
       "Returns a compact structural summary, not a line-by-line diff.",
-    inputSchema: z.preprocess(
-      coerceParams,
-      z.object({
-        file_paths: z
-          .array(z.string())
-          .min(
-            1,
-            'file_paths is required — pass an array of file paths, e.g. {"file_paths": ["src/app.ts"]}. Use ["*"] for all changed files.',
-          )
-          .default([])
-          .describe('Paths to diff. Pass multiple files in one call. Use ["*"] for all changed files.'),
-        compare_against: z
-          .string()
-          .describe('Git ref to compare against. Defaults to "HEAD". Use ":0" for staged content.')
-          .optional(),
-      }),
-    ),
+    inputSchema: laxify(changesSchema),
   },
-  safeTool(async (params) => {
+  safeTool(async (rawParams) => {
+    const params = changesSchema.parse(coerceParams(rawParams));
     return handleDiff({ ...params, projectDir, allowedDirs });
   }),
 );
+
+const outlineSchema = z.object({
+  file_paths: z
+    .array(z.string())
+    .min(
+      1,
+      'file_paths is required — pass an array of file paths to outline, e.g. {"file_paths": ["src/main.ts"]}',
+    )
+    .default([])
+    .describe("One or more absolute or project-relative file paths to outline."),
+  depth: z
+    .number()
+    .int()
+    .min(0)
+    .describe(
+      "Maximum nesting depth. 0 = top-level only, 1 = include class/interface members. Omit for all levels.",
+    )
+    .optional(),
+});
 
 server.registerTool(
   "trueline_outline",
@@ -181,32 +222,42 @@ server.registerTool(
       "List functions, classes, types, and key structures in the specified files (requires file_paths). " +
       "Supports code (functions/classes), markdown (headings), and XML (elements). " +
       "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections.",
-    inputSchema: z.preprocess(
-      coerceParams,
-      z.object({
-        file_paths: z
-          .array(z.string())
-          .min(
-            1,
-            'file_paths is required — pass an array of file paths to outline, e.g. {"file_paths": ["src/main.ts"]}',
-          )
-          .default([])
-          .describe("One or more absolute or project-relative file paths to outline."),
-        depth: z
-          .number()
-          .int()
-          .min(0)
-          .describe(
-            "Maximum nesting depth. 0 = top-level only, 1 = include class/interface members. Omit for all levels.",
-          )
-          .optional(),
-      }),
-    ),
+    inputSchema: laxify(outlineSchema),
   },
-  safeTool(async (params) => {
+  safeTool(async (rawParams) => {
+    const params = outlineSchema.parse(coerceParams(rawParams));
     return handleOutline({ ...params, projectDir, allowedDirs });
   }),
 );
+
+const searchSchema = z.object({
+  file_paths: z
+    .array(z.string())
+    .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
+    .max(1)
+    .default([])
+    .describe("File to search (single-element array). Accepts file_path as alias."),
+  pattern: z
+    .string({ required_error: "pattern is required" })
+    .describe("Search string. Literal by default; set regex=true for regular expressions."),
+  context_lines: z
+    .number()
+    .int()
+    .min(0)
+    .describe("Lines of context above/below each match. Default: 2.")
+    .optional(),
+  max_matches: z
+    .number()
+    .int()
+    .positive()
+    .describe("Maximum number of matches to return. Default: 10.")
+    .optional(),
+  case_insensitive: z.boolean().describe("Case-insensitive matching. Default: false.").optional(),
+  regex: z
+    .boolean()
+    .describe("Treat pattern as a regular expression. Default: false (literal match).")
+    .optional(),
+});
 
 server.registerTool(
   "trueline_search",
@@ -214,43 +265,24 @@ server.registerTool(
     description:
       "Search a file for a literal string or regex pattern. Returns matching lines with context, per-line hashes, and checksums \u2014 " +
       "ready for immediate editing. Use instead of outline+read when you know what to look for.",
-    inputSchema: z.preprocess(
-      coerceParams,
-      z.object({
-        file_paths: z
-          .array(z.string())
-          .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
-          .max(1)
-          .default([])
-          .describe("File to search (single-element array). Accepts file_path as alias."),
-        pattern: z
-          .string({ required_error: "pattern is required" })
-          .describe("Search string. Literal by default; set regex=true for regular expressions."),
-        context_lines: z
-          .number()
-          .int()
-          .min(0)
-          .describe("Lines of context above/below each match. Default: 2.")
-          .optional(),
-        max_matches: z
-          .number()
-          .int()
-          .positive()
-          .describe("Maximum number of matches to return. Default: 10.")
-          .optional(),
-        case_insensitive: z.boolean().describe("Case-insensitive matching. Default: false.").optional(),
-        regex: z
-          .boolean()
-          .describe("Treat pattern as a regular expression. Default: false (literal match).")
-          .optional(),
-      }),
-    ),
+    inputSchema: laxify(searchSchema),
   },
-  safeTool(async (params) => {
+  safeTool(async (rawParams) => {
+    const params = searchSchema.parse(coerceParams(rawParams));
     const { file_paths, ...rest } = params;
     return handleSearch({ ...rest, file_path: file_paths[0], projectDir, allowedDirs });
   }),
 );
+
+const verifySchema = z.object({
+  file_paths: z
+    .array(z.string())
+    .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
+    .max(1)
+    .default([])
+    .describe("File to verify (single-element array). Accepts file_path as alias."),
+  checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
+});
 
 server.registerTool(
   "trueline_verify",
@@ -258,20 +290,10 @@ server.registerTool(
     description:
       "Validate held checksums against a file. Returns which are valid or stale. " +
       "Cheaper than re-reading \u2014 use before editing when the file may have changed.",
-    inputSchema: z.preprocess(
-      coerceParams,
-      z.object({
-        file_paths: z
-          .array(z.string())
-          .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
-          .max(1)
-          .default([])
-          .describe("File to verify (single-element array). Accepts file_path as alias."),
-        checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
-      }),
-    ),
+    inputSchema: laxify(verifySchema),
   },
-  safeTool(async (params) => {
+  safeTool(async (rawParams) => {
+    const params = verifySchema.parse(coerceParams(rawParams));
     const { file_paths, ...rest } = params;
     return handleVerify({ ...rest, file_path: file_paths[0], projectDir, allowedDirs });
   }),
