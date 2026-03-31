@@ -10,9 +10,11 @@
 // The file is never loaded into memory as a whole.
 // ==============================================================================
 
+import { open } from "node:fs/promises";
 import { unlink } from "node:fs/promises";
 import { relative } from "node:path";
 import { DiffCollector } from "../diff-collector.ts";
+import { detectBOM } from "../encoding.ts";
 import { streamingEdit } from "../streaming-edit.ts";
 import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
@@ -47,9 +49,28 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const built = validateEdits(edits);
   if (!built.ok) return built.error;
 
+  // Detect BOM to pass encoding info through to streamingEdit for round-trip fidelity
+  const fd = await open(resolvedPath, "r");
+  const bomBuf = Buffer.alloc(4);
+  try {
+    await fd.read(bomBuf, 0, 4);
+  } finally {
+    await fd.close();
+  }
+  const bomInfo = detectBOM(bomBuf);
+
   if (dry_run) {
     const collector = new DiffCollector();
-    const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true, enc, collector);
+    const result = await streamingEdit(
+      resolvedPath,
+      built.ops,
+      built.checksumRefs,
+      mtimeMs,
+      true,
+      enc,
+      collector,
+      bomInfo,
+    );
 
     if (!result.ok) return errorResult(result.error);
     if (!result.changed) return textResult("(no changes)");
@@ -68,7 +89,16 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     return textResult(diff);
   }
 
-  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, false, enc);
+  const result = await streamingEdit(
+    resolvedPath,
+    built.ops,
+    built.checksumRefs,
+    mtimeMs,
+    false,
+    enc,
+    undefined,
+    bomInfo,
+  );
 
   if (!result.ok) {
     return errorResult(result.error);

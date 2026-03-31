@@ -31,7 +31,8 @@ import {
   formatChecksum,
   hashToLetters,
 } from "./hash.ts";
-import { EMPTY_BUF, LF_BUF, splitLines } from "./line-splitter.ts";
+import { EMPTY_BUF, LF_BUF } from "./line-splitter.ts";
+import { transcodedLines, bomBytes, encodeBuffer, encodeString, type BOMInfo } from "./encoding.ts";
 import type { DiffCollector } from "./diff-collector.ts";
 import type { ChecksumRef } from "./parse.ts";
 
@@ -79,6 +80,7 @@ export async function streamingEdit(
   dryRun = false,
   encoding: BufferEncoding = "utf-8",
   collector?: DiffCollector,
+  fileBomInfo?: BOMInfo,
 ): Promise<StreamingEditResult> {
   // ---- Sort ops ascending by startLine, insert_after after replace at same line ----
   const indexed = ops.map((op, i) => ({ op, i }));
@@ -109,6 +111,20 @@ export async function streamingEdit(
   }));
   let csIdx = 0;
 
+  // ---- Encoding ----
+  const isUtf16 = fileBomInfo?.encoding === "utf-16le" || fileBomInfo?.encoding === "utf-16be";
+  const targetEncoding = fileBomInfo?.encoding ?? "utf-8";
+
+  /** Encode a UTF-8 Buffer for the target file encoding. Identity for UTF-8. */
+  function encodeForWrite(buf: Buffer): Buffer {
+    return isUtf16 ? encodeBuffer(buf, targetEncoding) : buf;
+  }
+
+  /** Encode a UTF-8 EOL Buffer for the target file encoding. */
+  function encodeEolForWrite(eol: Buffer): Buffer {
+    return isUtf16 ? encodeString(eol.toString("utf-8"), targetEncoding) : eol;
+  }
+
   // ---- Temp file setup ----
   const dir = dirname(resolvedPath);
   const tmpName = `.trueline-tmp-${randomBytes(6).toString("hex")}`;
@@ -121,6 +137,14 @@ export async function streamingEdit(
   const WRITE_BUF_SIZE = 65536;
   const writeBuf = Buffer.allocUnsafe(WRITE_BUF_SIZE);
   let writeBufPos = 0;
+
+  // Write BOM if the original file had one
+  if (fileBomInfo?.hasBOM) {
+    const bom = bomBytes(fileBomInfo);
+    if (bom.length > 0) {
+      await fd.write(bom, 0, bom.length);
+    }
+  }
 
   async function flushWriteBuf(): Promise<void> {
     if (writeBufPos > 0) {
@@ -163,8 +187,8 @@ export async function streamingEdit(
 
   async function flushPending(): Promise<void> {
     if (pendingWrite !== null) {
-      await writeBytes(pendingWrite);
-      await writeBytes(pendingEol);
+      await writeBytes(encodeForWrite(pendingWrite));
+      await writeBytes(encodeEolForWrite(pendingEol));
       pendingWrite = null;
     }
   }
@@ -257,8 +281,11 @@ export async function streamingEdit(
   }
 
   // ---- Stream source file ----
+  // transcodedLines handles BOM stripping and UTF-16→UTF-8 transcoding.
+  // After this point, lineBytes are always UTF-8 regardless of original encoding.
+  const transcoded = await transcodedLines(resolvedPath, { detectBinary: !isUtf16 });
   try {
-    for await (const { lineBytes, eolBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: true })) {
+    for await (const { lineBytes, eolBytes, lineNumber } of transcoded.lines) {
       totalLines = lineNumber;
       lastEolBytes = eolBytes;
 
@@ -406,10 +433,10 @@ export async function streamingEdit(
   // EOL based on whether the original file had a trailing newline.
   try {
     if (pendingWrite !== null) {
-      await writeBytes(pendingWrite);
+      await writeBytes(encodeForWrite(pendingWrite));
       // If the last source line had a non-empty eolBytes, the file had a trailing newline
       if (lastEolBytes.length > 0) {
-        await writeBytes(detectedEol);
+        await writeBytes(encodeEolForWrite(detectedEol));
       }
     }
   } catch (err) {

@@ -10,7 +10,8 @@
 // end.  This avoids a per-line `Buffer.toString()` allocation.
 // ==============================================================================
 
-import { splitLines, LF_BUF } from "../line-splitter.ts";
+import { LF_BUF } from "../line-splitter.ts";
+import { transcodedLines } from "../encoding.ts";
 import {
   EMPTY_FILE_CHECKSUM,
   FNV_OFFSET_BASIS,
@@ -75,8 +76,12 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   let outputLines = 0;
   let truncated = false;
 
+  // Resolve encoding before streaming — transcodedLines peeks at the BOM.
+  const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
+  const { bomInfo } = transcoded;
+
   try {
-    for await (const { lineBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: true })) {
+    for await (const { lineBytes, lineNumber } of transcoded.lines) {
       totalLines = lineNumber;
 
       // Past all ranges — stop early
@@ -156,12 +161,22 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     outputLen += nb.length;
   }
 
+  // Include encoding metadata when non-default, so trueline_edit can round-trip
+  if (bomInfo.hasBOM) {
+    const encLabel = bomInfo.encoding === "utf-8" ? "utf-8-bom" : bomInfo.encoding;
+    const encLine = Buffer.from(`\nencoding: ${encLabel}`);
+    outputChunks.push(encLine);
+    outputLen += encLine.length;
+  }
+
   // Steer agents toward trueline_edit instead of the built-in Edit tool.
   const hint = Buffer.from("\n\nTo edit: trueline_edit (not Edit tool)");
   outputChunks.push(hint);
   outputLen += hint.length;
 
-  return textResult(Buffer.concat(outputChunks, outputLen).toString(enc));
+  // UTF-16 content has been transcoded to UTF-8; always decode output as UTF-8.
+  const outputEnc = bomInfo.encoding === "utf-8" ? enc : "utf-8";
+  return textResult(Buffer.concat(outputChunks, outputLen).toString(outputEnc));
 }
 
 export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResult> {
