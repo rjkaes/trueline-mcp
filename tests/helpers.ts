@@ -9,13 +9,27 @@ import { writeFileSync } from "node:fs";
  * streaming reads. Tests need a standalone version to fabricate valid
  * checksum strings for `handleEdit` / `handleDiff` inputs.
  */
-export function rangeChecksum(lines: string[], startLine: number, endLine: number): string {
+export function rangeChecksum(
+  lines: string[],
+  startLine: number,
+  endLine: number,
+  options?: { decimal?: boolean },
+): string {
   let hash = FNV_OFFSET_BASIS;
   const effectiveEnd = Math.min(endLine, lines.length);
+  let firstLetters = "";
+  let lastLetters = "";
   for (let i = startLine - 1; i < effectiveEnd; i++) {
-    hash = foldHash(hash, fnv1aHash(lines[i]));
+    const h = fnv1aHash(lines[i]);
+    const letters = hashToLetters(h);
+    if (i === startLine - 1) firstLetters = letters;
+    lastLetters = letters;
+    hash = foldHash(hash, h);
   }
-  return formatChecksum(startLine, effectiveEnd, hash);
+  if (options?.decimal) {
+    return formatChecksum(startLine, effectiveEnd, hash);
+  }
+  return formatChecksum(startLine, effectiveEnd, hash, firstLetters, lastLetters);
 }
 
 /**
@@ -35,10 +49,16 @@ export function lineHash(line: string): string {
  */
 export function rawRangeChecksum(bufs: Buffer[], startLine: number, endLine: number): string {
   let hash = FNV_OFFSET_BASIS;
+  let firstLetters = "";
+  let lastLetters = "";
   for (let i = 0; i < bufs.length; i++) {
-    hash = foldHash(hash, fnv1aHashBytes(bufs[i], 0, bufs[i].length));
+    const h = fnv1aHashBytes(bufs[i], 0, bufs[i].length);
+    const letters = hashToLetters(h);
+    if (i === 0) firstLetters = letters;
+    lastLetters = letters;
+    hash = foldHash(hash, h);
   }
-  return formatChecksum(startLine, endLine, hash);
+  return formatChecksum(startLine, endLine, hash, firstLetters, lastLetters);
 }
 
 /**

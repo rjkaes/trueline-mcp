@@ -280,7 +280,7 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("line2");
 
     // Check checksum to ensure it was correctly identified as 2 lines
-    expect(text).toContain("checksum: 1-2:");
+    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.2:/);
   });
 
   test("concurrent modification detection (mtime change)", async () => {
@@ -404,7 +404,7 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("line2");
     expect(text).toContain("line3");
     expect(text).toContain("line4");
-    expect(text).toContain("checksum: 1-4:");
+    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.4:/);
   });
 
   test("insert-after at last line of file without trailing newline", async () => {
@@ -508,7 +508,7 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     expect(text).toContain("line2");
-    expect(text).toContain("checksum: 1-2:");
+    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.2:/);
   });
 
   test("splitLines handles \\r at chunk boundary (not followed by \\n)", async () => {
@@ -522,7 +522,7 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     expect(text).toContain("line2");
-    expect(text).toContain("checksum: 1-2:");
+    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.2:/);
   });
 
   test("handleSearch with extremely long line in context", async () => {
@@ -594,9 +594,9 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     // Should have merged into 1-5 and 7-8
-    expect(text).toContain("checksum: 1-5:");
-    expect(text).toContain("checksum: 7-8:");
-    expect(text).not.toContain("checksum: 3-5:");
+    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.5:/);
+    expect(text).toMatch(/checksum: [a-z]{2}\.7-[a-z]{2}\.8:/);
+    expect(text).not.toMatch(/checksum: [a-z]{2}\.3-[a-z]{2}\.5:/);
   });
 
   test("handleSearch with empty pattern", async () => {
@@ -658,7 +658,7 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("line1");
     expect(text).toContain("line2");
     expect(text).toContain("line3");
-    expect(text).toContain("checksum: 1-3:");
+    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.3:/);
   });
 
   test("handleSearch pattern matching tab separator", async () => {

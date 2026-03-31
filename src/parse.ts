@@ -115,42 +115,58 @@ export interface ChecksumRef {
 }
 
 /**
- * Parse a checksum string like "10-25:f7e2abcd" from trueline_read.
+ * Parse a checksum string from trueline_read.
  *
- * Format: "<startLine>-<endLine>:<8hex>"
- * The special sentinel "0-0:<8hex>" represents an empty file.
+ * Accepts both the legacy decimal format ("9-10:abcdef01") and the new
+ * hash.line format ("aj.9-na.10:abcdef01") as well as mixed and single-line
+ * forms. Strips a "checksum: " label prefix and trims whitespace so the
+ * caller can paste output verbatim without pre-processing.
+ *
+ * The special sentinel "0-0:00000000" represents an empty file.
  * Throws on invalid format.
  */
 export function parseChecksum(checksum: string): ChecksumRef {
-  const dashIdx = checksum.indexOf("-");
-  if (dashIdx === -1) {
-    throw new Error(`Invalid checksum "${checksum}" — expected format "startLine-endLine:hex"`);
+  // Step 1: Normalize — trim then strip the "checksum: " label if present.
+  let raw = checksum.trim();
+  if (raw.startsWith("checksum:")) {
+    raw = raw.slice("checksum:".length).trimStart();
   }
 
-  const colonIdx = checksum.indexOf(":", dashIdx);
+  // Step 2: Split on the last ":" to separate the range part from the hex hash.
+  // We use lastIndexOf so that dots/letters in hash.line refs don't interfere.
+  const colonIdx = raw.lastIndexOf(":");
   if (colonIdx === -1) {
-    throw new Error(`Invalid checksum "${checksum}" — expected format "startLine-endLine:hex"`);
+    throw new Error(`Invalid checksum "${checksum}" — expected format "startLine-endLine:hex", e.g. "9-10:ab12cd34"`);
   }
 
-  // Slice all three parts up front, then validate formats.
-  const startStr = checksum.slice(0, dashIdx);
-  const endStr = checksum.slice(dashIdx + 1, colonIdx);
-  const hash = checksum.slice(colonIdx + 1);
+  const rangePart = raw.slice(0, colonIdx);
+  const hash = raw.slice(colonIdx + 1);
 
-  // Validate decimal integers before Number() conversion to reject
-  // scientific notation (e.g. "1e2" → 100) and empty/whitespace strings.
-  if (!DECIMAL_INT.test(startStr)) {
-    throw new Error(`Invalid checksum "${checksum}" — start line must be a decimal integer`);
-  }
-  if (!DECIMAL_INT.test(endStr)) {
-    throw new Error(`Invalid checksum "${checksum}" — end line must be a decimal integer`);
-  }
   if (!/^[0-9a-f]{8}$/.test(hash)) {
     throw new Error(`Invalid checksum "${checksum}" — hash must be 8 hex chars, got "${hash}"`);
   }
 
-  const startLine = Number(startStr);
-  const endLine = Number(endStr);
+  // Step 3: Find the dash separating start from end. The first "-" that is
+  // immediately preceded by a digit (not a letter) is the range separator.
+  const dashIdx = findRangeDash(rangePart);
+
+  let startRef: string;
+  let endRef: string;
+
+  if (dashIdx === -1) {
+    // Single-line reference: start = end.
+    startRef = rangePart;
+    endRef = rangePart;
+  } else {
+    startRef = rangePart.slice(0, dashIdx);
+    endRef = rangePart.slice(dashIdx + 1);
+  }
+
+  const start = extractLineNumber(startRef, checksum, "start");
+  const end = extractLineNumber(endRef, checksum, "end");
+
+  const startLine = start.line;
+  const endLine = end.line;
 
   // 0-0 is the empty-file sentinel; any other use of 0 is invalid.
   if (startLine === 0 && endLine !== 0) {
@@ -163,7 +179,62 @@ export function parseChecksum(checksum: string): ChecksumRef {
     throw new Error(`Invalid checksum "${checksum}" — empty-file sentinel must have hash 00000000`);
   }
 
-  return { startLine, endLine, hash };
+  const result: ChecksumRef = { startLine, endLine, hash };
+  return result;
+}
+
+/**
+ * Find the index of the "-" that separates the start ref from the end ref.
+ *
+ * Strategy: scan for the first "-" that is immediately preceded by a digit.
+ * In "aj.9-na.10" the separator is at index 4 (after "9").
+ * In "9-10" it's at index 1 (after "9").
+ * Returns -1 if no range dash is found (single-line reference).
+ */
+function findRangeDash(rangePart: string): number {
+  for (let i = 1; i < rangePart.length; i++) {
+    const c = rangePart.charCodeAt(i - 1);
+    if (rangePart[i] === "-" && c >= 48 && c <= 57) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Parse a single side of a checksum range — either "aj.9" or "9" format.
+ * Returns the line number and optional 2-letter hash prefix.
+ */
+function extractLineNumber(
+  ref: string,
+  originalInput: string,
+  which: "start" | "end",
+): { line: number; hashPrefix?: string } {
+  const dotIdx = ref.indexOf(".");
+  if (dotIdx !== -1) {
+    // hash.line format: "aj.9"
+    const hashPrefix = ref.slice(0, dotIdx);
+    const lineStr = ref.slice(dotIdx + 1);
+    if (!/^[a-z]{2}$/.test(hashPrefix)) {
+      throw new Error(
+        `Invalid checksum "${originalInput}" — ${which} hash prefix must be 2 lowercase letters, got "${hashPrefix}"`,
+      );
+    }
+    if (!DECIMAL_INT.test(lineStr)) {
+      throw new Error(
+        `Invalid checksum "${originalInput}" — ${which} line must be a decimal integer, got "${lineStr}"`,
+      );
+    }
+    return { line: Number(lineStr), hashPrefix };
+  }
+
+  // Decimal format: "9"
+  if (!DECIMAL_INT.test(ref)) {
+    throw new Error(
+      `Invalid checksum "${originalInput}" — ${which} line must be a decimal integer (expected format "aj.9-na.10:hex" or "9-10:hex")`,
+    );
+  }
+  return { line: Number(ref) };
 }
 
 export interface ReadRange {

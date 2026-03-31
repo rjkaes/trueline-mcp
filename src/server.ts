@@ -143,8 +143,8 @@ const editSchema = z.object({
         checksum: z
           .string()
           .describe(
-            'Required. Checksum from trueline_read or trueline_search (e.g. "1-50:f7e2abcd"). ' +
-              "Must cover this edit's target lines.",
+            'Required. Checksum from trueline_read or trueline_search output (e.g. "aj.9-na.10:f7e2abcd"). ' +
+              "Copy verbatim. Must cover the edit's target lines.",
           ),
         range: z
           .string()
@@ -166,7 +166,7 @@ server.registerTool(
   {
     description:
       "Apply hash-verified edits to a file. Edits go in the edits array. " +
-      'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", checksum: "8-25:f7e2abcd", content: "new text"}]}. ' +
+      'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", checksum: "ab.10-cd.20:f7e2abcd", content: "new text"}]}. ' +
       "Copy the 2-letter hash prefix (ab, cd, ...) from trueline_read/trueline_search output.",
     inputSchema: laxify(editSchema),
   },

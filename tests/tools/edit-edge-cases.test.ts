@@ -493,7 +493,9 @@ describe("checksum validation", () => {
   test("checksum range exceeding file length fails", async () => {
     const { path, lines } = setupFile("short.txt", "aaa\nbbb\n");
     // Fabricate a checksum claiming to cover lines 1-10
-    const fakeCs = rangeChecksum(lines, 1, 2).replace(/^1-2:/, "1-10:");
+    const realCs = rangeChecksum(lines, 1, 2);
+    const hashHex = realCs.slice(realCs.indexOf(":") + 1);
+    const fakeCs = `1-10:${hashHex}`;
 
     const result = await handleEdit({
       file_path: path,

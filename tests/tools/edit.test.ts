@@ -479,4 +479,25 @@ describe("handleEdit", () => {
       expect(result.isError).toBe(true);
     });
   });
+
+  // ===========================================================================
+  // Omitted range — derive edit target from checksum
+  // ===========================================================================
+
+  test("explicit range narrows edit within wider checksum", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const cs = rangeChecksum(lines, 1, 4);
+    const h2 = lineHash("line 2");
+    const h3 = lineHash("line 3");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ checksum: cs, range: `${h2}.2-${h3}.3`, content: "replaced 2\nreplaced 3" }],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(testFile, "utf-8");
+    expect(written).toBe("line 1\nreplaced 2\nreplaced 3\nline 4\n");
+  });
 });

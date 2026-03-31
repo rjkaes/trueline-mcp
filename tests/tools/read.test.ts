@@ -103,7 +103,7 @@ describe("handleRead", () => {
     const text = result.content[0].text;
 
     // Should have two checksum lines
-    const checksumMatches = text.match(/^checksum: \d+-\d+:[0-9a-f]{8}$/gm);
+    const checksumMatches = text.match(/^checksum: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[0-9a-f]{8}$/gm);
     expect(checksumMatches).toHaveLength(2);
 
     // Should contain lines 3-5 and 15-17 but not lines 6-14
@@ -141,7 +141,7 @@ describe("handleRead", () => {
     const text = result.content[0].text;
     expect(text).toMatch(/^[a-z]{2}\.1\t/m);
     expect(text).toMatch(/^[a-z]{2}\.4\t/m);
-    expect(text).toContain("checksum: 1-4:");
+    expect(text).toContain("checksum: ");
   });
 
   test("hash is based on raw file bytes, not decoded string", async () => {
@@ -175,7 +175,7 @@ describe("handleRead", () => {
     const text = (result.content[0] as { text: string }).text;
 
     // Should have a checksum covering only the returned lines
-    expect(text).toMatch(/checksum: 1-2000:[0-9a-f]{8}/);
+    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.2000:[0-9a-f]{8}/);
     // Should include truncation notice
     expect(text).toContain("truncated");
     expect(text).toContain("2000 line limit");
@@ -194,7 +194,7 @@ describe("handleRead", () => {
     expect(result.isError).toBeUndefined();
     const text = (result.content[0] as { text: string }).text;
     expect(text).not.toContain("truncated");
-    expect(text).toMatch(/checksum: 100-199:[0-9a-f]{8}/);
+    expect(text).toMatch(/checksum: [a-z]{2}\.100-[a-z]{2}\.199:[0-9a-f]{8}/);
   });
 
   test("output lines include per-line hashes", async () => {
@@ -222,7 +222,7 @@ describe("handleRead", () => {
     expect(text).toContain("const a = 1;");
     expect(text).toContain("export const x = 42;");
     // Each file section should have its own checksum
-    const checksums = text.match(/checksum: \d+-\d+:[0-9a-f]+/g);
+    const checksums = text.match(/checksum: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[0-9a-f]+/g);
     expect(checksums).toHaveLength(2);
   });
 

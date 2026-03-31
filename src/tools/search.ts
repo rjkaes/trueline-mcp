@@ -225,12 +225,19 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     let checksumHash = FNV_OFFSET_BASIS;
     let firstLine = 0;
     let lastLine = 0;
+    let firstLetters = "";
+    let lastLetters = "";
 
     if (i > 0) parts.push("");
 
     for (const line of window.lines) {
-      if (firstLine === 0) firstLine = line.lineNumber;
+      const letters = hashToLetters(line.hash);
+      if (firstLine === 0) {
+        firstLine = line.lineNumber;
+        firstLetters = letters;
+      }
       lastLine = line.lineNumber;
+      lastLetters = letters;
       checksumHash = foldHash(checksumHash, line.hash);
 
       const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
@@ -239,7 +246,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     }
 
     parts.push("");
-    parts.push(`checksum: ${formatChecksum(firstLine, lastLine, checksumHash)}`);
+    parts.push(`checksum: ${formatChecksum(firstLine, lastLine, checksumHash, firstLetters, lastLetters)}`);
   }
 
   // Truncation notice

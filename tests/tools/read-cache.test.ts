@@ -41,7 +41,7 @@ describe("read cache — unchanged file", () => {
     expect(t2).not.toContain("line one");
 
     // Stub includes checksums
-    expect(t2).toMatch(/checksum: \d+-\d+:[0-9a-f]+/);
+    expect(t2).toMatch(/checksum: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[0-9a-f]+/);
 
     // Checksums match between full read and stub
     const cs1 = t1.match(/checksum: (\S+)/)?.[1];

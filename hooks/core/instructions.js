@@ -79,9 +79,9 @@ export function getInstructions(platform = "claude-code") {
     <path name="exploratory">When you need context first: trueline_outline \u2192 trueline_read (targeted ranges) to understand, then trueline_search or trueline_read \u2192 trueline_edit.</path>
     <path name="small-edit">For files under ~200 lines or trivial one-line changes: ${p.readTool} and ${p.editTool} are fine. The MCP round-trip overhead outweighs hash verification savings on small files.</path>
     <example name="search-then-edit">
-      trueline_search output shows: ab.10 old line one / cd.11 old line two / checksum: 8-12:f7e2abcd
-      \u2192 trueline_edit: range="ab.10-cd.11", checksum="8-12:f7e2abcd", content="new line one\\nnew line two"
-      Key: range uses the hash.line identifiers (ab.10, cd.11) from the output. checksum is always required.
+      trueline_search output shows: ab.10 old line one / cd.11 old line two / checksum: ab.10-cd.11:f7e2abcd
+      \u2192 trueline_edit: range="ab.10-cd.11", checksum="ab.10-cd.11:f7e2abcd", content="new line one\\nnew line two"
+      Key: both range and checksum use the same hash.line format. Copy checksum verbatim from the "checksum:" line in output. range specifies which lines to replace.
     </example>
   </editing>
   <workflow>trueline_outline \u2192 understand structure (any file, any size)</workflow>

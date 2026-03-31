@@ -739,7 +739,7 @@ describe("read-then-edit round-trip", () => {
     expect(readResult.isError).toBeUndefined();
 
     // Extract checksum from read output
-    const csMatch = readResult.content[0].text.match(/checksum:\s*(\d+-\d+:[0-9a-f]+)/);
+    const csMatch = readResult.content[0].text.match(/checksum:\s*([a-z]{2}\.\d+-[a-z]{2}\.\d+:[0-9a-f]+)/);
     expect(csMatch).not.toBeNull();
 
     const hBeta = lineHash("beta");
@@ -764,7 +764,7 @@ describe("read-then-edit round-trip", () => {
     });
     expect(readResult.isError).toBeUndefined();
 
-    const csMatch = readResult.content[0].text.match(/checksum:\s*(\d+-\d+:[0-9a-f]+)/);
+    const csMatch = readResult.content[0].text.match(/checksum:\s*([a-z]{2}\.\d+-[a-z]{2}\.\d+:[0-9a-f]+)/);
     expect(csMatch).not.toBeNull();
 
     const hCcc = lineHash("ccc");

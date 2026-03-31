@@ -95,9 +95,19 @@ export function foldHash(accumulator: number, h: number): number {
   return accumulator;
 }
 
-/** Format a checksum as `"<start>-<end>:<8hex>"`. */
-export function formatChecksum(startLine: number, endLine: number, hash: number): string {
-  return `${startLine}-${endLine}:${hash.toString(16).padStart(8, "0")}`;
+/** Format a checksum as `"<start>-<end>:<8hex>"`, optionally with hash letters. */
+export function formatChecksum(
+  startLine: number,
+  endLine: number,
+  hash: number,
+  startLetters?: string,
+  endLetters?: string,
+): string {
+  const hex = hash.toString(16).padStart(8, "0");
+  if (startLetters && endLetters) {
+    return `${startLetters}.${startLine}-${endLetters}.${endLine}:${hex}`;
+  }
+  return `${startLine}-${endLine}:${hex}`;
 }
 
 /**

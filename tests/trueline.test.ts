@@ -48,7 +48,7 @@ describe("rangeChecksum", () => {
   test("produces startLine-endLine:8hex format", () => {
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
-    expect(cs).toMatch(/^1-3:[0-9a-f]{8}$/);
+    expect(cs).toMatch(/^[a-z]{2}\.1-[a-z]{2}\.3:[0-9a-f]{8}$/);
   });
 
   test("deterministic for same content", () => {
@@ -65,7 +65,7 @@ describe("rangeChecksum", () => {
   test("clamps endLine to file length", () => {
     const lines = ["a", "b"];
     const cs = rangeChecksum(lines, 1, 10);
-    expect(cs).toMatch(/^1-2:[0-9a-f]{8}$/);
+    expect(cs).toMatch(/^[a-z]{2}\.1-[a-z]{2}\.2:[0-9a-f]{8}$/);
     expect(cs).toBe(rangeChecksum(lines, 1, 2));
   });
 });

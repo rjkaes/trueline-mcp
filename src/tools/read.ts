@@ -120,6 +120,8 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   let rangeChecksumHash = FNV_OFFSET_BASIS;
   let rangeFirstLine = 0;
   let rangeLastLine = 0;
+  let rangeFirstLetters = "";
+  let rangeLastLetters = "";
   let totalLines = 0;
   let outputLines = 0;
   let truncated = false;
@@ -143,7 +145,13 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
       // Past current range — close it, advance
       if (lineNumber > currentRange.end) {
-        const cs = formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash);
+        const cs = formatChecksum(
+          rangeFirstLine,
+          rangeLastLine,
+          rangeChecksumHash,
+          rangeFirstLetters,
+          rangeLastLetters,
+        );
         collectedChecksums.push(cs);
         const checksumLine = `\nchecksum: ${cs}\n`;
         const cb = Buffer.from(checksumLine);
@@ -154,6 +162,8 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
         rangeChecksumHash = FNV_OFFSET_BASIS;
         rangeFirstLine = 0;
         rangeLastLine = 0;
+        rangeFirstLetters = "";
+        rangeLastLetters = "";
 
         // Check if new range starts at this line
         if (rangeIdx >= ranges.length) break;
@@ -162,10 +172,13 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       }
 
       // Within current range — hash and output
-      if (rangeFirstLine === 0) rangeFirstLine = lineNumber;
-
       const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
-      const prefix = Buffer.from(`${hashToLetters(h)}.${lineNumber}\t`);
+      const letters = hashToLetters(h);
+      if (rangeFirstLine === 0) {
+        rangeFirstLine = lineNumber;
+        rangeFirstLetters = letters;
+      }
+      const prefix = Buffer.from(`${letters}.${lineNumber}\t`);
       const lineLen = prefix.length + lineBytes.length + 1;
 
       // Check output limits before committing this line
@@ -174,6 +187,9 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
         truncated = true;
         break;
       }
+
+      rangeLastLine = lineNumber;
+      rangeLastLetters = letters;
 
       rangeLastLine = lineNumber;
       rangeChecksumHash = foldHash(rangeChecksumHash, h);
@@ -198,7 +214,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   // Emit checksum for the last range (only if we output any lines in it)
   if (rangeFirstLine > 0 && rangeLastLine > 0) {
-    const cs = formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash);
+    const cs = formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash, rangeFirstLetters, rangeLastLetters);
     collectedChecksums.push(cs);
     const checksumLine = `\nchecksum: ${cs}`;
     const cb = Buffer.from(checksumLine);
