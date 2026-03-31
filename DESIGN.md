@@ -1,13 +1,13 @@
 # trueline Protocol Design
 
 trueline is a file-editing protocol for AI agents. Every line the agent
-reads carries a short content hash, and every edit must present those
-hashes back — proving the agent is working against the file's actual
-content rather than a stale or hallucinated version.
+reads carries a short content hash, and every edit must present a
+server-issued ref token back — proving the agent is working against the
+file's actual content rather than a stale or hallucinated version.
 
 This document explains how the core tools — `trueline_read`,
-`trueline_edit`, `trueline_changes`, `trueline_outline`, and
-`trueline_search` — work together.
+`trueline_edit`, `trueline_verify`, `trueline_changes`,
+`trueline_outline`, and `trueline_search` — work together.
 
 ## The problem
 
@@ -23,8 +23,8 @@ tool-use setups), two things can go wrong silently:
    matches an unintended location.
 
 trueline prevents both by requiring the agent to echo back per-line
-hashes and a range checksum. If anything is wrong, the edit is rejected
-before any bytes hit disk.
+hashes and a server-issued ref. If anything is wrong, the edit is
+rejected before any bytes hit disk.
 
 ## Line format
 
@@ -44,18 +44,22 @@ ab.1	#!/usr/bin/env node
 mp.2	import { readFile } from "fs/promises";
 qk.3	console.log("hello");
 
-checksum: 1-3:f7e2a1b0
+ref: R1 (lines 1-3)
 ```
 
 The **hash** is two characters from a 26-symbol alphabet (`a-z`) derived from the line's content via FNV-1a (a fast, non-cryptographic hash). Two characters give 676 possible values — enough to catch accidental mismatches, not enough to be a security mechanism.
 
-The **checksum** covers the entire range of lines returned. Its format
-is `startLine-endLine:8hex`, where the hex is an FNV-1a accumulator
-over the full 32-bit hashes of each line in the range. This is
-deliberately stronger than the 2-letter per-line hashes: the
-accumulator feeds all four bytes of each line's hash into a second
-FNV-1a pass, giving much better collision resistance over the whole
-range.
+The **ref** is a short opaque token (e.g. `R1`, `R2`) issued by the
+server for each range of lines returned. Internally, the server maps
+each ref to the file path, line range, and an FNV-1a checksum over
+those lines. The agent copies the ref verbatim into `trueline_edit`;
+it never sees or handles raw checksums.
+
+The internal checksum is an FNV-1a accumulator over the full 32-bit
+hashes of each line in the range. This is deliberately stronger than
+the 2-letter per-line hashes: the accumulator feeds all four bytes of
+each line's hash into a second FNV-1a pass, giving much better
+collision resistance over the whole range.
 
 ## Reading: `trueline_read`
 
@@ -77,26 +81,25 @@ file into memory. The pipeline:
    `start_line` are counted and skipped; lines after `end_line` stop
    the stream early.
 4. Computes FNV-1a hashes and formats as truelines.
-5. Computes and appends the range checksum.
+5. Issues a ref token for each range and appends it to the output.
 
 ### Partial reads
 
-When `ranges` are specified, each range produces its own checksum
+When `ranges` are specified, each range produces its own ref
 covering only those lines. This matters for `trueline_edit`: the
-checksum you pass in each edit must cover at least the lines that edit
-targets. Reading a few lines around your edit target is enough — you
-don't need to re-read a 2000-line file to edit line 500.
+ref you pass in each edit must have been issued for a range that
+covers the lines that edit targets. Reading a few lines around your
+edit target is enough — you don't need to re-read a 2000-line file
+to edit line 500.
 
 Multiple disjoint ranges can be read in a single call, each producing
-its own checksum. This is useful when editing lines in different parts
-of a file — one read call provides all the checksums needed.
+its own ref. This is useful when editing lines in different parts
+of a file — one read call provides all the refs needed.
 
 ### Empty files
 
-### Empty files
-
-An empty file returns the sentinel checksum `0-0:00000000`. This
-sentinel is accepted by `trueline_edit`, so you can insert content into
+An empty file returns a ref for the sentinel range `0-0`. This
+ref is accepted by `trueline_edit`, so you can insert content into
 an empty file without special-casing.
 
 ## Editing: `trueline_edit`
@@ -105,7 +108,7 @@ an empty file without special-casing.
 trueline_edit({
   file_path: "src/main.ts",
   edits: [{
-    checksum: "10-25:f7e2a1b0",
+    ref: "R1",
     range: "mp.12-qk.14",
     content: "  const x = 1;\n  const y = 2;",
   }]
@@ -122,10 +125,10 @@ Each edit specifies:
   string. The resulting lines can be fewer or more than the range
   (shrinking or growing the file). An empty string deletes the range.
 
-Each edit carries its own **`checksum`** — the range checksum from a
-prior `trueline_read`. Must be the full string including the range
-prefix (e.g. `"10-25:f7e2a1b0"`, not just `"f7e2a1b0"`). Edits
-targeting different ranges can use different checksums from the same
+Each edit carries a **`ref`** — a short token (e.g. `"R1"`) copied
+from a prior `trueline_read` or `trueline_search` output. The server
+resolves the ref to the file path, line range, and internal checksum.
+Edits targeting different ranges can use different refs from the same
 or different `trueline_read` calls.
 
 ### Verification
@@ -137,7 +140,7 @@ validation catches malformed inputs before the file is opened:
 ```
 1. parseRange      — range string well-formed? + prefix valid?
 2. line-0 check    — line 0 only allowed with + prefix?
-3. coverage check  — checksum range covers the edit range?
+3. coverage check  — ref's line range covers the edit range?
 4. overlap check   — no two edits target the same line?
 ```
 
@@ -185,7 +188,7 @@ for replacement content. Unchanged lines preserve their original raw
 bytes exactly, so mixed-EOL files only normalize the lines that were
 actually edited.
 
-**Stale checksum recovery.** When the checksum fails but the
+**Stale ref recovery.** When the internal checksum fails but the
 edit-target lines are still valid (meaning lines *outside* the edit
 range changed), the error suggests a narrow re-read:
 
@@ -194,8 +197,8 @@ Checksum mismatch for lines 1-50: expected f7e2a1b0, got ab12cd34.
 File changed since last read. Re-read with trueline_read.
 
 However, lines 12-14 appear unchanged. Re-read with
-trueline_read(ranges=[{start: 12, end: 14}]) to get a narrow checksum,
-then retry the edit.
+trueline_read(ranges=["12-14"]) to get a fresh ref, then retry
+the edit.
 ```
 
 This avoids a full-file re-read in the common case where only distant
@@ -209,7 +212,7 @@ the TOCTOU window but doesn't eliminate it.
 ### Multi-edit batches
 
 A single `trueline_edit` call can carry multiple edits. Each edit
-carries its own checksum, so edits can reference different read ranges.
+carries its own ref, so edits can reference different read ranges.
 All edits are verified together before any are applied. This is useful
 for making several changes in one atomic operation. Edits must not
 overlap — if two edits target the same line, the call is rejected.
@@ -219,13 +222,15 @@ overlap — if two edits target the same line, the call is rejected.
 On success:
 
 ```
-Edit applied successfully.
+Edit applied. (12ms)
 
-checksum: 1-50:newchecksum
+  replaced lines 12-14 → 2 lines
+ref: R3 (lines 1-50)
 ```
 
-The returned checksum covers the entire file after edits, so the agent
-can use it for subsequent edits without re-reading.
+The returned ref covers the entire file after edits, so the agent
+can use it for subsequent edits without re-reading. All prior refs
+for the file are invalidated.
 
 ### Dry-run preview
 
@@ -361,7 +366,7 @@ trueline_search({
 ```
 
 `trueline_search` searches a file by regex and returns matching lines
-with context, per-line hashes, and checksums — ready for immediate
+with context, per-line hashes, and refs — ready for immediate
 editing. It replaces the outline → read → find workflow when the agent
 knows what pattern to look for.
 
@@ -381,14 +386,14 @@ The pipeline:
 5. Early termination: once `max_matches` matches have been captured and
    their post-context is complete, the engine stops decoding lines
    (remaining lines are only scanned for the total match count).
-6. Formats output with per-line hashes and a checksum per context
+6. Formats output with per-line hashes and a ref per context
    window.
 
 If `max_matches` is exceeded, the output includes a truncation notice
 with the total match count.
 
 The output is identical in format to `trueline_read` — same `hash.N\t`
-prefix, same checksums — so the agent can pass results directly to
+prefix, same refs — so the agent can pass results directly to
 `trueline_edit` without a re-read step.
 
 ### When to use search vs outline+read
@@ -399,10 +404,65 @@ prefix, same checksums — so the agent can pass results directly to
 | Read specific known lines | `trueline_read` |
 | Find code by pattern, then edit | `trueline_search` |
 | Explore unfamiliar code | `trueline_outline` → `trueline_read` |
+| Check if a ref is still valid | `trueline_verify` |
+
+
+## Verifying: `trueline_verify`
+
+```
+trueline_verify({
+  refs: ["R1", "R2"],
+})
+```
+
+`trueline_verify` checks whether held refs are still valid without
+re-reading the file. The server resolves each ref to its file path
+and line range, then streams only the covered lines to recompute
+the internal checksum. If the checksum matches, the ref is reported
+as valid; otherwise, it is reported as stale.
+
+This is cheaper than a full `trueline_read` — useful when the agent
+has been working for a while and wants to confirm its refs before
+attempting an edit. Multiple refs (even across different files) can
+be verified in a single call.
+
+## Ref store
+
+Refs are the only edit-authorization mechanism visible to the agent.
+Internally, each ref maps to a `RefEntry`:
+
+```
+{ filePath, startLine, endLine, hash }
+```
+
+where `hash` is the 8-hex-char FNV-1a checksum over the covered
+lines. The agent never sees this structure — it just copies `"R1"`.
+
+Ref lifecycle:
+
+1. **Issued** by `trueline_read`, `trueline_search`, or a successful
+   `trueline_edit` (which returns a new ref covering the post-edit
+   file).
+2. **Resolved** by `trueline_edit` and `trueline_verify`, which look
+   up the ref, extract the internal checksum, and feed it into the
+   existing hash-verification pipeline.
+3. **Invalidated** after a successful edit: all prior refs for the
+   edited file are deleted, replaced by the single post-edit ref.
+
+Refs are scoped to the MCP server process. They do not persist across
+restarts.
+
+The indirection serves two purposes:
+
+- **Reduced copying errors.** `"R1"` is trivially copyable; a raw
+  checksum like `"1-157:d3b4c152"` is not. LLMs frequently corrupt
+  hex strings or drop range prefixes.
+- **Server-side authority.** The server controls what a ref means.
+  The agent cannot forge a valid ref because the mapping is opaque.
 
 ## Security model
 
-All five tools share a file-access layer that enforces deny patterns
+All six tools share a file-access layer that enforces deny patterns
 from a three-tier settings hierarchy:
 
 1. `.claude/settings.local.json` (project-local, gitignored)

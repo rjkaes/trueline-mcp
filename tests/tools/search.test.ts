@@ -1,9 +1,9 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleSearch } from "../../src/tools/search.ts";
-import { getText } from "../helpers.ts";
+import { getText, resetRefStore } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -32,6 +32,10 @@ afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
+beforeEach(() => {
+  resetRefStore();
+});
+
 describe("trueline_search", () => {
   test("finds matching lines with context", async () => {
     const result = await handleSearch({
@@ -44,8 +48,8 @@ describe("trueline_search", () => {
     // Should find both console.log lines
     expect(text).toContain("hello");
     expect(text).toContain("world");
-    // Should have checksums
-    expect(text).toContain("checksum:");
+    // Should have refs
+    expect(text).toMatch(/ref: R\d+ \(lines \d+-\d+\)/);
     // Should have per-line hashes
     expect(text).toMatch(/^[a-z]{2}\.\d+\t/m);
   });
@@ -72,8 +76,8 @@ describe("trueline_search", () => {
     });
     const text = getText(result);
     // With context_lines=5, the two matches (lines 4 and 8) overlap — should be one block
-    const checksumMatches = text.match(/checksum:/g);
-    expect(checksumMatches?.length).toBe(1);
+    const refMatches = text.match(/ref: R\d+/g);
+    expect(refMatches?.length).toBe(1);
   });
 
   test("respects max_matches", async () => {
@@ -142,7 +146,7 @@ describe("trueline_search", () => {
     });
     const text = getText(result);
     expect(text).toContain("hello");
-    expect(text).toContain("checksum:");
+    expect(text).toMatch(/ref: R\d+ \(lines \d+-\d+\)/);
   });
 
   test("case_insensitive false (default) does not match wrong case", async () => {
@@ -164,7 +168,7 @@ describe("trueline_search", () => {
     });
     const text = getText(result);
     expect(text).toContain("console.log");
-    expect(text).toContain("checksum:");
+    expect(text).toMatch(/ref: R\d+ \(lines \d+-\d+\)/);
   });
 
   test("literal mode treats bare parens as literal text", async () => {

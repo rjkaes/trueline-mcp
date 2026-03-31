@@ -85,11 +85,19 @@ describe("parseArgs", () => {
     });
   });
 
-  test("verify with checksums", () => {
-    const result = parseArgs(["verify", "src/foo.ts", "--checksums", "1-50:abcdef01", "51-100:12345678"]);
+  test("verify with refs", () => {
+    const result = parseArgs(["verify", "src/foo.ts", "--refs", "R1", "R2"]);
     expect(result).toEqual({
       command: "verify",
-      params: { file_path: "src/foo.ts", checksums: ["1-50:abcdef01", "51-100:12345678"] },
+      params: { file_path: "src/foo.ts", refs: ["R1", "R2"] },
+    });
+  });
+
+  test("verify with --checksums backwards compat", () => {
+    const result = parseArgs(["verify", "src/foo.ts", "--checksums", "R1"]);
+    expect(result).toEqual({
+      command: "verify",
+      params: { file_path: "src/foo.ts", refs: ["R1"] },
     });
   });
 

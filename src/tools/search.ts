@@ -8,7 +8,8 @@
  * of O(file_size). Decodes each line to a string exactly once.
  */
 import { transcodedLines } from "../encoding.ts";
-import { fnv1aHashBytes, hashToLetters, foldHash, FNV_OFFSET_BASIS, formatChecksum } from "../hash.ts";
+import { fnv1aHashBytes, hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
+import { issueRef } from "../ref-store.ts";
 import { binaryFileError, isBinaryError, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
@@ -225,8 +226,6 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     let checksumHash = FNV_OFFSET_BASIS;
     let firstLine = 0;
     let lastLine = 0;
-    let firstLetters = "";
-    let lastLetters = "";
 
     if (i > 0) parts.push("");
 
@@ -234,10 +233,8 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
       const letters = hashToLetters(line.hash);
       if (firstLine === 0) {
         firstLine = line.lineNumber;
-        firstLetters = letters;
       }
       lastLine = line.lineNumber;
-      lastLetters = letters;
       checksumHash = foldHash(checksumHash, line.hash);
 
       const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
@@ -245,8 +242,10 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
       parts.push(`${hashToLetters(line.hash)}.${line.lineNumber}\t${line.text}${marker}`);
     }
 
+    const hex = checksumHash.toString(16).padStart(8, "0");
+    const refId = issueRef(resolvedPath, firstLine, lastLine, hex);
     parts.push("");
-    parts.push(`checksum: ${formatChecksum(firstLine, lastLine, checksumHash, firstLetters, lastLetters)}`);
+    parts.push(`ref: ${refId} (lines ${firstLine}-${lastLine})`);
   }
 
   // Truncation notice

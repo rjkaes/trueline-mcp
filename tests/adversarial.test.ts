@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import { handleEdit } from "../src/tools/edit.ts";
 import { handleRead } from "../src/tools/read.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
-import { lineHash, rangeChecksum } from "./helpers.ts";
+import { lineHash, rangeChecksum, issueTestRef, resetRefStore } from "./helpers.ts";
 import { EMPTY_FILE_CHECKSUM } from "../src/hash.ts";
 
 let testDir: string;
 
 beforeEach(() => {
+  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-adversarial-")));
 });
 
@@ -24,8 +25,8 @@ function setupFile(name: string, content: string | Buffer) {
   const contentStr = typeof content === "string" ? content : content.toString("utf-8");
   const lines = contentStr.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const cs = lines.length > 0 ? rangeChecksum(lines, 1, lines.length) : EMPTY_FILE_CHECKSUM;
-  return { path: f, lines, cs };
+  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : issueTestRef(f, [], 0, 0);
+  return { path: f, lines, ref };
 }
 
 describe("Adversarial Tests", () => {
@@ -41,13 +42,13 @@ describe("Adversarial Tests", () => {
 
   test("very long lines (> 64KB)", async () => {
     const longLine = "a".repeat(100000);
-    const { path, cs } = setupFile("long.txt", `${longLine}\nsecond\n`);
+    const { path, ref } = setupFile("long.txt", `${longLine}\nsecond\n`);
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `${lineHash(longLine)}.1`,
           content: "shortened",
         },
@@ -91,13 +92,13 @@ describe("Adversarial Tests", () => {
   test("surrogate pairs in hashing", async () => {
     const text = "A 🎉 B"; // 🎉 is \uD83C\uDF89
     const h = lineHash(text);
-    const { path, cs } = setupFile("unicode.txt", `${text}\n`);
+    const { path, ref } = setupFile("unicode.txt", `${text}\n`);
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `${h}.1`,
           content: "changed",
         },
@@ -113,13 +114,13 @@ describe("Adversarial Tests", () => {
     // Unpaired high surrogate
     const text = "A \uD83C B";
     const h = lineHash(text);
-    const { path, cs } = setupFile("malformed.txt", `${text}\n`);
+    const { path, ref } = setupFile("malformed.txt", `${text}\n`);
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `${h}.1`,
           content: "fixed",
         },
@@ -131,9 +132,8 @@ describe("Adversarial Tests", () => {
     expect(readFileSync(path, "utf-8")).toBe("fixed\n");
   });
 
-  test("checksum mismatch suggesting narrow re-read", async () => {
-    const { path, lines } = setupFile("mismatch.txt", "1\n2\n3\n4\n5\n");
-    const cs = rangeChecksum(lines, 1, 5);
+  test("ref mismatch suggesting narrow re-read", async () => {
+    const { path, lines, ref } = setupFile("mismatch.txt", "1\n2\n3\n4\n5\n");
 
     // Modify line 1 (outside edit range)
     writeFileSync(path, "X\n2\n3\n4\n5\n");
@@ -142,7 +142,7 @@ describe("Adversarial Tests", () => {
       file_path: path,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `${lineHash("3")}.3`,
           content: "THREE",
         },
@@ -156,18 +156,18 @@ describe("Adversarial Tests", () => {
   });
 
   test("insert-after at the end line of a multi-line replace", async () => {
-    const { path, cs } = setupFile("multi-replace-ia.txt", "1\n2\n3\n4\n5\n");
+    const { path, ref } = setupFile("multi-replace-ia.txt", "1\n2\n3\n4\n5\n");
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `${lineHash("2")}.2-${lineHash("3")}.3`,
           content: "TWO-THREE",
         },
         {
-          checksum: cs,
+          ref,
           range: `+${lineHash("3")}.3`,
           content: "inserted",
         },
@@ -180,18 +180,18 @@ describe("Adversarial Tests", () => {
   });
 
   test("overlapping range: insert-after inside a multi-line replace", async () => {
-    const { path, cs } = setupFile("overlap-ia.txt", "1\n2\n3\n4\n");
+    const { path, ref } = setupFile("overlap-ia.txt", "1\n2\n3\n4\n");
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `${lineHash("1")}.1-${lineHash("3")}.3`,
           content: "REPLACED",
         },
         {
-          checksum: cs,
+          ref,
           range: `+${lineHash("2")}.2`,
           content: "IA",
         },
@@ -237,23 +237,23 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("\uFFFD");
   });
 
-  test("overlapping checksum ranges (later ends earlier)", async () => {
+  test("overlapping ref ranges (later ends earlier)", async () => {
     const { path, lines } = setupFile("overlap-cs.txt", "1\n2\n3\n4\n5\n");
-    // CS1: lines 1-5
-    const cs1 = rangeChecksum(lines, 1, 5);
-    // CS2: lines 2-4
-    const cs2 = rangeChecksum(lines, 2, 4);
+    // ref1: lines 1-5
+    const ref1 = issueTestRef(path, lines, 1, 5);
+    // ref2: lines 2-4
+    const ref2 = issueTestRef(path, lines, 2, 4);
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
-          checksum: cs1,
+          ref: ref1,
           range: `${lineHash("3")}.3`,
           content: "THREE-1",
         },
         {
-          checksum: cs2,
+          ref: ref2,
           range: `${lineHash("4")}.4`,
           content: "FOUR-2",
         },
@@ -279,14 +279,12 @@ describe("Adversarial Tests", () => {
     const text = result.content[0].text;
     expect(text).toContain("line2");
 
-    // Check checksum to ensure it was correctly identified as 2 lines
-    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.2:/);
+    // Check ref to ensure it was correctly identified as 2 lines
+    expect(text).toMatch(/ref: \S+ \(lines 1-2\)/);
   });
 
   test("concurrent modification detection (mtime change)", async () => {
     const { path, lines } = setupFile("mtime.txt", "line1\nline2\nline3\n");
-    const _cs = rangeChecksum(lines, 1, 3);
-
     // Captured mtime at this point
     const { mtimeMs } = statSync(path);
 
@@ -308,7 +306,7 @@ describe("Adversarial Tests", () => {
           endHash: "",
         },
       ],
-      [], // NO CHECKSUMS - triggers mtime check at the end
+      [], // NO REFS - triggers mtime check at the end
       mtimeMs, // OLD mtime
     );
 
@@ -404,18 +402,18 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("line2");
     expect(text).toContain("line3");
     expect(text).toContain("line4");
-    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.4:/);
+    expect(text).toMatch(/ref: \S+ \(lines 1-4\)/);
   });
 
   test("insert-after at last line of file without trailing newline", async () => {
-    const { path, lines: _lines, cs } = setupFile("no-trail.txt", "line1\nline2");
+    const { path, lines: _lines, ref } = setupFile("no-trail.txt", "line1\nline2");
     // original: "line1\nline2" (no trailing newline)
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `+${lineHash("line2")}.2`,
           content: "line3",
         },
@@ -430,13 +428,13 @@ describe("Adversarial Tests", () => {
   });
 
   test("replace last line of file without trailing newline", async () => {
-    const { path, lines: _lines, cs } = setupFile("no-trail-replace.txt", "line1\nline2");
+    const { path, lines: _lines, ref } = setupFile("no-trail-replace.txt", "line1\nline2");
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `${lineHash("line2")}.2`,
           content: "replaced",
         },
@@ -508,7 +506,7 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     expect(text).toContain("line2");
-    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.2:/);
+    expect(text).toMatch(/ref: \S+ \(lines 1-2\)/);
   });
 
   test("splitLines handles \\r at chunk boundary (not followed by \\n)", async () => {
@@ -522,7 +520,7 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     expect(text).toContain("line2");
-    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.2:/);
+    expect(text).toMatch(/ref: \S+ \(lines 1-2\)/);
   });
 
   test("handleSearch with extremely long line in context", async () => {
@@ -558,8 +556,8 @@ describe("Adversarial Tests", () => {
     const text = readResult.content[0].text;
     expect(text).toContain("aé");
 
-    const csMatch = text.match(/checksum: (.+)/);
-    const cs = csMatch![1];
+    const refMatch = text.match(/ref: (\S+)/);
+    const readRef = refMatch![1];
     const lhMatch = text.match(/^([a-z]{2})\.1\t/m);
     const lh = lhMatch![1];
 
@@ -568,7 +566,7 @@ describe("Adversarial Tests", () => {
       encoding: "latin1",
       edits: [
         {
-          checksum: cs,
+          ref: readRef,
           range: `${lh}.1`,
           content: "aé-modified",
         },
@@ -594,9 +592,9 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     // Should have merged into 1-5 and 7-8
-    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.5:/);
-    expect(text).toMatch(/checksum: [a-z]{2}\.7-[a-z]{2}\.8:/);
-    expect(text).not.toMatch(/checksum: [a-z]{2}\.3-[a-z]{2}\.5:/);
+    expect(text).toMatch(/ref: \S+ \(lines 1-5\)/);
+    expect(text).toMatch(/ref: \S+ \(lines 7-8\)/);
+    expect(text).not.toMatch(/ref: \S+ \(lines 3-5\)/);
   });
 
   test("handleSearch with empty pattern", async () => {
@@ -633,12 +631,12 @@ describe("Adversarial Tests", () => {
   });
 
   test("multiple insert-after at the same line", async () => {
-    const { path, lines: _lines, cs } = setupFile("multi-ia-same.txt", "line1\nline2\n");
+    const { path, lines: _lines, ref } = setupFile("multi-ia-same.txt", "line1\nline2\n");
     const result = await handleEdit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `+${lineHash("line1")}.1`, content: "ins1" },
-        { checksum: cs, range: `+${lineHash("line1")}.1`, content: "ins2" },
+        { ref, range: `+${lineHash("line1")}.1`, content: "ins1" },
+        { ref, range: `+${lineHash("line1")}.1`, content: "ins2" },
       ],
       projectDir: testDir,
     });
@@ -658,7 +656,7 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("line1");
     expect(text).toContain("line2");
     expect(text).toContain("line3");
-    expect(text).toMatch(/checksum: [a-z]{2}\.1-[a-z]{2}\.3:/);
+    expect(text).toMatch(/ref: \S+ \(lines 1-3\)/);
   });
 
   test("handleSearch pattern matching tab separator", async () => {
@@ -677,13 +675,13 @@ describe("Adversarial Tests", () => {
   });
 
   test("insert-after at last line of file WITH trailing newline", async () => {
-    const { path, lines: _lines, cs } = setupFile("trail-nl.txt", "line1\nline2\n");
+    const { path, lines: _lines, ref } = setupFile("trail-nl.txt", "line1\nline2\n");
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `+${lineHash("line2")}.2`,
           content: "line3",
         },

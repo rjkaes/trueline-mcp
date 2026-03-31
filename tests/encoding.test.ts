@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { detectBOM, transcodedLines, bomBytes, encodeString, encodeBuffer } from "../src/encoding.ts";
 import { handleRead } from "../src/tools/read.ts";
 import { handleEdit } from "../src/tools/edit.ts";
-import { getText } from "./helpers.ts";
+import { getText, resetRefStore } from "./helpers.ts";
 
 let tmpDir: string;
 
@@ -348,10 +348,10 @@ describe("trueline_edit — UTF-16 LE round-trip", () => {
     });
     const readText = getText(readResult);
 
-    // Extract checksum from readResult
-    const checksumMatch = readText.match(/checksum: (\S+)/);
-    expect(checksumMatch).toBeTruthy();
-    const checksum = checksumMatch![1];
+    // Extract ref from readResult
+    const refMatch = readText.match(/ref: (R\d+)/);
+    expect(refMatch).toBeTruthy();
+    const ref = refMatch![1];
 
     // Extract hash.line for "beta" (line 2)
     const betaLine = readText.split("\n").find((l) => l.includes("beta"));
@@ -365,7 +365,7 @@ describe("trueline_edit — UTF-16 LE round-trip", () => {
         {
           range: `${hashDotLine}-${hashDotLine}`,
           content: "BETA",
-          checksum,
+          ref,
         },
       ],
       allowedDirs: [tmpDir],
@@ -401,8 +401,8 @@ describe("trueline_edit — UTF-8 BOM round-trip", () => {
     });
     const readText = getText(readResult);
 
-    const checksumMatch = readText.match(/checksum: (\S+)/);
-    const checksum = checksumMatch![1];
+    const refMatch = readText.match(/ref: (R\d+)/);
+    const ref = refMatch![1];
 
     const worldLine = readText.split("\n").find((l) => l.includes("world"));
     const hashDotLine = worldLine!.split("\t")[0];
@@ -414,7 +414,7 @@ describe("trueline_edit — UTF-8 BOM round-trip", () => {
         {
           range: `${hashDotLine}-${hashDotLine}`,
           content: "universe",
-          checksum,
+          ref,
         },
       ],
       allowedDirs: [tmpDir],
@@ -449,8 +449,8 @@ describe("trueline_edit — UTF-16 BE round-trip", () => {
     });
     const readText = getText(readResult);
 
-    const checksumMatch = readText.match(/checksum: (\S+)/);
-    const checksum = checksumMatch![1];
+    const refMatch = readText.match(/ref: (R\d+)/);
+    const ref = refMatch![1];
 
     const twoLine = readText.split("\n").find((l) => l.includes("\ttwo"));
     const hashDotLine = twoLine!.split("\t")[0];
@@ -461,7 +461,7 @@ describe("trueline_edit — UTF-16 BE round-trip", () => {
         {
           range: `${hashDotLine}-${hashDotLine}`,
           content: "TWO",
-          checksum,
+          ref,
         },
       ],
       allowedDirs: [tmpDir],

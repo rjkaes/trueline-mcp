@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../src/tools/edit.ts";
 import { handleRead } from "../src/tools/read.ts";
-import { lineHash, rangeChecksum } from "./helpers.ts";
+import { lineHash, rangeChecksum, issueTestRef, resetRefStore } from "./helpers.ts";
+import { issueRef } from "../src/ref-store.ts";
 
 let testDir: string;
 
 beforeEach(() => {
+  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-logical-bugs-")));
 });
 
@@ -28,7 +30,7 @@ describe("logical bugs and edge cases", () => {
     writeFileSync(f, content);
 
     const lines = ["line1", "line2", "line3", "line4", "line5"];
-    const cs = rangeChecksum(lines, 1, 5);
+    const ref = issueTestRef(f, lines, 1, 5);
 
     // Edit 1: change line 1 (to trigger a diff)
     // Edit 2: no-op change line 3
@@ -37,12 +39,12 @@ describe("logical bugs and edge cases", () => {
       dry_run: true,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `${lineHash("line1")}.1`,
           content: "LINE1",
         },
         {
-          checksum: cs,
+          ref,
           range: `${lineHash("line3")}.3`,
           content: "line3",
         },
@@ -68,13 +70,13 @@ describe("logical bugs and edge cases", () => {
     const f = join(testDir, "prepend-crlf.txt");
     writeFileSync(f, "existing\r\n");
 
-    const cs = rangeChecksum(["existing"], 1, 1);
+    const ref = issueTestRef(f, ["existing"], 1, 1);
 
     await handleEdit({
       file_path: f,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: "+0",
           content: "prepended",
         },
@@ -93,13 +95,13 @@ describe("logical bugs and edge cases", () => {
     const f = join(testDir, "empty-multi.txt");
     writeFileSync(f, "");
 
-    const cs = "0-0:00000000";
+    const ref = issueRef(f, 0, 0, "00000000");
 
     await handleEdit({
       file_path: f,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: "+0",
           content: "line1\nline2",
         },
@@ -129,13 +131,13 @@ describe("logical bugs and edge cases", () => {
     expect(lineCount).toBe(2000);
   });
 
-  test("checksum mismatch provides narrow re-read suggestion", async () => {
+  test("ref mismatch provides narrow re-read suggestion", async () => {
     const f = join(testDir, "suggestion.txt");
     const content = "line1\nline2\nline3\nline4\nline5\n";
     writeFileSync(f, content);
 
     const lines = ["line1", "line2", "line3", "line4", "line5"];
-    const cs = rangeChecksum(lines, 1, 5);
+    const ref = issueTestRef(f, lines, 1, 5);
 
     // Modify file externally but keep line 4 unchanged
     writeFileSync(f, "line1\nline2\nCHANGED\nline4\nline5\n");
@@ -144,7 +146,7 @@ describe("logical bugs and edge cases", () => {
       file_path: f,
       edits: [
         {
-          checksum: cs,
+          ref,
           range: `${lineHash("line4")}.4`,
           content: "LINE4",
         },

@@ -105,60 +105,15 @@ describe("coerceParams", () => {
     });
   });
 
-  describe("top-level checksum pushed into edits", () => {
-    test("moves top-level checksum into edits missing one", () => {
-      expect(
-        coerceParams({
-          file_path: "foo.ts",
-          checksum: "16-20:abcd1234",
-          edits: [{ range: "ab.18-ab.18", content: "new line" }],
-        }),
-      ).toEqual({
-        file_paths: ["foo.ts"],
-        edits: [{ range: "ab.18-ab.18", content: "new line", checksum: "16-20:abcd1234" }],
-      });
-    });
-
-    test("does not overwrite per-edit checksum", () => {
-      expect(
-        coerceParams({
-          file_path: "foo.ts",
-          checksum: "16-20:toplevel",
-          edits: [{ range: "ab.18-ab.18", content: "new line", checksum: "16-20:peredit" }],
-        }),
-      ).toEqual({
-        file_paths: ["foo.ts"],
-        edits: [{ range: "ab.18-ab.18", content: "new line", checksum: "16-20:peredit" }],
-      });
-    });
-
-    test("fills only edits missing checksum in a mixed batch", () => {
-      expect(
-        coerceParams({
-          file_path: "foo.ts",
-          checksum: "1-50:aabbccdd",
-          edits: [
-            { range: "ab.10-cd.12", content: "first", checksum: "1-50:existing" },
-            { range: "ef.20-gh.22", content: "second" },
-          ],
-        }),
-      ).toEqual({
-        file_paths: ["foo.ts"],
-        edits: [
-          { range: "ab.10-cd.12", content: "first", checksum: "1-50:existing" },
-          { range: "ef.20-gh.22", content: "second", checksum: "1-50:aabbccdd" },
-        ],
-      });
-    });
-
-    test("no-op when no top-level checksum", () => {
+  describe("no-op when no top-level ref", () => {
+    test("edits keep their own refs", () => {
       const input = {
         file_path: "foo.ts",
-        edits: [{ range: "ab.10-cd.12", content: "text", checksum: "1-50:abcdef01" }],
+        edits: [{ range: "ab.10-cd.12", content: "text", ref: "R1" }],
       };
       expect(coerceParams(input)).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab.10-cd.12", content: "text", checksum: "1-50:abcdef01" }],
+        edits: [{ range: "ab.10-cd.12", content: "text", ref: "R1" }],
       });
     });
   });
@@ -302,18 +257,18 @@ describe("coerceParams", () => {
     });
   });
 
-  describe("checksums bare string → array (#9)", () => {
-    test("wraps bare checksums string in array", () => {
-      expect(coerceParams({ file_paths: ["foo.ts"], checksums: "1-50:abcdef01" })).toEqual({
+  describe("refs bare string → array (#9)", () => {
+    test("wraps bare refs string in array", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], refs: "R1" })).toEqual({
         file_paths: ["foo.ts"],
-        checksums: ["1-50:abcdef01"],
+        refs: ["R1"],
       });
     });
   });
 
   describe("edits bare object → array (#10)", () => {
     test("wraps single edit object in array", () => {
-      const edit = { range: "ab.10-cd.12", content: "new", checksum: "1-50:abcdef01" };
+      const edit = { range: "ab.10-cd.12", content: "new", ref: "R1" };
       expect(coerceParams({ file_path: "foo.ts", edits: edit })).toEqual({
         file_paths: ["foo.ts"],
         edits: [edit],
@@ -321,23 +276,10 @@ describe("coerceParams", () => {
     });
 
     test("leaves edit array unchanged", () => {
-      const edit = { range: "ab.10-cd.12", content: "new", checksum: "1-50:abcdef01" };
+      const edit = { range: "ab.10-cd.12", content: "new", ref: "R1" };
       expect(coerceParams({ file_path: "foo.ts", edits: [edit] })).toEqual({
         file_paths: ["foo.ts"],
         edits: [edit],
-      });
-    });
-
-    test("wraps single edit then receives top-level checksum", () => {
-      expect(
-        coerceParams({
-          file_path: "foo.ts",
-          checksum: "1-50:aabbccdd",
-          edits: { range: "ab.10-cd.12", content: "new" },
-        }),
-      ).toEqual({
-        file_paths: ["foo.ts"],
-        edits: [{ range: "ab.10-cd.12", content: "new", checksum: "1-50:aabbccdd" }],
       });
     });
   });
@@ -381,11 +323,11 @@ describe("coerceParams", () => {
       expect(
         coerceParams({
           file_path: "foo.ts",
-          edits: [{ range: "ab.10-cd.12", checksum: "1-50:abcdef01", content: ["line1", "line2", "line3"] }],
+          edits: [{ range: "ab.10-cd.12", ref: "R1", content: ["line1", "line2", "line3"] }],
         }),
       ).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab.10-cd.12", checksum: "1-50:abcdef01", content: "line1\nline2\nline3" }],
+        edits: [{ range: "ab.10-cd.12", ref: "R1", content: "line1\nline2\nline3" }],
       });
     });
 
@@ -393,11 +335,11 @@ describe("coerceParams", () => {
       expect(
         coerceParams({
           file_path: "foo.ts",
-          edits: [{ range: "ab.10", checksum: "1-50:abcdef01", content: "single line" }],
+          edits: [{ range: "ab.10", ref: "R1", content: "single line" }],
         }),
       ).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab.10", checksum: "1-50:abcdef01", content: "single line" }],
+        edits: [{ range: "ab.10", ref: "R1", content: "single line" }],
       });
     });
 
@@ -405,11 +347,11 @@ describe("coerceParams", () => {
       expect(
         coerceParams({
           file_path: "foo.ts",
-          edits: [{ range: "ab.10", checksum: "1-50:abcdef01", content: [42, true, "text"] }],
+          edits: [{ range: "ab.10", ref: "R1", content: [42, true, "text"] }],
         }),
       ).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab.10", checksum: "1-50:abcdef01", content: "42\ntrue\ntext" }],
+        edits: [{ range: "ab.10", ref: "R1", content: "42\ntrue\ntext" }],
       });
     });
   });
@@ -497,7 +439,7 @@ describe("coerceParams", () => {
   });
 
   // ===========================================================================
-  // Whitespace stripping in ranges and checksums
+  // Whitespace stripping in ranges and refs
   // ===========================================================================
 
   describe("whitespace stripping", () => {
@@ -513,96 +455,23 @@ describe("coerceParams", () => {
       expect(coerceParams({ range: " 10-25 " })).toEqual({ ranges: ["10-25"] });
     });
 
-    test("strips whitespace from checksum strings", () => {
-      expect(coerceParams({ checksums: ["10 - 25 : f7e2abcd"] })).toEqual({
-        checksums: ["10-25:f7e2abcd"],
-      });
-    });
-
     test("strips whitespace from edit range", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10 - cd.20", checksum: "1-50:abcd1234", content: "x" }],
+          edits: [{ range: "ab.10 - cd.20", ref: "R1", content: "x" }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: "x" }],
+        edits: [{ range: "ab.10-cd.20", ref: "R1", content: "x" }],
       });
     });
 
-    test("strips whitespace from edit checksum", () => {
+    test("strips whitespace from edit ref", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10-cd.20", checksum: "1 - 50 : abcd1234", content: "x" }],
+          edits: [{ range: "ab.10-cd.20", ref: "  R1  ", content: "x" }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: "x" }],
-      });
-    });
-  });
-
-  // ===========================================================================
-  // Checksum # prefix removal
-  // ===========================================================================
-
-  describe("checksum # prefix removal", () => {
-    test("removes # before hex in checksums array", () => {
-      expect(coerceParams({ checksums: ["10-25:#f7e2abcd"] })).toEqual({
-        checksums: ["10-25:f7e2abcd"],
-      });
-    });
-
-    test("removes # before hex in edit checksum", () => {
-      expect(
-        coerceParams({
-          edits: [{ range: "ab.10", checksum: "1-50:#ABCD1234", content: "x" }],
-        }),
-      ).toEqual({
-        edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "x" }],
-      });
-    });
-
-    test("combines # removal with whitespace stripping", () => {
-      expect(coerceParams({ checksums: ["10 - 25 : #F7E2ABCD"] })).toEqual({
-        checksums: ["10-25:f7e2abcd"],
-      });
-    });
-  });
-
-  // ===========================================================================
-  // Uppercase hex lowercasing in checksums
-  // ===========================================================================
-
-  describe("checksum hex lowercasing", () => {
-    test("lowercases hex in checksums array", () => {
-      expect(coerceParams({ checksums: ["10-25:F7E2ABCD"] })).toEqual({
-        checksums: ["10-25:f7e2abcd"],
-      });
-    });
-
-    test("lowercases hex in edit checksum", () => {
-      expect(
-        coerceParams({
-          edits: [{ range: "ab.10", checksum: "1-50:ABCD1234", content: "x" }],
-        }),
-      ).toEqual({
-        edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "x" }],
-      });
-    });
-
-    test("lowercases mixed-case hex", () => {
-      expect(coerceParams({ checksums: ["1-10:AbCd1234"] })).toEqual({
-        checksums: ["1-10:abcd1234"],
-      });
-    });
-
-    test("lowercases top-level checksum pushed into edits", () => {
-      expect(
-        coerceParams({
-          checksum: "1-50:ABCD1234",
-          edits: [{ range: "ab.10", content: "x" }],
-        }),
-      ).toEqual({
-        edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "x" }],
+        edits: [{ range: "ab.10-cd.20", ref: "R1", content: "x" }],
       });
     });
   });
@@ -615,30 +484,30 @@ describe("coerceParams", () => {
     test("coerces null content to empty string", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: null }],
+          edits: [{ range: "ab.10-cd.20", ref: "R1", content: null }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: "" }],
+        edits: [{ range: "ab.10-cd.20", ref: "R1", content: "" }],
       });
     });
 
     test("coerces undefined content to empty string", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: undefined }],
+          edits: [{ range: "ab.10-cd.20", ref: "R1", content: undefined }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10-cd.20", checksum: "1-50:abcd1234", content: "" }],
+        edits: [{ range: "ab.10-cd.20", ref: "R1", content: "" }],
       });
     });
 
     test("does not coerce empty string content", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "" }],
+          edits: [{ range: "ab.10", ref: "R1", content: "" }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "" }],
+        edits: [{ range: "ab.10", ref: "R1", content: "" }],
       });
     });
   });
@@ -676,7 +545,7 @@ describe("coerceParams", () => {
       // Weird but not the confused-tool-shape case — Zod will strip old_string
       expect(() =>
         coerceParams({
-          edits: [{ range: "ab.10", checksum: "1-50:abcd1234", content: "x", old_string: "foo" }],
+          edits: [{ range: "ab.10", ref: "R1", content: "x", old_string: "foo" }],
         }),
       ).not.toThrow();
     });

@@ -54,7 +54,7 @@ export interface StreamEditOp {
 // ==============================================================================
 
 type StreamingEditResult =
-  | { ok: true; newChecksum: string; changed: boolean; tmpPath?: string }
+  | { ok: true; newChecksum: string; newLineCount: number; newHash: string; changed: boolean; tmpPath?: string }
   | { ok: false; error: string };
 
 function buffersEqual(a: Buffer[], b: Buffer[]): boolean {
@@ -263,6 +263,10 @@ export async function streamingEdit(
 
   function outputChecksumStr(): string {
     return outputLineCount > 0 ? formatChecksum(1, outputLineCount, outputChecksumAcc) : EMPTY_FILE_CHECKSUM;
+  }
+
+  function outputHashHex(): string {
+    return outputChecksumAcc.toString(16).padStart(8, "0");
   }
 
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
@@ -496,9 +500,9 @@ export async function streamingEdit(
       const base =
         `${resolvedPath}: checksum mismatch for lines ${ref.startLine}\u2013${ref.endLine}: ` +
         `expected ${expected}, got ${actual}. File changed since last read.` +
-        `\n\nDid you construct this checksum? NEVER modify or construct checksums. ` +
-        `Copy the exact checksum string from trueline_read/trueline_search output. ` +
-        `A wider checksum from a prior read (covering more lines) is valid for editing any sub-range within it.`;
+        `\n\nYour ref is stale \u2014 the file was modified after the ref was issued. ` +
+        `Re-read with trueline_read to get a fresh ref. ` +
+        `A wider ref from a prior read (covering more lines) is valid for editing any sub-range within it.`;
 
       if (minLine !== Infinity) {
         return {
@@ -522,7 +526,13 @@ export async function streamingEdit(
   // ---- No-op: skip write if nothing changed ----
   if (!contentChanged) {
     await cleanupTmp();
-    return { ok: true, newChecksum: outputChecksumStr(), changed: false };
+    return {
+      ok: true,
+      newChecksum: outputChecksumStr(),
+      newLineCount: outputLineCount,
+      newHash: outputHashHex(),
+      changed: false,
+    };
   }
 
   // ---- Atomic rename with mtime check ----
@@ -558,6 +568,8 @@ export async function streamingEdit(
   return {
     ok: true,
     newChecksum: outputChecksumStr(),
+    newLineCount: outputLineCount,
+    newHash: outputHashHex(),
     changed: true,
     ...(dryRun ? { tmpPath } : {}),
   };

@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
-import { lineHash, rangeChecksum } from "../helpers.ts";
+import { lineHash, rangeChecksum, issueTestRef, resetRefStore } from "../helpers.ts";
+import { issueRef } from "../../src/ref-store.ts";
 import { EMPTY_FILE_CHECKSUM } from "../../src/hash.ts";
 
 // =============================================================================
@@ -14,11 +15,13 @@ import { EMPTY_FILE_CHECKSUM } from "../../src/hash.ts";
 let testDir: string;
 
 beforeEach(() => {
+  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-proto-edge-")));
 });
 
 afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
+  resetRefStore();
 });
 
 function setupFile(name: string, content: string) {
@@ -26,11 +29,11 @@ function setupFile(name: string, content: string) {
   writeFileSync(f, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const cs = lines.length > 0 ? rangeChecksum(lines, 1, lines.length) : EMPTY_FILE_CHECKSUM;
-  return { path: f, lines, cs };
+  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : issueRef(f, 0, 0, "00000000");
+  return { path: f, lines, ref };
 }
 
-function edit(opts: { file_path: string; edits: { checksum: string; range: string; content: string }[] }) {
+function edit(opts: { file_path: string; edits: { ref: string; range: string; content: string }[] }) {
   return handleEdit({ ...opts, projectDir: testDir });
 }
 
@@ -40,12 +43,12 @@ function edit(opts: { file_path: string; edits: { checksum: string; range: strin
 
 describe("range format parsing", () => {
   test("single-line shorthand (no dash)", async () => {
-    const { path, cs } = setupFile("single.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("single.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -53,12 +56,12 @@ describe("range format parsing", () => {
   });
 
   test("explicit single-line range (N:hash-N:hash)", async () => {
-    const { path, cs } = setupFile("explicit.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("explicit.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2-${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}.2-${h2}.2`, content: "BBB" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -66,57 +69,57 @@ describe("range format parsing", () => {
   });
 
   test("rejects malformed range — missing hash", async () => {
-    const { path, cs } = setupFile("bad.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("bad.txt", "aaa\nbbb\n");
 
     await expect(
       edit({
         file_path: path,
-        edits: [{ checksum: cs, range: ".1", content: "x" }],
+        edits: [{ ref, range: ".1", content: "x" }],
       }),
     ).rejects.toThrow();
   });
 
   test("rejects malformed range — non-numeric line number", async () => {
-    const { path, cs } = setupFile("bad2.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("bad2.txt", "aaa\nbbb\n");
 
     await expect(
       edit({
         file_path: path,
-        edits: [{ checksum: cs, range: "aa.abc-bb.2", content: "x" }],
+        edits: [{ ref, range: "aa.abc-bb.2", content: "x" }],
       }),
     ).rejects.toThrow();
   });
 
   test("rejects range where start > end", async () => {
-    const { path, cs } = setupFile("rev.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("rev.txt", "aaa\nbbb\nccc\n");
     const h1 = lineHash("aaa");
     const h3 = lineHash("ccc");
 
     await expect(
       edit({
         file_path: path,
-        edits: [{ checksum: cs, range: `${h3}.3-${h1}.1`, content: "x" }],
+        edits: [{ ref, range: `${h3}.3-${h1}.1`, content: "x" }],
       }),
     ).rejects.toThrow();
   });
 
   test("rejects line 0 without + prefix", async () => {
-    const { path, cs } = setupFile("zero.txt", "aaa\n");
+    const { path, ref } = setupFile("zero.txt", "aaa\n");
 
     await expect(
       edit({
         file_path: path,
-        edits: [{ checksum: cs, range: "aa.0-aa.0", content: "x" }],
+        edits: [{ ref, range: "aa.0-aa.0", content: "x" }],
       }),
     ).rejects.toThrow();
   });
 
   test("+0: prefix for prepend requires no hash", async () => {
-    const { path, cs } = setupFile("prepend.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("prepend.txt", "aaa\nbbb\n");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: "+0", content: "header" }],
+      edits: [{ ref, range: "+0", content: "header" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -124,12 +127,12 @@ describe("range format parsing", () => {
   });
 
   test("rejects edit targeting line beyond EOF", async () => {
-    const { path, cs } = setupFile("short.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("short.txt", "aaa\nbbb\n");
     const h = lineHash("aaa");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h}.99-${h}.99`, content: "x" }],
+      edits: [{ ref, range: `${h}.99-${h}.99`, content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -142,12 +145,12 @@ describe("range format parsing", () => {
 
 describe("insert-after (+) semantics", () => {
   test("insert after the very last line", async () => {
-    const { path, cs } = setupFile("append.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("append.txt", "aaa\nbbb\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `+${h2}.2`, content: "ccc" }],
+      edits: [{ ref, range: `+${h2}.2`, content: "ccc" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -155,14 +158,14 @@ describe("insert-after (+) semantics", () => {
   });
 
   test("multiple inserts at the same anchor preserve order", async () => {
-    const { path, cs } = setupFile("multi-ins.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("multi-ins.txt", "aaa\nbbb\n");
     const h1 = lineHash("aaa");
 
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `+${h1}.1`, content: "first" },
-        { checksum: cs, range: `+${h1}.1`, content: "second" },
+        { ref, range: `+${h1}.1`, content: "first" },
+        { ref, range: `+${h1}.1`, content: "second" },
       ],
     });
 
@@ -172,14 +175,14 @@ describe("insert-after (+) semantics", () => {
   });
 
   test("insert-after and replace at the same line", async () => {
-    const { path, cs } = setupFile("ins-rep.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("ins-rep.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `${h2}.2`, content: "BBB" },
-        { checksum: cs, range: `+${h2}.2`, content: "inserted" },
+        { ref, range: `${h2}.2`, content: "BBB" },
+        { ref, range: `+${h2}.2`, content: "inserted" },
       ],
     });
 
@@ -190,12 +193,12 @@ describe("insert-after (+) semantics", () => {
   });
 
   test("insert multiple lines after an anchor", async () => {
-    const { path, cs } = setupFile("multi-line-ins.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("multi-line-ins.txt", "aaa\nbbb\n");
     const h1 = lineHash("aaa");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `+${h1}.1`, content: "x\ny\nz" }],
+      edits: [{ ref, range: `+${h1}.1`, content: "x\ny\nz" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -205,10 +208,11 @@ describe("insert-after (+) semantics", () => {
   test("insert into empty file via +0:", async () => {
     const f = join(testDir, "empty.txt");
     writeFileSync(f, "");
+    const emptyRef = issueRef(f, 0, 0, "00000000");
 
     const result = await edit({
       file_path: f,
-      edits: [{ checksum: EMPTY_FILE_CHECKSUM, range: "+0", content: "first line\nsecond line" }],
+      edits: [{ ref: emptyRef, range: "+0", content: "first line\nsecond line" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -224,15 +228,15 @@ describe("insert-after (+) semantics", () => {
 
 describe("multi-edit batches", () => {
   test("two non-overlapping replacements in one call", async () => {
-    const { path, cs } = setupFile("batch.txt", "aaa\nbbb\nccc\nddd\neee\n");
+    const { path, ref } = setupFile("batch.txt", "aaa\nbbb\nccc\nddd\neee\n");
     const h1 = lineHash("aaa");
     const h3 = lineHash("ccc");
 
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `${h1}.1`, content: "AAA" },
-        { checksum: cs, range: `${h3}.3`, content: "CCC" },
+        { ref, range: `${h1}.1`, content: "AAA" },
+        { ref, range: `${h3}.3`, content: "CCC" },
       ],
     });
 
@@ -241,7 +245,7 @@ describe("multi-edit batches", () => {
   });
 
   test("edits provided out of order succeed (engine sorts)", async () => {
-    const { path, cs } = setupFile("unsorted.txt", "aaa\nbbb\nccc\nddd\n");
+    const { path, ref } = setupFile("unsorted.txt", "aaa\nbbb\nccc\nddd\n");
     const h3 = lineHash("ccc");
     const h1 = lineHash("aaa");
 
@@ -249,8 +253,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `${h3}.3`, content: "CCC" },
-        { checksum: cs, range: `${h1}.1`, content: "AAA" },
+        { ref, range: `${h3}.3`, content: "CCC" },
+        { ref, range: `${h1}.1`, content: "AAA" },
       ],
     });
 
@@ -259,15 +263,15 @@ describe("multi-edit batches", () => {
   });
 
   test("batch with replace + insert-after at different lines", async () => {
-    const { path, cs } = setupFile("mixed.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("mixed.txt", "aaa\nbbb\nccc\n");
     const h1 = lineHash("aaa");
     const h3 = lineHash("ccc");
 
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `${h1}.1`, content: "AAA" },
-        { checksum: cs, range: `+${h3}.3`, content: "ddd" },
+        { ref, range: `${h1}.1`, content: "AAA" },
+        { ref, range: `+${h3}.3`, content: "ddd" },
       ],
     });
 
@@ -276,7 +280,7 @@ describe("multi-edit batches", () => {
   });
 
   test("overlapping replace ranges are rejected", async () => {
-    const { path, cs } = setupFile("overlap.txt", "aaa\nbbb\nccc\nddd\n");
+    const { path, ref } = setupFile("overlap.txt", "aaa\nbbb\nccc\nddd\n");
     const h1 = lineHash("aaa");
     const h2 = lineHash("bbb");
     const h3 = lineHash("ccc");
@@ -284,8 +288,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `${h1}.1-${h2}.2`, content: "X" },
-        { checksum: cs, range: `${h2}.2-${h3}.3`, content: "Y" },
+        { ref, range: `${h1}.1-${h2}.2`, content: "X" },
+        { ref, range: `${h2}.2-${h3}.3`, content: "Y" },
       ],
     });
 
@@ -294,7 +298,7 @@ describe("multi-edit batches", () => {
   });
 
   test("adjacent ranges (non-overlapping) succeed", async () => {
-    const { path, cs } = setupFile("adjacent.txt", "aaa\nbbb\nccc\nddd\n");
+    const { path, ref } = setupFile("adjacent.txt", "aaa\nbbb\nccc\nddd\n");
     const h1 = lineHash("aaa");
     const h2 = lineHash("bbb");
     const h3 = lineHash("ccc");
@@ -303,8 +307,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `${h1}.1-${h2}.2`, content: "AA\nBB" },
-        { checksum: cs, range: `${h3}.3-${h4}.4`, content: "CC\nDD" },
+        { ref, range: `${h1}.1-${h2}.2`, content: "AA\nBB" },
+        { ref, range: `${h3}.3-${h4}.4`, content: "CC\nDD" },
       ],
     });
 
@@ -334,12 +338,12 @@ describe("multi-edit batches", () => {
 describe("checksum coverage", () => {
   test("narrow checksum covering only the edited line works", async () => {
     const { path, lines } = setupFile("narrow.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    const narrowCs = rangeChecksum(lines, 2, 4);
+    const narrowRef = issueTestRef(path, lines, 2, 4);
     const h3 = lineHash("ccc");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: narrowCs, range: `${h3}.3`, content: "CCC" }],
+      edits: [{ ref: narrowRef, range: `${h3}.3`, content: "CCC" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -348,13 +352,13 @@ describe("checksum coverage", () => {
 
   test("checksum range must cover all edits in batch", async () => {
     const { path, lines } = setupFile("partial.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    // Checksum covers lines 1-3 but edit targets line 5
-    const narrowCs = rangeChecksum(lines, 1, 3);
+    // Ref covers lines 1-3 but edit targets line 5
+    const narrowRef = issueTestRef(path, lines, 1, 3);
     const h5 = lineHash("eee");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: narrowCs, range: `${h5}.5`, content: "EEE" }],
+      edits: [{ ref: narrowRef, range: `${h5}.5`, content: "EEE" }],
     });
 
     expect(result.isError).toBe(true);
@@ -364,12 +368,12 @@ describe("checksum coverage", () => {
   test("checksum from partial read covers insert-after anchor line", async () => {
     const { path, lines } = setupFile("partial-ins.txt", "aaa\nbbb\nccc\n");
     // Only cover lines 1-2
-    const narrowCs = rangeChecksum(lines, 1, 2);
+    const narrowRef = issueTestRef(path, lines, 1, 2);
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: narrowCs, range: `+${h2}.2`, content: "inserted" }],
+      edits: [{ ref: narrowRef, range: `+${h2}.2`, content: "inserted" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -378,10 +382,11 @@ describe("checksum coverage", () => {
 
   test("empty-file sentinel rejected for non-empty file", async () => {
     const { path } = setupFile("notempty.txt", "aaa\n");
+    const emptyRef = issueRef(path, 0, 0, "00000000");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: EMPTY_FILE_CHECKSUM, range: "+0", content: "x" }],
+      edits: [{ ref: emptyRef, range: "+0", content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -394,12 +399,12 @@ describe("checksum coverage", () => {
 
 describe("content growth and shrinkage", () => {
   test("replace one line with many (file grows)", async () => {
-    const { path, cs } = setupFile("grow.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("grow.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "x1\nx2\nx3\nx4\nx5" }],
+      edits: [{ ref, range: `${h2}.2`, content: "x1\nx2\nx3\nx4\nx5" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -407,13 +412,13 @@ describe("content growth and shrinkage", () => {
   });
 
   test("replace many lines with one (file shrinks)", async () => {
-    const { path, cs } = setupFile("shrink.txt", "aaa\nbbb\nccc\nddd\neee\n");
+    const { path, ref } = setupFile("shrink.txt", "aaa\nbbb\nccc\nddd\neee\n");
     const h2 = lineHash("bbb");
     const h4 = lineHash("ddd");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2-${h4}.4`, content: "only" }],
+      edits: [{ ref, range: `${h2}.2-${h4}.4`, content: "only" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -421,13 +426,13 @@ describe("content growth and shrinkage", () => {
   });
 
   test("delete lines (empty content string)", async () => {
-    const { path, cs } = setupFile("delete.txt", "aaa\nbbb\nccc\nddd\n");
+    const { path, ref } = setupFile("delete.txt", "aaa\nbbb\nccc\nddd\n");
     const h2 = lineHash("bbb");
     const h3 = lineHash("ccc");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2-${h3}.3`, content: "" }],
+      edits: [{ ref, range: `${h2}.2-${h3}.3`, content: "" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -435,38 +440,38 @@ describe("content growth and shrinkage", () => {
   });
 
   test("delete all lines leaves empty file", async () => {
-    const { path, cs } = setupFile("delall.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("delall.txt", "aaa\nbbb\n");
     const h1 = lineHash("aaa");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h1}.1-${h2}.2`, content: "" }],
+      edits: [{ ref, range: `${h1}.1-${h2}.2`, content: "" }],
     });
 
     expect(result.isError).toBeUndefined();
     expect(readFileSync(path, "utf-8")).toBe("");
   });
 
-  test("replace with empty then chain a second edit using returned checksum", async () => {
-    const { path, cs } = setupFile("chain.txt", "aaa\nbbb\nccc\n");
+  test("replace with empty then chain a second edit using returned ref", async () => {
+    const { path, ref } = setupFile("chain.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const r1 = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "" }],
+      edits: [{ ref, range: `${h2}.2`, content: "" }],
     });
     expect(r1.isError).toBeUndefined();
 
-    // Extract returned checksum and use for second edit
-    const csMatch = r1.content[0].text.match(/(\d+-\d+:[0-9a-f]+)/);
-    expect(csMatch).not.toBeNull();
-    const newCs = csMatch![1];
+    // Extract returned ref and use for second edit
+    const refMatch = r1.content[0].text.match(/ref: (R\d+)/);
+    expect(refMatch).not.toBeNull();
+    const newRef = refMatch![1];
 
     const h1 = lineHash("aaa");
     const r2 = await edit({
       file_path: path,
-      edits: [{ checksum: newCs, range: `${h1}.1`, content: "AAA" }],
+      edits: [{ ref: newRef, range: `${h1}.1`, content: "AAA" }],
     });
     expect(r2.isError).toBeUndefined();
     expect(readFileSync(path, "utf-8")).toBe("AAA\nccc\n");
@@ -479,12 +484,12 @@ describe("content growth and shrinkage", () => {
 
 describe("unicode and special content", () => {
   test("emoji content hashes and edits correctly", async () => {
-    const { path, cs } = setupFile("emoji.txt", "hello\n🎉🎊🎈\nworld\n");
+    const { path, ref } = setupFile("emoji.txt", "hello\n🎉🎊🎈\nworld\n");
     const h2 = lineHash("🎉🎊🎈");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "🚀 launched" }],
+      edits: [{ ref, range: `${h2}.2`, content: "🚀 launched" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -492,12 +497,12 @@ describe("unicode and special content", () => {
   });
 
   test("CJK characters", async () => {
-    const { path, cs } = setupFile("cjk.txt", "你好\n世界\n测试\n");
+    const { path, ref } = setupFile("cjk.txt", "你好\n世界\n测试\n");
     const h2 = lineHash("世界");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "地球" }],
+      edits: [{ ref, range: `${h2}.2`, content: "地球" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -507,12 +512,12 @@ describe("unicode and special content", () => {
   test("lines containing colons and pipe characters", async () => {
     // These chars appear in the trueline format itself — ensure they
     // don't confuse the parser when they're in file content.
-    const { path, cs } = setupFile("special.txt", "key:value|extra\nnormal\n");
+    const { path, ref } = setupFile("special.txt", "key:value|extra\nnormal\n");
     const h1 = lineHash("key:value|extra");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h1}.1`, content: "new:val|stuff" }],
+      edits: [{ ref, range: `${h1}.1`, content: "new:val|stuff" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -520,15 +525,15 @@ describe("unicode and special content", () => {
   });
 
   test("lines with only whitespace", async () => {
-    const { path, cs } = setupFile("ws.txt", "  \n\t\t\n   \n");
+    const { path, ref } = setupFile("ws.txt", "  \n\t\t\n   \n");
     const h1 = lineHash("  ");
     const h2 = lineHash("\t\t");
 
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `${h1}.1`, content: "trimmed" },
-        { checksum: cs, range: `${h2}.2`, content: "also trimmed" },
+        { ref, range: `${h1}.1`, content: "trimmed" },
+        { ref, range: `${h2}.2`, content: "also trimmed" },
       ],
     });
 
@@ -537,12 +542,12 @@ describe("unicode and special content", () => {
   });
 
   test("single newline in content string produces empty line", async () => {
-    const { path, cs } = setupFile("blank.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("blank.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "\n" }],
+      edits: [{ ref, range: `${h2}.2`, content: "\n" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -551,12 +556,12 @@ describe("unicode and special content", () => {
 
   test("very long line", async () => {
     const longLine = "x".repeat(10000);
-    const { path, cs } = setupFile("long.txt", `aaa\n${longLine}\nccc\n`);
+    const { path, ref } = setupFile("long.txt", `aaa\n${longLine}\nccc\n`);
     const h2 = lineHash(longLine);
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "short" }],
+      edits: [{ ref, range: `${h2}.2`, content: "short" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -570,12 +575,12 @@ describe("unicode and special content", () => {
 
 describe("line ending edge cases", () => {
   test("CRLF file: replacement uses CRLF", async () => {
-    const { path, cs } = setupFile("crlf.txt", "aaa\r\nbbb\r\nccc\r\n");
+    const { path, ref } = setupFile("crlf.txt", "aaa\r\nbbb\r\nccc\r\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -584,12 +589,12 @@ describe("line ending edge cases", () => {
   });
 
   test("LF file: no CRLF introduced by edit", async () => {
-    const { path, cs } = setupFile("lf.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("lf.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
     });
 
     const written = readFileSync(path, "utf-8");
@@ -597,12 +602,12 @@ describe("line ending edge cases", () => {
   });
 
   test("file without trailing newline preserves that after edit", async () => {
-    const { path, cs } = setupFile("notl.txt", "aaa\nbbb");
+    const { path, ref } = setupFile("notl.txt", "aaa\nbbb");
     const h1 = lineHash("aaa");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h1}.1`, content: "AAA" }],
+      edits: [{ ref, range: `${h1}.1`, content: "AAA" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -612,12 +617,12 @@ describe("line ending edge cases", () => {
   });
 
   test("file with trailing newline preserves it after edit", async () => {
-    const { path, cs } = setupFile("tl.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("tl.txt", "aaa\nbbb\n");
     const h1 = lineHash("aaa");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h1}.1`, content: "AAA" }],
+      edits: [{ ref, range: `${h1}.1`, content: "AAA" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -633,12 +638,12 @@ describe("line ending edge cases", () => {
 
 describe("no-op detection", () => {
   test("replacing line with identical content is a no-op", async () => {
-    const { path, cs } = setupFile("noop1.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("noop1.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "bbb" }],
+      edits: [{ ref, range: `${h2}.2`, content: "bbb" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -646,13 +651,13 @@ describe("no-op detection", () => {
   });
 
   test("replacing multi-line range with identical content is a no-op", async () => {
-    const { path, cs } = setupFile("noop2.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("noop2.txt", "aaa\nbbb\nccc\n");
     const h1 = lineHash("aaa");
     const h3 = lineHash("ccc");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h1}.1-${h3}.3`, content: "aaa\nbbb\nccc" }],
+      edits: [{ ref, range: `${h1}.1-${h3}.3`, content: "aaa\nbbb\nccc" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -660,12 +665,12 @@ describe("no-op detection", () => {
   });
 
   test("insert-after with content is not a no-op (always changes file)", async () => {
-    const { path, cs } = setupFile("ins-noop.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile("ins-noop.txt", "aaa\nbbb\n");
     const h1 = lineHash("aaa");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `+${h1}.1`, content: "inserted" }],
+      edits: [{ ref, range: `+${h1}.1`, content: "inserted" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -674,52 +679,53 @@ describe("no-op detection", () => {
 });
 
 // =============================================================================
-// Returned checksum chaining
+// Returned ref enables chaining
 // =============================================================================
 
-describe("returned checksum enables chaining", () => {
-  test("returned checksum works for a subsequent edit", async () => {
-    const { path, cs } = setupFile("chain1.txt", "aaa\nbbb\nccc\n");
+describe("returned ref enables chaining", () => {
+  test("returned ref works for a subsequent edit", async () => {
+    const { path, ref } = setupFile("chain1.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const r1 = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
     });
     expect(r1.isError).toBeUndefined();
 
-    const csMatch = r1.content[0].text.match(/(\d+-\d+:[0-9a-f]+)/);
-    expect(csMatch).not.toBeNull();
-    const newCs = csMatch![1];
+    const refMatch = r1.content[0].text.match(/ref: (R\d+)/);
+    expect(refMatch).not.toBeNull();
+    const newRef = refMatch![1];
 
     const hBBB = lineHash("BBB");
     const r2 = await edit({
       file_path: path,
-      edits: [{ checksum: newCs, range: `${hBBB}.2`, content: "FINAL" }],
+      edits: [{ ref: newRef, range: `${hBBB}.2`, content: "FINAL" }],
     });
 
     expect(r2.isError).toBeUndefined();
     expect(readFileSync(path, "utf-8")).toBe("aaa\nFINAL\nccc\n");
   });
 
-  test("old checksum is rejected after file was edited", async () => {
-    const { path, cs } = setupFile("stale.txt", "aaa\nbbb\nccc\n");
+  test("old ref is rejected after file was edited", async () => {
+    const { path, ref } = setupFile("stale.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
     });
 
-    // Try using the old checksum — file has changed
+    // Try using the old ref — it was invalidated after the edit
     const h3 = lineHash("ccc");
     const r2 = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h3}.3`, content: "CCC" }],
+      edits: [{ ref, range: `${h3}.3`, content: "CCC" }],
     });
 
     expect(r2.isError).toBe(true);
-    expect(r2.content[0].text).toContain("mismatch");
+    // The old ref was invalidated, so it should be unknown
+    expect(r2.content[0].text).toMatch(/unknown ref|mismatch/i);
   });
 });
 
@@ -728,7 +734,7 @@ describe("returned checksum enables chaining", () => {
 // =============================================================================
 
 describe("read-then-edit round-trip", () => {
-  test("checksum from handleRead feeds directly into handleEdit", async () => {
+  test("ref from handleRead feeds directly into handleEdit", async () => {
     const f = join(testDir, "roundtrip.txt");
     writeFileSync(f, "alpha\nbeta\ngamma\n");
 
@@ -738,21 +744,21 @@ describe("read-then-edit round-trip", () => {
     });
     expect(readResult.isError).toBeUndefined();
 
-    // Extract checksum from read output
-    const csMatch = readResult.content[0].text.match(/checksum:\s*([a-z]{2}\.\d+-[a-z]{2}\.\d+:[0-9a-f]+)/);
-    expect(csMatch).not.toBeNull();
+    // Extract ref from read output
+    const refMatch = readResult.content[0].text.match(/ref: (R\d+)/);
+    expect(refMatch).not.toBeNull();
 
     const hBeta = lineHash("beta");
     const editResult = await edit({
       file_path: f,
-      edits: [{ checksum: csMatch![1], range: `${hBeta}.2`, content: "BETA" }],
+      edits: [{ ref: refMatch![1], range: `${hBeta}.2`, content: "BETA" }],
     });
 
     expect(editResult.isError).toBeUndefined();
     expect(readFileSync(f, "utf-8")).toBe("alpha\nBETA\ngamma\n");
   });
 
-  test("partial read checksum covers the edit", async () => {
+  test("partial read ref covers the edit", async () => {
     const f = join(testDir, "partial-rt.txt");
     writeFileSync(f, "aaa\nbbb\nccc\nddd\neee\n");
 
@@ -764,13 +770,13 @@ describe("read-then-edit round-trip", () => {
     });
     expect(readResult.isError).toBeUndefined();
 
-    const csMatch = readResult.content[0].text.match(/checksum:\s*([a-z]{2}\.\d+-[a-z]{2}\.\d+:[0-9a-f]+)/);
-    expect(csMatch).not.toBeNull();
+    const refMatch = readResult.content[0].text.match(/ref: (R\d+)/);
+    expect(refMatch).not.toBeNull();
 
     const hCcc = lineHash("ccc");
     const editResult = await edit({
       file_path: f,
-      edits: [{ checksum: csMatch![1], range: `${hCcc}.3`, content: "CCC" }],
+      edits: [{ ref: refMatch![1], range: `${hCcc}.3`, content: "CCC" }],
     });
 
     expect(editResult.isError).toBeUndefined();
@@ -788,14 +794,14 @@ describe("stale checksum recovery hints", () => {
     writeFileSync(f, "aaa\nbbb\nccc\nddd\neee\n");
 
     const original = ["aaa", "bbb", "ccc", "ddd", "eee"];
-    const cs = rangeChecksum(original, 1, 5);
+    const ref = issueTestRef(f, original, 1, 5);
 
     // External modification of line 5, outside edit target
     writeFileSync(f, "aaa\nbbb\nccc\nddd\nEEE\n");
 
     const result = await edit({
       file_path: f,
-      edits: [{ checksum: cs, range: `${lineHash("bbb")}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${lineHash("bbb")}.2`, content: "BBB" }],
     });
 
     expect(result.isError).toBe(true);
@@ -808,14 +814,14 @@ describe("stale checksum recovery hints", () => {
     writeFileSync(f, "aaa\nbbb\nccc\n");
 
     const original = ["aaa", "bbb", "ccc"];
-    const cs = rangeChecksum(original, 1, 3);
+    const ref = issueTestRef(f, original, 1, 3);
 
     // External modification of line 2, which IS the edit target
     writeFileSync(f, "aaa\nBBB\nccc\n");
 
     const result = await edit({
       file_path: f,
-      edits: [{ checksum: cs, range: `${lineHash("bbb")}.2`, content: "xxx" }],
+      edits: [{ ref, range: `${lineHash("bbb")}.2`, content: "xxx" }],
     });
 
     expect(result.isError).toBe(true);
@@ -830,11 +836,11 @@ describe("stale checksum recovery hints", () => {
 
 describe("boundary hash verification", () => {
   test("wrong start hash rejected", async () => {
-    const { path, cs } = setupFile("bad-start.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("bad-start.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `zz.1-${lineHash("bbb")}.2`, content: "x\ny" }],
+      edits: [{ ref, range: `zz.1-${lineHash("bbb")}.2`, content: "x\ny" }],
     });
 
     expect(result.isError).toBe(true);
@@ -842,11 +848,11 @@ describe("boundary hash verification", () => {
   });
 
   test("wrong end hash rejected", async () => {
-    const { path, cs } = setupFile("bad-end.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile("bad-end.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${lineHash("aaa")}.1-zz.2`, content: "x\ny" }],
+      edits: [{ ref, range: `${lineHash("aaa")}.1-zz.2`, content: "x\ny" }],
     });
 
     expect(result.isError).toBe(true);
@@ -854,13 +860,13 @@ describe("boundary hash verification", () => {
   });
 
   test("correct hashes on multi-line range pass", async () => {
-    const { path, cs } = setupFile("good-hash.txt", "aaa\nbbb\nccc\nddd\n");
+    const { path, ref } = setupFile("good-hash.txt", "aaa\nbbb\nccc\nddd\n");
     const h1 = lineHash("aaa");
     const h4 = lineHash("ddd");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `${h1}.1-${h4}.4`, content: "only one line" }],
+      edits: [{ ref, range: `${h1}.1-${h4}.4`, content: "only one line" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -879,9 +885,10 @@ describe("security and file validation", () => {
     writeFileSync(outsideFile, "secret\n");
 
     try {
+      const staleRef = issueRef(outsideFile, 1, 1, "00000000");
       const result = await edit({
         file_path: outsideFile,
-        edits: [{ checksum: "1-1:00000000", range: "aa.1", content: "hacked" }],
+        edits: [{ ref: staleRef, range: "aa.1", content: "hacked" }],
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("outside");
@@ -894,9 +901,10 @@ describe("security and file validation", () => {
     const binFile = join(testDir, "binary.dat");
     writeFileSync(binFile, Buffer.from([0x48, 0x65, 0x00, 0x6c, 0x6f]));
 
+    const staleRef = issueRef(binFile, 1, 1, "00000000");
     const result = await edit({
       file_path: binFile,
-      edits: [{ checksum: "1-1:00000000", range: "aa.1", content: "text" }],
+      edits: [{ ref: staleRef, range: "aa.1", content: "text" }],
     });
 
     expect(result.isError).toBe(true);
@@ -904,18 +912,20 @@ describe("security and file validation", () => {
   });
 
   test("rejects directory path", async () => {
+    const staleRef = issueRef(testDir, 1, 1, "00000000");
     const result = await edit({
       file_path: testDir,
-      edits: [{ checksum: "1-1:00000000", range: "aa.1", content: "x" }],
+      edits: [{ ref: staleRef, range: "aa.1", content: "x" }],
     });
 
     expect(result.isError).toBe(true);
   });
 
   test("rejects nonexistent file", async () => {
+    const staleRef = issueRef(join(testDir, "does-not-exist.txt"), 1, 1, "00000000");
     const result = await edit({
       file_path: join(testDir, "does-not-exist.txt"),
-      edits: [{ checksum: "1-1:00000000", range: "aa.1", content: "x" }],
+      edits: [{ ref: staleRef, range: "aa.1", content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -928,12 +938,13 @@ describe("security and file validation", () => {
     symlinkSync(realFile, linkFile);
 
     const lines = ["aaa", "bbb"];
-    const cs = rangeChecksum(lines, 1, 2);
+    // Use realFile for the ref since symlinks resolve to the real path
+    const ref = issueTestRef(realFile, lines, 1, 2);
     const h1 = lineHash("aaa");
 
     const result = await edit({
       file_path: linkFile,
-      edits: [{ checksum: cs, range: `${h1}.1`, content: "AAA" }],
+      edits: [{ ref, range: `${h1}.1`, content: "AAA" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -948,9 +959,10 @@ describe("security and file validation", () => {
     symlinkSync(outsideFile, linkFile);
 
     try {
+      const staleRef = issueRef(linkFile, 1, 1, "00000000");
       const result = await edit({
         file_path: linkFile,
-        edits: [{ checksum: "1-1:00000000", range: "aa.1", content: "hacked" }],
+        edits: [{ ref: staleRef, range: "aa.1", content: "hacked" }],
       });
       expect(result.isError).toBe(true);
     } finally {
@@ -971,12 +983,12 @@ describe("security and file validation", () => {
     writeFileSync(secretFile, "hunter2\n");
 
     const lines = ["hunter2"];
-    const cs = rangeChecksum(lines, 1, 1);
+    const ref = issueTestRef(secretFile, lines, 1, 1);
     const h = lineHash("hunter2");
 
     const result = await edit({
       file_path: secretFile,
-      edits: [{ checksum: cs, range: `${h}.1`, content: "redacted" }],
+      edits: [{ ref, range: `${h}.1`, content: "redacted" }],
     });
 
     expect(result.isError).toBe(true);
@@ -999,11 +1011,11 @@ describe("large file edits", () => {
 
     const target = "line 500";
     const h500 = lineHash(target);
-    const narrowCs = rangeChecksum(lines, 498, 502);
+    const narrowRef = issueTestRef(path, lines, 498, 502);
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: narrowCs, range: `${h500}.500`, content: "REPLACED 500" }],
+      edits: [{ ref: narrowRef, range: `${h500}.500`, content: "REPLACED 500" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -1019,14 +1031,14 @@ describe("large file edits", () => {
     const content = `${lines.join("\n")}\n`;
     const { path } = setupFile("scatter.txt", content);
 
-    const cs = rangeChecksum(lines, 1, 500);
+    const ref = issueTestRef(path, lines, 1, 500);
 
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `${lineHash("line 1")}.1`, content: "FIRST" },
-        { checksum: cs, range: `${lineHash("line 250")}.250`, content: "MIDDLE" },
-        { checksum: cs, range: `${lineHash("line 500")}.500`, content: "LAST" },
+        { ref, range: `${lineHash("line 1")}.1`, content: "FIRST" },
+        { ref, range: `${lineHash("line 250")}.250`, content: "MIDDLE" },
+        { ref, range: `${lineHash("line 500")}.500`, content: "LAST" },
       ],
     });
 
@@ -1039,32 +1051,33 @@ describe("large file edits", () => {
 });
 
 // =============================================================================
-// Checksum format validation
+// Ref validation
 // =============================================================================
 
-describe("checksum format validation", () => {
-  test("rejects checksum without range prefix", async () => {
+describe("ref validation", () => {
+  test("rejects unknown ref", async () => {
     const { path } = setupFile("nopfx.txt", "aaa\n");
     const h = lineHash("aaa");
 
-    // Just the hex part, no "1-1:" prefix
-    await expect(
-      edit({
-        file_path: path,
-        edits: [{ checksum: "abcdef01", range: `${h}.1`, content: "x" }],
-      }),
-    ).rejects.toThrow();
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref: "NONEXISTENT", range: `${h}.1`, content: "x" }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Unknown ref");
   });
 
-  test("rejects completely garbled checksum", async () => {
+  test("rejects garbled ref", async () => {
     const { path } = setupFile("garbled.txt", "aaa\n");
     const h = lineHash("aaa");
 
-    await expect(
-      edit({
-        file_path: path,
-        edits: [{ checksum: "not-a-checksum", range: `${h}.1`, content: "x" }],
-      }),
-    ).rejects.toThrow();
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref: "not-a-ref", range: `${h}.1`, content: "x" }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Unknown ref");
   });
 });

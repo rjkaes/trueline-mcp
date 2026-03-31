@@ -3,12 +3,12 @@ import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync, symlinkSyn
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead, clearReadCache } from "../../src/tools/read.ts";
-import { EMPTY_FILE_CHECKSUM } from "../../src/hash.ts";
-import { rangeChecksum, LINE_PATTERN } from "../helpers.ts";
+import { rangeChecksum, LINE_PATTERN, resetRefStore } from "../helpers.ts";
 
 let testDir: string;
 
 beforeEach(() => {
+  resetRefStore();
   clearReadCache();
 });
 
@@ -25,14 +25,14 @@ afterAll(() => {
 // =============================================================================
 
 describe("empty and minimal files", () => {
-  test("empty file returns sentinel checksum", async () => {
+  test("empty file returns ref for empty file", async () => {
     const f = join(testDir, "empty.txt");
     writeFileSync(f, "");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     expect(result.content[0].text).toContain("(empty file)");
-    expect(result.content[0].text).toContain(EMPTY_FILE_CHECKSUM);
+    expect(result.content[0].text).toMatch(/ref: R\d+ \(empty file\)/);
   });
 
   test("single line with trailing newline", async () => {
@@ -289,7 +289,7 @@ describe("range parameters", () => {
     expect(lines[0]).toMatch(/^[a-z]{2}\.2\tbbb$/);
   });
 
-  test("reading a middle range produces correct checksum", async () => {
+  test("reading a middle range produces correct ref", async () => {
     const f = join(testDir, "range-checksum.txt");
     const fileLines = ["aaa", "bbb", "ccc", "ddd", "eee"];
     writeFileSync(f, `${fileLines.join("\n")}\n`);
@@ -297,27 +297,27 @@ describe("range parameters", () => {
     const result = await handleRead({ file_path: f, ranges: ["2-4"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
 
-    const expectedCs = rangeChecksum(fileLines, 2, 4);
-    expect(result.content[0].text).toContain(`checksum: ${expectedCs}`);
+    // The ref should be present for lines 2-4
+    expect(result.content[0].text).toMatch(/ref: R\d+ \(lines 2-4\)/);
   });
 });
 
 // =============================================================================
-// Checksum consistency
+// Ref consistency
 // =============================================================================
 
-describe("checksum consistency", () => {
-  test("full-file read checksum matches rangeChecksum helper", async () => {
+describe("ref consistency", () => {
+  test("full-file read produces ref for correct line range", async () => {
     const f = join(testDir, "cs-full.txt");
     const fileLines = ["alpha", "beta", "gamma"];
     writeFileSync(f, `${fileLines.join("\n")}\n`);
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
-    const expectedCs = rangeChecksum(fileLines, 1, 3);
-    expect(result.content[0].text).toContain(`checksum: ${expectedCs}`);
+    // The ref should be present for lines 1-3
+    expect(result.content[0].text).toMatch(/ref: R\d+ \(lines 1-3\)/);
   });
 
-  test("identical content produces identical hashes", async () => {
+  test("identical content produces refs with matching line ranges", async () => {
     const f1 = join(testDir, "dup1.txt");
     const f2 = join(testDir, "dup2.txt");
     writeFileSync(f1, "same\ncontent\n");
@@ -331,7 +331,7 @@ describe("checksum consistency", () => {
     expect(cs1).toBe(cs2);
   });
 
-  test("different content produces different checksums", async () => {
+  test("different content produces different ref IDs", async () => {
     const f1 = join(testDir, "diff1.txt");
     const f2 = join(testDir, "diff2.txt");
     writeFileSync(f1, "aaa\nbbb\n");
@@ -339,9 +339,12 @@ describe("checksum consistency", () => {
 
     const r1 = await handleRead({ file_path: f1, projectDir: testDir });
     const r2 = await handleRead({ file_path: f2, projectDir: testDir });
-    const cs1 = r1.content[0].text.split("\n").find((l) => l.startsWith("checksum:"));
-    const cs2 = r2.content[0].text.split("\n").find((l) => l.startsWith("checksum:"));
-    expect(cs1).not.toBe(cs2);
+    const ref1 = r1.content[0].text.match(/ref: (R\d+)/)?.[1];
+    const ref2 = r2.content[0].text.match(/ref: (R\d+)/)?.[1];
+    // Refs are always unique IDs
+    expect(ref1).toBeDefined();
+    expect(ref2).toBeDefined();
+    expect(ref1).not.toBe(ref2);
   });
 
   test("line hash is deterministic across reads", async () => {
@@ -350,6 +353,7 @@ describe("checksum consistency", () => {
 
     const r1 = await handleRead({ file_path: f, projectDir: testDir });
     clearReadCache(); // bypass cache to test hash determinism
+    resetRefStore();
     const r2 = await handleRead({ file_path: f, projectDir: testDir });
     // Extract the hash portion of the first content line
     const hash1 = r1.content[0].text.split("\n")[0].match(/^([a-z]{2})\.\d+/)?.[1];

@@ -62,7 +62,7 @@ the ranges it needs. A 500-line file where the agent needs one 20-line
 function? It reads 20 lines, not 500.
 
 `trueline_search` finds lines by literal string or regex and returns them
-with edit-ready checksums, no outline or read step needed. For targeted
+with edit-ready refs, no outline or read step needed. For targeted
 edits where the agent knows what it's looking for, this is the fastest path.
 
 ### Edit: compact and verified
@@ -96,7 +96,7 @@ content that doesn't match what's on disk, the edit is rejected. If the
 agent targets the wrong lines, the edit is rejected. Nothing hits disk
 unless the hashes match.
 
-`trueline_verify` checks whether held checksums are still valid without
+`trueline_verify` checks whether held refs are still valid without
 re-reading the file. When nothing changed (the common case), the response
 is a single line.
 

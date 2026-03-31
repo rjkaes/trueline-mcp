@@ -1,6 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import { type ChecksumRef, parseChecksum, parseRange } from "../parse.ts";
+import { type ChecksumRef, parseRange } from "../parse.ts";
+import { refToChecksumRef, resolveRef } from "../ref-store.ts";
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
 
@@ -9,7 +10,7 @@ import { errorResult, type ToolResult } from "./types.ts";
 // ==============================================================================
 
 export interface EditInput {
-  checksum: string;
+  ref: string;
   range: string;
   content: string;
   action?: "replace" | "insert_after";
@@ -177,22 +178,41 @@ type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
  * and overlap detection. File-content verification (checksum match,
  * boundary hash match) is deferred to the streaming pass.
  */
-export function validateEdits(edits: EditInput[]): ValidateEditsResult {
+export function validateEdits(edits: EditInput[], resolvedPath?: string): ValidateEditsResult {
   const ops: StreamEditOp[] = [];
   const checksumRefMap = new Map<string, ChecksumRef>();
 
   for (const edit of edits) {
-    const checksumRef = parseChecksum(edit.checksum);
-    checksumRefMap.set(edit.checksum, checksumRef);
+    let refEntry: ReturnType<typeof resolveRef>;
+    try {
+      refEntry = resolveRef(edit.ref);
+    } catch (err) {
+      return { ok: false, error: errorResult((err as Error).message) };
+    }
+    const checksumRef = refToChecksumRef(refEntry);
+    checksumRefMap.set(edit.ref, checksumRef);
+
+    // Cross-file check: ensure the ref was issued for the file being edited.
+    // Without this, an LLM could accidentally use a ref from file A to edit file B.
+    if (resolvedPath && refEntry.filePath !== resolvedPath) {
+      return {
+        ok: false,
+        error: errorResult(
+          `Ref ${edit.ref} was issued for a different file (${refEntry.filePath}), ` +
+            `not the file being edited (${resolvedPath}). ` +
+            `Use a ref from trueline_read or trueline_search on the target file.`,
+        ),
+      };
+    }
 
     let rangeRef: ReturnType<typeof parseRange>;
     try {
       rangeRef = parseRange(edit.range);
     } catch (err) {
-      // Enhance bare-number errors with checksum context so the LLM knows where to look.
+      // Enhance bare-number errors with ref context so the LLM knows where to look.
       const msg = err instanceof Error ? err.message : String(err);
       const hint =
-        ` Your checksum covers lines ${checksumRef.startLine}\u2013${checksumRef.endLine}. ` +
+        ` Your ref ${edit.ref} covers lines ${checksumRef.startLine}\u2013${checksumRef.endLine}. ` +
         "Re-read or search near that line to get its hash.line prefix.";
       throw new Error(msg + hint);
     }
@@ -226,9 +246,9 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
         return {
           ok: false,
           error: errorResult(
-            `Checksum range ${checksumRef.startLine}-${checksumRef.endLine} does not cover ` +
+            `Ref ${edit.ref} covers lines ${checksumRef.startLine}-${checksumRef.endLine}, which does not cover ` +
               `edit range ${rangeRef.start.line}-${rangeRef.end.line}. ` +
-              `Re-read with trueline_read to get a checksum covering the target lines.`,
+              `Re-read with trueline_read to get a ref covering the target lines.`,
           ),
         };
       }

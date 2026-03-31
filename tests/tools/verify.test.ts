@@ -1,10 +1,11 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { handleRead } from "../../src/tools/read.ts";
+import { handleRead, clearReadCache } from "../../src/tools/read.ts";
 import { handleVerify } from "../../src/tools/verify.ts";
-import { getText, writeTestFile as _writeTestFile } from "../helpers.ts";
+import { getText, writeTestFile as _writeTestFile, resetRefStore } from "../helpers.ts";
+import { issueRef } from "../../src/ref-store.ts";
 
 let testDir: string;
 const writeTestFile = (name: string, content: string) => _writeTestFile(testDir, name, content);
@@ -17,35 +18,39 @@ afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
-/** Extract checksum strings from a trueline_read result. */
-function extractChecksums(text: string): string[] {
-  const matches = text.matchAll(/checksum: (\S+)/g);
+beforeEach(() => {
+  clearReadCache();
+  resetRefStore();
+});
+
+/** Extract ref IDs from a trueline_read result. */
+function extractRefs(text: string): string[] {
+  const matches = text.matchAll(/ref: (R\d+)/g);
   return [...matches].map((m) => m[1]);
 }
 
 describe("trueline_verify", () => {
-  test("all valid — checksums match immediately after read", async () => {
+  test("all valid — refs match immediately after read", async () => {
     const file = writeTestFile("valid.txt", "line one\nline two\nline three\n");
     const readResult = await handleRead({ file_path: file, projectDir: testDir });
-    const checksums = extractChecksums(getText(readResult));
-    expect(checksums.length).toBeGreaterThan(0);
+    const refs = extractRefs(getText(readResult));
+    expect(refs.length).toBeGreaterThan(0);
 
-    const result = await handleVerify({ file_path: file, checksums, projectDir: testDir });
-    expect(getText(result)).toBe("all checksums valid");
+    const result = await handleVerify({ refs, projectDir: testDir });
+    expect(getText(result)).toBe("all refs valid");
   });
 
   test("stale after external modification", async () => {
     const file = writeTestFile("stale.txt", "original content\n");
     const readResult = await handleRead({ file_path: file, projectDir: testDir });
-    const checksums = extractChecksums(getText(readResult));
+    const refs = extractRefs(getText(readResult));
 
     // Modify the file externally
     writeFileSync(file, "modified content\n");
 
-    const result = await handleVerify({ file_path: file, checksums, projectDir: testDir });
+    const result = await handleVerify({ refs, projectDir: testDir });
     const text = getText(result);
     expect(text).toContain("stale:");
-    expect(text).toContain("actual:");
   });
 
   test("mixed valid and stale with two ranges", async () => {
@@ -58,8 +63,8 @@ describe("trueline_verify", () => {
       ranges: ["1-5", "10-15"],
       projectDir: testDir,
     });
-    const checksums = extractChecksums(getText(readResult));
-    expect(checksums.length).toBe(2);
+    const refs = extractRefs(getText(readResult));
+    expect(refs.length).toBe(2);
 
     // Modify only lines in the second range (10-15)
     const modifiedLines =
@@ -67,65 +72,58 @@ describe("trueline_verify", () => {
       "\n";
     writeFileSync(file, modifiedLines);
 
-    const result = await handleVerify({ file_path: file, checksums, projectDir: testDir });
+    const result = await handleVerify({ refs, projectDir: testDir });
     const text = getText(result);
     expect(text).toContain("valid:");
     expect(text).toContain("stale:");
   });
 
-  test("invalid checksum format returns error", async () => {
-    const file = writeTestFile("invalid.txt", "content\n");
+  test("unknown ref returns error", async () => {
     const result = await handleVerify({
-      file_path: file,
-      checksums: ["not-a-checksum"],
+      refs: ["R9999"],
       projectDir: testDir,
     });
     expect(result.isError).toBe(true);
+    expect(getText(result)).toContain("Unknown ref");
   });
 
-  test("empty checksums array returns error", async () => {
-    const file = writeTestFile("empty-cs.txt", "content\n");
+  test("empty refs array returns error", async () => {
     const result = await handleVerify({
-      file_path: file,
-      checksums: [],
+      refs: [],
       projectDir: testDir,
     });
     expect(result.isError).toBe(true);
-    expect(getText(result)).toContain("No checksums provided");
+    expect(getText(result)).toContain("No refs provided");
   });
 
   test("range past EOF is stale", async () => {
     const file = writeTestFile("short.txt", "one\ntwo\n");
-    // Fabricate a checksum for lines 1-100 that can't possibly match
-    const result = await handleVerify({
-      file_path: file,
-      checksums: ["1-100:deadbeef"],
-      projectDir: testDir,
-    });
+    // Issue a ref for lines 1-100 that extends past EOF
+    const ref = issueRef(file, 1, 100, "deadbeef");
+
+    const result = await handleVerify({ refs: [ref], projectDir: testDir });
     const text = getText(result);
     expect(text).toContain("stale:");
   });
 
-  test("empty file with 0-0:00000000 is valid", async () => {
+  test("empty file ref is valid", async () => {
     const file = writeTestFile("empty.txt", "");
-    const result = await handleVerify({
-      file_path: file,
-      checksums: ["0-0:00000000"],
-      projectDir: testDir,
-    });
-    expect(getText(result)).toBe("all checksums valid");
+    const readResult = await handleRead({ file_path: file, projectDir: testDir });
+    const refs = extractRefs(getText(readResult));
+
+    const result = await handleVerify({ refs, projectDir: testDir });
+    expect(getText(result)).toBe("all refs valid");
   });
 
-  test("empty file with non-empty checksum is stale", async () => {
+  test("empty file ref becomes stale when content is added", async () => {
     const file = writeTestFile("empty2.txt", "");
     const readResult = await handleRead({ file_path: file, projectDir: testDir });
-    const checksums = extractChecksums(getText(readResult));
-    expect(checksums).toEqual(["0-0:00000000"]);
+    const refs = extractRefs(getText(readResult));
 
     // Write content so it's no longer empty
     writeFileSync(file, "now has content\n");
 
-    const result = await handleVerify({ file_path: file, checksums, projectDir: testDir });
+    const result = await handleVerify({ refs, projectDir: testDir });
     const text = getText(result);
     expect(text).toContain("stale:");
   });
@@ -136,21 +134,21 @@ describe("trueline_verify", () => {
 
     // Read full file and a sub-range
     const fullRead = await handleRead({ file_path: file, projectDir: testDir });
+    clearReadCache();
     const subRead = await handleRead({
       file_path: file,
-      ranges: [{ start: 5, end: 15 }],
+      ranges: ["5-15"],
       projectDir: testDir,
     });
 
-    const fullCs = extractChecksums(getText(fullRead));
-    const subCs = extractChecksums(getText(subRead));
+    const fullRefs = extractRefs(getText(fullRead));
+    const subRefs = extractRefs(getText(subRead));
 
     // Verify both in one call (overlapping ranges)
     const result = await handleVerify({
-      file_path: file,
-      checksums: [...subCs, ...fullCs],
+      refs: [...subRefs, ...fullRefs],
       projectDir: testDir,
     });
-    expect(getText(result)).toBe("all checksums valid");
+    expect(getText(result)).toBe("all refs valid");
   });
 });

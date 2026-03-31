@@ -16,6 +16,7 @@ import { relative } from "node:path";
 import { DiffCollector } from "../diff-collector.ts";
 import { detectBOM } from "../encoding.ts";
 import { streamingEdit } from "../streaming-edit.ts";
+import { adjustRefsAfterEdit, issueRef, type EditRegion } from "../ref-store.ts";
 import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
@@ -46,7 +47,7 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
 
   const { resolvedPath, mtimeMs } = validated;
 
-  const built = validateEdits(edits);
+  const built = validateEdits(edits, resolvedPath);
   if (!built.ok) return built.error;
 
   // Detect BOM to pass encoding info through to streamingEdit for round-trip fidelity
@@ -104,16 +105,29 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     return errorResult(result.error);
   }
 
+  // Adjust surviving refs: invalidate those overlapping edits, shift those after.
+  const regions: EditRegion[] = built.ops.map((op) => ({
+    startLine: op.startLine,
+    endLine: op.endLine,
+    insertAfter: op.insertAfter,
+    newLineCount: op.content.length,
+  }));
+  adjustRefsAfterEdit(resolvedPath, regions);
+  const newRef =
+    result.newLineCount > 0
+      ? issueRef(resolvedPath, 1, result.newLineCount, result.newHash)
+      : issueRef(resolvedPath, 0, 0, "00000000");
+
   const summary = editSummary(built.ops);
 
   if (!result.changed) {
     return textResult(
-      `Edit produced no changes \u2014 file not written.\n\n${summary}\nchecksum: ${result.newChecksum}`,
+      `Edit produced no changes \u2014 file not written.\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})`,
     );
   }
 
   return textResult(
-    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nchecksum: ${result.newChecksum}`,
+    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})`,
   );
 }
 

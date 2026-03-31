@@ -45,9 +45,9 @@ describe("getInstructions", () => {
     expect(out).not.toContain("Never use");
   });
 
-  test("mentions checksum from trueline_read", () => {
+  test("mentions ref from trueline_read", () => {
     const out = getInstructions();
-    expect(out).toContain("checksum");
+    expect(out).toContain("ref");
   });
 
   test("getSessionStartInstructions is a backwards-compatible alias", () => {

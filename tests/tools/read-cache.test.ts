@@ -3,12 +3,13 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead, clearReadCache } from "../../src/tools/read.ts";
-import { getText } from "../helpers.ts";
+import { getText, resetRefStore } from "../helpers.ts";
 
 let testDir: string;
 
 beforeEach(() => {
   clearReadCache();
+  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-read-cache-")));
 });
 
@@ -23,7 +24,7 @@ function writeFile(name: string, content: string): string {
 }
 
 describe("read cache — unchanged file", () => {
-  test("second read of same file returns stub with checksums", async () => {
+  test("second read of same file returns stub with refs", async () => {
     const f = writeFile("cached.txt", "line one\nline two\n");
 
     const r1 = await handleRead({ file_path: f, allowedDirs: [testDir] });
@@ -40,31 +41,31 @@ describe("read cache — unchanged file", () => {
     expect(t2).toContain("File unchanged since last read");
     expect(t2).not.toContain("line one");
 
-    // Stub includes checksums
-    expect(t2).toMatch(/checksum: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[0-9a-f]+/);
+    // Stub includes refs
+    expect(t2).toMatch(/ref: R\d+ \(still valid\)/);
 
-    // Checksums match between full read and stub
-    const cs1 = t1.match(/checksum: (\S+)/)?.[1];
-    const cs2 = t2.match(/checksum: (\S+)/)?.[1];
-    expect(cs1).toBeDefined();
-    expect(cs1).toBe(cs2);
+    // Refs match between full read and stub
+    const ref1 = t1.match(/ref: (R\d+)/)?.[1];
+    const ref2 = t2.match(/ref: (R\d+)/)?.[1];
+    expect(ref1).toBeDefined();
+    expect(ref1).toBe(ref2);
   });
 
-  test("stub checksums are valid for editing", async () => {
+  test("stub refs are valid for editing", async () => {
     const f = writeFile("edit-from-stub.txt", "alpha\nbeta\ngamma\n");
 
     // First read — get full content
     const r1 = await handleRead({ file_path: f, allowedDirs: [testDir] });
     const t1 = getText(r1);
 
-    // Second read — get stub with checksums
+    // Second read — get stub with refs
     const r2 = await handleRead({ file_path: f, allowedDirs: [testDir] });
     const t2 = getText(r2);
 
-    // Both should have the same checksum
-    const cs1 = t1.match(/checksum: (\S+)/)?.[1];
-    const cs2 = t2.match(/checksum: (\S+)/)?.[1];
-    expect(cs1).toBe(cs2);
+    // Both should have the same ref
+    const ref1 = t1.match(/ref: (R\d+)/)?.[1];
+    const ref2 = t2.match(/ref: (R\d+)/)?.[1];
+    expect(ref1).toBe(ref2);
   });
 
   test("modified file returns full content, not stub", async () => {
@@ -126,7 +127,7 @@ describe("read cache — unchanged file", () => {
 
     expect(getText(r1)).toContain("empty file");
     expect(getText(r2)).toContain("File unchanged");
-    expect(getText(r2)).toContain("checksum:");
+    expect(getText(r2)).toMatch(/ref: R\d+/);
   });
 
   test("stub includes encoding metadata for BOM files", async () => {

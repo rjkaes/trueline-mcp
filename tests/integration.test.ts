@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead } from "../src/tools/read.ts";
 import { handleEdit } from "../src/tools/edit.ts";
+import { resetRefStore } from "./helpers.ts";
 
 let testDir: string;
 let testFile: string;
 
 beforeEach(() => {
+  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-integration-")));
   testFile = join(testDir, "app.ts");
   writeFileSync(testFile, 'function greet(name: string) {\n  return "Hello, " + name;\n}\n');
@@ -28,10 +30,10 @@ describe("read → diff → edit roundtrip", () => {
     expect(readResult.isError).toBeUndefined();
     const readText = readResult.content[0].text;
 
-    // Extract checksum from read result
-    const checksumMatch = readText.match(/checksum: (.+)$/m);
-    expect(checksumMatch).not.toBeNull();
-    const checksum = checksumMatch![1];
+    // Extract ref from read result
+    const refMatch = readText.match(/ref: (\S+)/m);
+    expect(refMatch).not.toBeNull();
+    const ref = refMatch![1];
 
     // Extract line 2 hash from read result
     const line2Match = readText.match(/^([a-z]{2})\.2\t/m);
@@ -44,7 +46,7 @@ describe("read → diff → edit roundtrip", () => {
       dry_run: true,
       edits: [
         {
-          checksum,
+          ref,
           range: `${line2Hash}.2-${line2Hash}.2`,
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: "  return `Hello, ${name}!`;",
@@ -66,7 +68,7 @@ describe("read → diff → edit roundtrip", () => {
       file_path: testFile,
       edits: [
         {
-          checksum,
+          ref,
           range: `${line2Hash}.2-${line2Hash}.2`,
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: "  return `Hello, ${name}!`;",

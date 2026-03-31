@@ -33,19 +33,19 @@ const USAGE = `trueline <command> [options]
 Hash-verified file operations for AI coding agents.
 
 Commands:
-  read      Read a file with per-line hashes and range checksums
+  read      Read a file with per-line hashes and refs
   edit      Apply hash-verified edits to a file
   outline   Structural outline (functions, classes, types) via tree-sitter
   search    Search a file for a string or regex, returns edit-ready hashes
   diff      Semantic AST-based diff vs a git ref
-  verify    Check if held checksums are still valid
+  verify    Check if held refs are still valid
 
 Run trueline <command> --help for command-specific usage.`;
 
 const COMMAND_HELP: Record<string, string> = {
   read: `trueline read <file> [options]
 
-Read a file with per-line hashes and range checksums.
+Read a file with per-line hashes and refs.
 
 Options:
   --ranges <range...>   Line ranges to read (e.g. 10-25 200-220)
@@ -94,13 +94,13 @@ With no files, diffs all changed files.
 Options:
   --ref <ref>           Git ref to compare against (default: working tree)`,
 
-  verify: `trueline verify <file> --checksums <checksum...>
+  verify: `trueline verify <file> --refs <ref...>
 
-Check if held checksums are still valid.
+Check if held refs are still valid.
 
 Options:
-  --checksums <cs...>   Range checksums to verify (required)
-                        Format: startLine-endLine:hexhash`,
+  --refs <ref...>       Refs to verify (required)
+                        Also accepts --checksums for backwards compatibility`,
 };
 
 // ==============================================================================
@@ -310,11 +310,12 @@ function parseVerify(args: string[]): Record<string, unknown> {
   let i = 1;
   while (i < args.length) {
     switch (args[i]) {
-      case "--checksums": {
+      case "--checksums":
+      case "--refs": {
         i++;
         const { values, nextIndex } = collectValues(args, i);
-        if (values.length === 0) throw new Error("--checksums requires at least one value");
-        params.checksums = values;
+        if (values.length === 0) throw new Error("--refs requires at least one value");
+        params.refs = values;
         i = nextIndex;
         break;
       }
@@ -322,7 +323,7 @@ function parseVerify(args: string[]): Record<string, unknown> {
         throw new Error(`Unknown flag for verify: ${args[i]}`);
     }
   }
-  if (!params.checksums) throw new Error("verify requires --checksums");
+  if (!params.refs) throw new Error("verify requires --refs");
   return params;
 }
 

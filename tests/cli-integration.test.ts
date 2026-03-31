@@ -39,8 +39,8 @@ describe("CLI integration", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("line one");
     expect(stdout).toContain("line two");
-    // Should contain checksum line
-    expect(stdout).toMatch(/checksum:/);
+    // Should contain ref line
+    expect(stdout).toMatch(/ref:/);
   });
 
   test("read with --no-hashes omits per-line hashes", () => {
@@ -100,14 +100,11 @@ describe("CLI integration", () => {
     expect(exitCode).toBe(1);
   });
 
-  test("verify with stale checksum reports stale", () => {
-    // First read to get a checksum
-    const { stdout } = run("read", testFile);
-    const checksumMatch = stdout.match(/checksum: (\S+)/);
-    expect(checksumMatch).toBeTruthy();
-    // Use a bogus checksum
-    const { stdout: verifyOut, exitCode } = run("verify", testFile, "--checksums", "1-3:deadbeef");
-    expect(exitCode).toBe(0);
-    expect(verifyOut).toContain("stale");
+  test("verify with unknown ref reports error", () => {
+    // Refs are per-process, so a ref from one CLI invocation is unknown in another.
+    // Verify that unknown refs are reported clearly.
+    const { stdout: verifyOut, stderr, exitCode } = run("verify", testFile, "--refs", "BOGUS");
+    expect(exitCode).toBe(1);
+    expect(verifyOut + stderr).toContain("Unknown ref");
   });
 });

@@ -41,7 +41,7 @@ function safeTool<P>(handler: (params: P) => Promise<ToolResult>): (params: P) =
 // Fields that are arrays in the canonical schema but may arrive as JSON
 // strings from some callers. Accept both so SDK validation doesn't reject
 // them before coerceParams can parse the string.
-const STRINGABLE_ARRAY_KEYS = new Set(["file_paths", "edits", "ranges", "checksums"]);
+const STRINGABLE_ARRAY_KEYS = new Set(["file_paths", "edits", "ranges", "refs"]);
 
 function laxify(schema: z.AnyZodObject): z.AnyZodObject {
   const shape: Record<string, z.ZodTypeAny> = {};
@@ -111,7 +111,7 @@ const readSchema = z.object({
   ranges: z
     .array(z.string())
     .describe(
-      'Line ranges to read (applied to each file). Omit to read the whole file. Examples: ["10-25"], ["1-50", "200-220"], ["10"] (single line), ["10-"] (to EOF). Each range gets its own checksum.',
+      'Line ranges to read (applied to each file). Omit to read the whole file. Examples: ["10-25"], ["1-50", "200-220"], ["10"] (single line), ["10-"] (to EOF). Each range gets its own ref.',
     )
     .optional(),
   encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
@@ -121,7 +121,7 @@ server.registerTool(
   "trueline_read",
   {
     description:
-      'Read files. Example: {"file_paths": ["src/main.ts"], "ranges": ["10-25"]}. Returns per-line hashes and checksums for editing. Supports multiple files in one call.',
+      'Read files. Example: {"file_paths": ["src/main.ts"], "ranges": ["10-25"]}. Returns per-line hashes and refs for editing. Supports multiple files in one call.',
     inputSchema: laxify(readSchema),
   },
   safeTool(async (rawParams) => {
@@ -140,11 +140,11 @@ const editSchema = z.object({
   edits: z
     .array(
       z.object({
-        checksum: z
+        ref: z
           .string()
           .describe(
-            'Required. Copy EXACTLY from the "checksum:" line in trueline_read/trueline_search output. ' +
-              "NEVER modify or construct checksums. A wide checksum (e.g. lines 1-50) works for editing any sub-range within it.",
+            'Required. Copy the ref ID (e.g. "R1") from trueline_read/trueline_search output. ' +
+              "A ref from a wide read works for editing any sub-range within it.",
           ),
         range: z
           .string()
@@ -173,8 +173,8 @@ server.registerTool(
   {
     description:
       "Apply hash-verified edits to a file. Edits go in the edits array. " +
-      'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", checksum: "ab.10-cd.20:f7e2abcd", content: "new text"}]}. ' +
-      "NEVER construct checksums — always copy verbatim from trueline_read/trueline_search output. " +
+      'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", ref: "R1", content: "new text"}]}. ' +
+      "Copy the ref from trueline_read/trueline_search output. The 2-letter hash prefix on each line number is required in ranges. " +
       'Use action: "insert_after" to insert content after a line instead of replacing it.',
     inputSchema: laxify(editSchema),
   },
@@ -265,7 +265,7 @@ server.registerTool(
   "trueline_search",
   {
     description:
-      "Search a file for a literal string or regex pattern. Returns matching lines with context, per-line hashes, and checksums \u2014 " +
+      "Search a file for a literal string or regex pattern. Returns matching lines with context, per-line hashes, and refs \u2014 " +
       "ready for immediate editing. Use instead of outline+read when you know what to look for.",
     inputSchema: laxify(searchSchema),
   },
@@ -277,27 +277,20 @@ server.registerTool(
 );
 
 const verifySchema = z.object({
-  file_paths: z
-    .array(z.string())
-    .min(1, 'file_paths is required — pass a single-element array, e.g. {"file_paths": ["src/main.ts"]}')
-    .max(1)
-    .default([])
-    .describe("File to verify (single-element array). Accepts file_path as alias."),
-  checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
+  refs: z.array(z.string()).describe('Ref IDs from a prior trueline_read/trueline_search, e.g. ["R1", "R2"].'),
 });
 
 server.registerTool(
   "trueline_verify",
   {
     description:
-      "Validate held checksums against a file. Returns which are valid or stale. " +
-      "Cheaper than re-reading \u2014 use before editing when the file may have changed.",
+      "Check if held refs are still valid. Returns which are valid or stale. " +
+      "Cheaper than re-reading — use before editing when the file may have changed.",
     inputSchema: laxify(verifySchema),
   },
   safeTool(async (rawParams) => {
     const params = verifySchema.parse(coerceParams(rawParams));
-    const { file_paths, ...rest } = params;
-    return handleVerify({ ...rest, file_path: file_paths[0], projectDir, allowedDirs });
+    return handleVerify({ ...params, projectDir, allowedDirs });
   }),
 );
 
