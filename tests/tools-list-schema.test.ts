@@ -16,14 +16,18 @@ import { zodToJsonSchema } from "zod-to-json-schema";
  */
 
 // Replicate the laxify function from server.ts to test the pattern in isolation.
+const STRINGABLE_ARRAY_KEYS = new Set(["file_paths", "edits", "ranges", "checksums"]);
+
 function laxify(schema: z.AnyZodObject): z.AnyZodObject {
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const [key, value] of Object.entries(schema.shape as Record<string, z.ZodTypeAny>)) {
     if (key === "file_paths") {
       shape[key] = z
-        .array(z.string())
+        .union([z.array(z.string()), z.string()])
         .optional()
         .describe(value.description ?? "");
+    } else if (STRINGABLE_ARRAY_KEYS.has(key)) {
+      shape[key] = z.union([value, z.string()]);
     } else {
       shape[key] = value;
     }
@@ -72,7 +76,9 @@ describe("tools/list JSON Schema generation", () => {
     expect(jsonSchema.properties).toBeDefined();
     expect(Object.keys(jsonSchema.properties).length).toBeGreaterThan(0);
     expect(jsonSchema.properties.file_paths).toBeDefined();
-    expect(jsonSchema.properties.file_paths.type).toBe("array");
+    // file_paths is a union (array | string) so it has anyOf, not a bare type
+    const fp = jsonSchema.properties.file_paths as Record<string, unknown>;
+    expect(fp.anyOf ?? fp.type).toBeDefined();
     expect(jsonSchema.properties.ranges).toBeDefined();
     expect(jsonSchema.properties.encoding).toBeDefined();
   });

@@ -38,14 +38,23 @@ function safeTool<P>(handler: (params: P) => Promise<ToolResult>): (params: P) =
  * 2. Makes file_paths optional (strips min/default) so validation doesn't reject
  *    requests that provide file paths via an alias — coercion happens in the handler
  */
+// Fields that are arrays in the canonical schema but may arrive as JSON
+// strings from some callers. Accept both so SDK validation doesn't reject
+// them before coerceParams can parse the string.
+const STRINGABLE_ARRAY_KEYS = new Set(["file_paths", "edits", "ranges", "checksums"]);
+
 function laxify(schema: z.AnyZodObject): z.AnyZodObject {
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const [key, value] of Object.entries(schema.shape as Record<string, z.ZodTypeAny>)) {
     if (key === "file_paths") {
+      // Accept array, string, or omitted — coerceParams normalizes later
       shape[key] = z
-        .array(z.string())
+        .union([z.array(z.string()), z.string()])
         .optional()
         .describe(value.description ?? "");
+    } else if (STRINGABLE_ARRAY_KEYS.has(key)) {
+      // Accept the original type or a stringified version
+      shape[key] = z.union([value, z.string()]);
     } else {
       shape[key] = value;
     }
