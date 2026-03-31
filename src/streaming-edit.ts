@@ -266,7 +266,10 @@ export async function streamingEdit(
   }
 
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
-    return `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}`;
+    return (
+      `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}. ` +
+      `The correct hash.line reference is ${got}.${lineNumber} — copy it from trueline_read/trueline_search output`
+    );
   }
 
   // ---- Handle line-0 insert_after (prepend) before streaming ----
@@ -492,7 +495,10 @@ export async function streamingEdit(
 
       const base =
         `${resolvedPath}: checksum mismatch for lines ${ref.startLine}\u2013${ref.endLine}: ` +
-        `expected ${expected}, got ${actual}. File changed since last read.`;
+        `expected ${expected}, got ${actual}. File changed since last read.` +
+        `\n\nDid you construct this checksum? NEVER modify or construct checksums. ` +
+        `Copy the exact checksum string from trueline_read/trueline_search output. ` +
+        `A wider checksum from a prior read (covering more lines) is valid for editing any sub-range within it.`;
 
       if (minLine !== Infinity) {
         return {

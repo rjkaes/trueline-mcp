@@ -40,7 +40,7 @@ describe("validateEdits", () => {
     const result = validateEdits([{ checksum: "0-0:00000000", range: "0", content: "x" }]);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.content[0].text).toContain("insert-after (use +0");
+      expect(result.error.content[0].text).toContain("insert-after");
     }
   });
 

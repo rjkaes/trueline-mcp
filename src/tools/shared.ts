@@ -12,6 +12,7 @@ export interface EditInput {
   checksum: string;
   range: string;
   content: string;
+  action?: "replace" | "insert_after";
 }
 
 // ==============================================================================
@@ -186,11 +187,26 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
 
     const rangeRef = parseRange(edit.range);
 
-    // line 0 only valid for insert-after (encoded as + prefix in range)
+    // Explicit action field takes precedence over + prefix in range.
+    // This makes intent unambiguous for LLMs that forget the + prefix.
+    if (edit.action === "insert_after") {
+      if (rangeRef.start.line !== rangeRef.end.line) {
+        return {
+          ok: false,
+          error: errorResult('action "insert_after" requires a single-line range, not a multi-line range'),
+        };
+      }
+      rangeRef.insertAfter = true;
+    } else if (edit.action === "replace") {
+      rangeRef.insertAfter = false;
+    }
+    // If action is omitted, parseRange's + prefix detection applies.
+
+    // line 0 only valid for insert-after
     if (rangeRef.start.line === 0 && !rangeRef.insertAfter) {
       return {
         ok: false,
-        error: errorResult("range starting at line 0 requires insert-after (use +0: prefix)"),
+        error: errorResult('range starting at line 0 requires insert-after (use action: "insert_after" or +0 prefix)'),
       };
     }
 

@@ -143,8 +143,8 @@ const editSchema = z.object({
         checksum: z
           .string()
           .describe(
-            'Required. Checksum from trueline_read or trueline_search output (e.g. "aj.9-na.10:f7e2abcd"). ' +
-              "Copy verbatim. Must cover the edit's target lines.",
+            'Required. Copy EXACTLY from the "checksum:" line in trueline_read/trueline_search output. ' +
+              "NEVER modify or construct checksums. A wide checksum (e.g. lines 1-50) works for editing any sub-range within it.",
           ),
         range: z
           .string()
@@ -154,6 +154,13 @@ const editSchema = z.object({
           ),
 
         content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
+        action: z
+          .enum(["replace", "insert_after"])
+          .describe(
+            'What to do: "replace" (default) replaces the lines in range. ' +
+              '"insert_after" inserts new content after the line in range (single-line range required).',
+          )
+          .optional(),
       }),
     )
     .min(1),
@@ -167,7 +174,8 @@ server.registerTool(
     description:
       "Apply hash-verified edits to a file. Edits go in the edits array. " +
       'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", checksum: "ab.10-cd.20:f7e2abcd", content: "new text"}]}. ' +
-      "Copy the 2-letter hash prefix (ab, cd, ...) from trueline_read/trueline_search output.",
+      "NEVER construct checksums — always copy verbatim from trueline_read/trueline_search output. " +
+      'Use action: "insert_after" to insert content after a line instead of replacing it.',
     inputSchema: laxify(editSchema),
   },
   safeTool(async (rawParams) => {

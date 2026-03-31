@@ -65,6 +65,74 @@ describe("handleEdit", () => {
     expect(written).toBe("line 1\ninserted\nline 2\nline 3\nline 4\n");
   });
 
+  test("action insert_after inserts without + prefix", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const cs = rangeChecksum(lines, 1, 4);
+    const h1 = lineHash("line 1");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        {
+          checksum: cs,
+          range: `${h1}.1`,
+          action: "insert_after",
+          content: "inserted",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(testFile, "utf-8");
+    expect(written).toBe("line 1\ninserted\nline 2\nline 3\nline 4\n");
+  });
+
+  test("action replace overrides + prefix", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const cs = rangeChecksum(lines, 1, 4);
+    const h1 = lineHash("line 1");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        {
+          checksum: cs,
+          range: `+${h1}.1`,
+          action: "replace",
+          content: "replaced 1",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(testFile, "utf-8");
+    expect(written).toBe("replaced 1\nline 2\nline 3\nline 4\n");
+  });
+
+  test("action insert_after rejects multi-line range", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const cs = rangeChecksum(lines, 1, 4);
+    const h1 = lineHash("line 1");
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        {
+          checksum: cs,
+          range: `${h1}.1-${h2}.2`,
+          action: "insert_after",
+          content: "inserted",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBe(true);
+  });
+
   test("rejects stale checksum", async () => {
     const result = await handleEdit({
       file_path: testFile,
