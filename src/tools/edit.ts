@@ -16,6 +16,7 @@ import { relative } from "node:path";
 import { DiffCollector } from "../diff-collector.ts";
 import { detectBOM } from "../encoding.ts";
 import { streamingEdit } from "../streaming-edit.ts";
+import { fnv1aHash, hashToLetters } from "../hash.ts";
 import { adjustRefsAfterEdit, issueRef, type EditRegion } from "../ref-store.ts";
 import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
@@ -136,15 +137,20 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
 // ==============================================================================
 
 function editSummary(ops: StreamEditOp[]): string {
+  let shift = 0;
   return ops
     .map((op) => {
       const lines = op.content.length;
 
       if (op.insertAfter) {
         const location = op.startLine === 0 ? "at start of file" : `after line ${op.startLine}`;
-        const newStart = op.startLine + 1;
-        const newEnd = op.startLine + lines;
-        const rangeHint = lines === 1 ? `(now line ${newStart})` : `(now lines ${newStart}\u2013${newEnd})`;
+        const newStart = op.startLine + 1 + shift;
+        const newEnd = op.startLine + lines + shift;
+        const rangeHint =
+          lines === 1
+            ? `(now ${hl(op.content[0], newStart)})`
+            : `(now ${hl(op.content[0], newStart)}\u2013${hl(op.content[lines - 1], newEnd)})`;
+        shift += lines;
         return `inserted ${lines} line${lines !== 1 ? "s" : ""} ${location} ${rangeHint}`;
       }
 
@@ -153,12 +159,39 @@ function editSummary(ops: StreamEditOp[]): string {
         op.startLine === op.endLine ? `line ${op.startLine}` : `lines ${op.startLine}\u2013${op.endLine}`;
 
       if (lines === 0) {
-        return `deleted ${rangeStr} (${span} line${span !== 1 ? "s" : ""})`;
+        shift -= span;
+        const preview = op.deletedContent ? `: ${truncatePreview(op.deletedContent)}` : "";
+        return `deleted ${rangeStr} (${span} line${span !== 1 ? "s" : ""})${preview}`;
       }
 
+      const newStart = op.startLine + shift;
+      const newEnd = op.startLine + lines - 1 + shift;
       const delta = lines - span;
       const sign = delta > 0 ? "+" : delta < 0 ? "" : "\u00b1";
-      return `replaced ${rangeStr} (${span}\u2192${lines} line${lines !== 1 ? "s" : ""}, ${sign}${delta})`;
+      const hint =
+        lines === 1
+          ? `now ${hl(op.content[0], newStart)}`
+          : `now ${hl(op.content[0], newStart)}\u2013${hl(op.content[lines - 1], newEnd)}`;
+      shift += delta;
+      return `replaced ${rangeStr} (${span}\u2192${lines} line${lines !== 1 ? "s" : ""}, ${sign}${delta}, ${hint})`;
     })
     .join("\n");
+}
+
+/** Format a hash.line reference for a content string at a given line number. */
+function hl(content: string, lineNumber: number): string {
+  return `${hashToLetters(fnv1aHash(content))}.${lineNumber}`;
+}
+
+/** Truncated preview of deleted content for the edit summary. */
+function truncatePreview(lines: string[]): string {
+  const MAX = 80;
+  let result = "";
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) result += "\\n";
+    const remaining = MAX - result.length;
+    if (remaining <= 0) return `"${result}\u2026"`;
+    result += lines[i].length <= remaining ? lines[i] : lines[i].slice(0, remaining);
+  }
+  return result.length > MAX ? `"${result.slice(0, MAX)}\u2026"` : `"${result}"`;
 }

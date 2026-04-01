@@ -54,7 +54,8 @@ describe("CLI integration", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("line one");
     expect(stdout).toContain("line two");
-    expect(stdout).not.toContain("line three");
+    // Context expansion adds line 3
+    expect(stdout).toContain("line three");
   });
 
   test("search finds matches", () => {

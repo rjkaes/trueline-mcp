@@ -34,7 +34,7 @@ import {
 import { EMPTY_BUF, LF_BUF } from "./line-splitter.ts";
 import { transcodedLines, bomBytes, encodeBuffer, encodeString, type BOMInfo } from "./encoding.ts";
 import type { DiffCollector } from "./diff-collector.ts";
-import type { ChecksumRef } from "./parse.ts";
+import { BARE_LINE_HASH, type ChecksumRef } from "./parse.ts";
 
 // ==============================================================================
 // StreamEditOp — the validated, parsed representation of a single edit
@@ -47,6 +47,8 @@ export interface StreamEditOp {
   insertAfter: boolean;
   startHash: string;
   endHash: string;
+  /** Populated during streaming with the original content of deleted lines. */
+  deletedContent?: string[];
 }
 
 // ==============================================================================
@@ -236,6 +238,9 @@ export async function streamingEdit(
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[], origEols?: Buffer[]): Promise<void> {
     if (op.content.length !== origBytes.length) {
       contentChanged = true;
+      if (op.content.length === 0) {
+        op.deletedContent = origBytes.map((buf) => buf.toString(encoding));
+      }
       for (const s of op.content) await enqueueString(s);
       if (collector) {
         for (const buf of origBytes) collector.delete(buf.toString(encoding));
@@ -270,10 +275,17 @@ export async function streamingEdit(
   }
 
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
+    if (expected === BARE_LINE_HASH) {
+      return (
+        `wrong hash prefix for line ${lineNumber}. ` +
+        `The correct hash.line reference is ${got}.${lineNumber}. ` +
+        `Your ref is still valid \u2014 retry the edit with ${got}.${lineNumber}.`
+      );
+    }
     return (
       `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}. ` +
       `The correct hash.line reference is ${got}.${lineNumber}. ` +
-      `Your ref is still valid — retry the edit with the corrected hash prefix.`
+      `Your ref is still valid \u2014 retry the edit with the corrected hash prefix.`
     );
   }
 

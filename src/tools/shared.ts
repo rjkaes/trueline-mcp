@@ -209,11 +209,8 @@ export function validateEdits(edits: EditInput[], resolvedPath?: string): Valida
     try {
       rangeRef = parseRange(edit.range);
     } catch (err) {
-      // Enhance bare-number errors with ref context so the LLM knows where to look.
       const msg = err instanceof Error ? err.message : String(err);
-      const hint =
-        ` Your ref ${edit.ref} covers lines ${checksumRef.startLine}\u2013${checksumRef.endLine}. ` +
-        "Re-read or search near that line to get its hash.line prefix.";
+      const hint = ` Your ref ${edit.ref} covers lines ${checksumRef.startLine}\u2013${checksumRef.endLine}.`;
       throw new Error(msg + hint);
     }
 

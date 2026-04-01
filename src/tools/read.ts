@@ -42,6 +42,24 @@ function rangesKey(ranges: ReadRange[]): string {
   return ranges.map((r) => `${r.start}-${r.end}`).join(",");
 }
 
+/** Expand each range by 1 line on each side for boundary context, then re-merge. */
+function expandRanges(ranges: ReadRange[]): ReadRange[] {
+  const expanded = ranges.map((r) => ({
+    start: r.start > 1 && r.end !== Infinity ? r.start - 1 : r.start,
+    end: r.end !== Infinity ? r.end + 1 : r.end,
+  }));
+  // Re-merge: expansion can make previously non-adjacent ranges overlap
+  for (let i = 1; i < expanded.length; i++) {
+    const prev = expanded[i - 1];
+    const curr = expanded[i];
+    if (prev.end === Infinity || curr.start <= prev.end + 1) {
+      prev.end = Math.max(prev.end, curr.end);
+      expanded.splice(i, 1);
+      i--;
+    }
+  }
+  return expanded;
+}
 /** Build the stub response for an unchanged file. */
 function unchangedStub(entry: ReadCacheEntry): string {
   const parts = [
@@ -98,8 +116,12 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     return errorResult((err as Error).message);
   }
 
+  // Cache key uses the requested ranges; actual streaming uses expanded ranges
+  // with 1 line of context on each side so the agent sees boundary lines.
+  const requestedRanges = ranges;
+  ranges = expandRanges(ranges);
   // Check cache: if same file, same ranges, same mtime → return stub + checksums
-  const rKey = rangesKey(ranges);
+  const rKey = rangesKey(requestedRanges);
   const cached = readCache.get(resolvedPath);
   if (cached && cached.mtimeMs === mtimeMs && cached.rangesKey === rKey && cached.refs.every(hasRef)) {
     return textResult(unchangedStub(cached));

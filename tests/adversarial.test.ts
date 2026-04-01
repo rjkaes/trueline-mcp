@@ -5,8 +5,7 @@ import { tmpdir } from "node:os";
 import { handleEdit } from "../src/tools/edit.ts";
 import { handleRead } from "../src/tools/read.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
-import { lineHash, rangeChecksum, issueTestRef, resetRefStore } from "./helpers.ts";
-import { EMPTY_FILE_CHECKSUM } from "../src/hash.ts";
+import { lineHash, issueTestRef, resetRefStore } from "./helpers.ts";
 
 let testDir: string;
 
@@ -591,10 +590,8 @@ describe("Adversarial Tests", () => {
 
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    // Should have merged into 1-5 and 7-8
-    expect(text).toMatch(/ref: \S+ \(lines 1-5\)/);
-    expect(text).toMatch(/ref: \S+ \(lines 7-8\)/);
-    expect(text).not.toMatch(/ref: \S+ \(lines 3-5\)/);
+    // parseRanges merges to 1-5 and 7-8, expansion merges them into one range
+    expect(text).toMatch(/ref: \S+ \(lines 1-9\)/);
   });
 
   test("handleSearch with empty pattern", async () => {

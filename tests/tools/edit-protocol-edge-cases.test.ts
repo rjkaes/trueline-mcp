@@ -4,9 +4,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
-import { lineHash, rangeChecksum, issueTestRef, resetRefStore } from "../helpers.ts";
+import { lineHash, issueTestRef, resetRefStore } from "../helpers.ts";
 import { issueRef } from "../../src/ref-store.ts";
-import { EMPTY_FILE_CHECKSUM } from "../../src/hash.ts";
 
 // =============================================================================
 // Shared fixture setup
@@ -874,6 +873,64 @@ describe("boundary hash verification", () => {
   });
 });
 
+describe("wrong hash prefix recovery", () => {
+  test("bare line number in range returns correct hash.line in error", async () => {
+    const { path, ref } = setupFile("bare.txt", "aaa\nbbb\nccc\n");
+
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref, range: "2", content: "xxx" }],
+    });
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0].text;
+    // Should include the correct hash.line so the LLM can retry immediately
+    expect(text).toContain(`${lineHash("bbb")}.2`);
+    expect(text).toContain("wrong hash prefix");
+  });
+
+  test("bare line number in insert-after range returns correct hash.line", async () => {
+    const { path, ref } = setupFile("bare-ia.txt", "aaa\nbbb\n");
+
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref, range: "+1", content: "xxx" }],
+    });
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0].text;
+    expect(text).toContain(`${lineHash("aaa")}.1`);
+    expect(text).toContain("wrong hash prefix");
+  });
+
+  test("bare line number in multi-line range returns correct hash.line", async () => {
+    const { path, ref } = setupFile("bare-multi.txt", "aaa\nbbb\nccc\n");
+
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref, range: "1-3", content: "xxx" }],
+    });
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0].text;
+    expect(text).toContain(`${lineHash("aaa")}.1`);
+    expect(text).toContain("wrong hash prefix");
+  });
+
+  test("invalid hash format (e.g. 78.78) returns correct hash.line", async () => {
+    const { path, ref } = setupFile("bad-fmt.txt", "aaa\nbbb\nccc\n");
+
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref, range: "78.2", content: "xxx" }],
+    });
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0].text;
+    expect(text).toContain(`${lineHash("bbb")}.2`);
+    expect(text).toContain("wrong hash prefix");
+  });
+});
 // =============================================================================
 // Security and file validation
 // =============================================================================

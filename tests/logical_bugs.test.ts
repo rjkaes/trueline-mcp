@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../src/tools/edit.ts";
 import { handleRead } from "../src/tools/read.ts";
-import { lineHash, rangeChecksum, issueTestRef, resetRefStore } from "./helpers.ts";
+import { lineHash, issueTestRef, resetRefStore } from "./helpers.ts";
 import { issueRef } from "../src/ref-store.ts";
 
 let testDir: string;

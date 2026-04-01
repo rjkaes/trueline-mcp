@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { detectBOM, transcodedLines, bomBytes, encodeString, encodeBuffer } from "../src/encoding.ts";
 import { handleRead } from "../src/tools/read.ts";
 import { handleEdit } from "../src/tools/edit.ts";
-import { getText, resetRefStore } from "./helpers.ts";
+import { getText } from "./helpers.ts";
 
 let tmpDir: string;
 

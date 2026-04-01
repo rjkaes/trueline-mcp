@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync, symlinkSyn
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead, clearReadCache } from "../../src/tools/read.ts";
-import { rangeChecksum, LINE_PATTERN, resetRefStore } from "../helpers.ts";
+import { LINE_PATTERN, resetRefStore } from "../helpers.ts";
 
 let testDir: string;
 
@@ -285,8 +285,9 @@ describe("range parameters", () => {
     const result = await handleRead({ file_path: f, ranges: ["2"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^[a-z]{2}\.2\tbbb$/);
+    // Expanded: line 2 → lines 1-3 (whole file)
+    expect(lines).toHaveLength(3);
+    expect(lines[1]).toMatch(/^[a-z]{2}\.2\tbbb$/);
   });
 
   test("reading a middle range produces correct ref", async () => {
@@ -297,8 +298,8 @@ describe("range parameters", () => {
     const result = await handleRead({ file_path: f, ranges: ["2-4"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
 
-    // The ref should be present for lines 2-4
-    expect(result.content[0].text).toMatch(/ref: R\d+ \(lines 2-4\)/);
+    // Expanded: 2-4 → 1-5 (whole file)
+    expect(result.content[0].text).toMatch(/ref: R\d+ \(lines 1-5\)/);
   });
 });
 

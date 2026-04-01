@@ -6,7 +6,6 @@ import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
 import { lineHash, rangeChecksum, issueTestRef, resetRefStore } from "../helpers.ts";
 import { issueRef } from "../../src/ref-store.ts";
-import { EMPTY_FILE_CHECKSUM } from "../../src/hash.ts";
 
 let testDir: string;
 
@@ -741,7 +740,7 @@ describe("read-then-edit round-trip", () => {
     // Extract the new ref from the edit output
     const refMatch = edit1.content[0].text.match(/ref: (R\d+)/);
     expect(refMatch).toBeTruthy();
-    const newRef = refMatch![1];
+    const _newRef = refMatch![1];
     const lineMatch2 = (await handleRead({ file_path: f, projectDir: testDir })).content[0].text.match(
       /^([a-z]{2})\.3\t/m,
     );

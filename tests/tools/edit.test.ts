@@ -3,15 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, readFileSync, mkdirSync, rmSy
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
-import {
-  lineHash,
-  rangeChecksum,
-  rawLineHash,
-  rawRangeChecksum,
-  issueTestRef,
-  issueTestRefRaw,
-  resetRefStore,
-} from "../helpers.ts";
+import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, resetRefStore } from "../helpers.ts";
 import { issueRef } from "../../src/ref-store.ts";
 
 let testDir: string;

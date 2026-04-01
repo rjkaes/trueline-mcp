@@ -69,8 +69,9 @@ describe("handleRead", () => {
     });
     const text = result.content[0].text;
     const contentLines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
-    expect(contentLines).toHaveLength(1);
-    expect(contentLines[0]).toMatch(/^[a-z]{2}\.2\tconst b = 2;$/);
+    // Expanded by 1 on each side: line 2 → lines 1-3 (whole file)
+    expect(contentLines).toHaveLength(3);
+    expect(contentLines[1]).toMatch(/^[a-z]{2}\.2\tconst b = 2;$/);
   });
 
   test("denies reading .env file", async () => {
@@ -108,12 +109,14 @@ describe("handleRead", () => {
     expect(refMatches).toHaveLength(2);
 
     // Should contain lines 3-5 and 15-17 but not lines 6-14
-    expect(text).toMatch(/^[a-z]{2}\.3\t/m);
-    expect(text).toMatch(/^[a-z]{2}\.5\t/m);
-    expect(text).toMatch(/^[a-z]{2}\.15\t/m);
-    expect(text).toMatch(/^[a-z]{2}\.17\t/m);
-    expect(text).not.toMatch(/^[a-z]{2}\.6\t/m);
-    expect(text).not.toMatch(/^[a-z]{2}\.14\t/m);
+    // Expanded: 3-5 → 2-6, 15-17 → 14-18
+    expect(text).toMatch(/^[a-z]{2}\.2\t/m);
+    expect(text).toMatch(/^[a-z]{2}\.6\t/m);
+    expect(text).toMatch(/^[a-z]{2}\.14\t/m);
+    expect(text).toMatch(/^[a-z]{2}\.18\t/m);
+    // Lines 7-13 should NOT be present (gap between expanded ranges)
+    expect(text).not.toMatch(/^[a-z]{2}\.7\t/m);
+    expect(text).not.toMatch(/^[a-z]{2}\.13\t/m);
   });
 
   test("reads whole file when ranges omitted", async () => {
@@ -195,7 +198,7 @@ describe("handleRead", () => {
     expect(result.isError).toBeUndefined();
     const text = (result.content[0] as { text: string }).text;
     expect(text).not.toContain("truncated");
-    expect(text).toMatch(/ref: R\d+ \(lines 100-199\)/);
+    expect(text).toMatch(/ref: R\d+ \(lines 99-200\)/);
   });
 
   test("output lines include per-line hashes", async () => {

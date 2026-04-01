@@ -4,6 +4,8 @@
 
 const DECIMAL_INT = /^\d+$/;
 
+/** Sentinel hash for bare line numbers (e.g. "78" instead of "rn.78"). */
+export const BARE_LINE_HASH = "??";
 interface LineRef {
   line: number;
   hash: string;
@@ -32,10 +34,7 @@ function parseHashLine(ref: string): LineRef {
     }
     const line = Number(ref);
     if (line !== 0) {
-      throw new Error(
-        `Invalid hash.line reference "${ref}" — bare line number only allowed for 0. ` +
-          `Use the hash.line format from trueline_read/trueline_search output (e.g. "ab.${ref}").`,
-      );
+      return { line, hash: BARE_LINE_HASH };
     }
     return { line: 0, hash: "" };
   }
@@ -53,9 +52,14 @@ function parseHashLine(ref: string): LineRef {
     throw new Error(`Invalid hash.line reference "${ref}" — line 0 must use bare "0" with no hash`);
   }
   if (!/^[a-z]{2}$/.test(hash)) {
+    if (hash.length > 0) {
+      // Wrong format but valid line number — use sentinel so streamingEdit
+      // can report the correct hash.line instead of a generic format error.
+      return { line, hash: BARE_LINE_HASH };
+    }
     throw new Error(
-      `Invalid hash in "${ref}" — the part before the dot must be exactly 2 lowercase letters (e.g. "ab.${line}"). ` +
-        `Copy the hash.line reference from trueline_read or trueline_search output.`,
+      `Invalid hash.line reference "${ref}" — expected format "hash.line" (e.g. "ab.${line}"). ` +
+        "Copy the 2-letter prefix and line number from trueline_read/trueline_search output.",
     );
   }
 
