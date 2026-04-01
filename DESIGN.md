@@ -520,18 +520,23 @@ round-trip.
 ### Two-character tag: `hashToLetters`
 
 The 32-bit per-line hash is projected into two characters from a
-32-symbol alphabet (`a-z` plus `2-7`, 1024 combinations) for the
-`xy.N\tcontent` display format:
+26-symbol alphabet (`a-z`, 676 combinations) for the
+`xy.N\tcontent` display format.
+
+The raw hash is XOR-folded from 32 bits to 16 bits first, then the
+two characters are extracted:
 
 ```
-c1 = HASH_CHARS[hash & 0x1f]          // bits 0-4
-c2 = HASH_CHARS[(hash >>> 8) & 0x1f]  // bits 8-12
+folded = (hash >>> 16) XOR (hash & 0xFFFF)
+c1 = HASH_CHARS[folded % 26]          // low bits
+c2 = HASH_CHARS[(folded >>> 8) % 26]  // high bits
 ```
 
-The power-of-2 alphabet size allows bitwise AND (`& 0x1f`) instead of
-integer division (`% 26`), which is measurably faster in the hot loop.
+Without the XOR-fold, FNV-1a's adjacent-byte correlation causes the
+two mod-26 extractions to cluster, using only ~50% of the 676-tag
+space. XOR-folding decorrelates them, achieving full coverage.
 
-This is a lossy mapping to 1024 possible values — a typo detector, not
+This is a lossy mapping to 676 possible values -- a typo detector, not
 a security boundary.
 
 ### Range checksum: `foldHash`
