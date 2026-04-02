@@ -66,7 +66,7 @@ export function getInstructions(platform = "claude-code") {
     <tool name="trueline_changes">Semantic AST-based diff vs a git ref. Pass all files in one call via file_paths; use ["*"] for all changed files. No built-in equivalent.</tool>
     <tool name="trueline_read">Read files with refs for editing. Use trueline_outline instead when you only need to understand structure.</tool>
     <tool name="trueline_edit">Hash-verified edits. Needs ref from trueline_read or trueline_search. Pass dry_run=true to preview as unified diff.</tool>
-    <tool name="trueline_search">Literal string search with verification refs \u2014 returns edit-ready results. Set regex=true for regex. Use for single-file searches when you plan to edit the matches.</tool>
+    <tool name="trueline_search">Search files for literal strings or regex patterns. Pass multiple file_paths in one call. Returns edit-ready results with verification refs. Set multiline=true for patterns spanning lines.</tool>
     <tool name="trueline_verify">Check if held refs are still valid. Cheaper than re-reading.</tool>
   </tools>
   <exploration>
@@ -100,7 +100,7 @@ export function getInstructions(platform = "claude-code") {
   <tips>
     <tip>If you already have hash.line identifiers and a ref from a prior trueline_read or trueline_search, go straight to trueline_edit. Do not re-read or re-search for data you already have. A wide ref (e.g. covering lines 1-50) works for editing any sub-range within it.</tip>
     <tip>Use ${p.writeTool} to create new files. To edit them afterward, use trueline_read or trueline_search to get refs first.</tip>
-    <tip>When you need to find a pattern across many files, ${p.grepAdvice}, then use trueline_search on individual files you need to edit.</tip>
+    <tip>When you need to search-then-edit across multiple files, ${p.grepAdvice}, then pass all file_paths to a single trueline_search call to get refs for all of them at once.</tip>
     <tip>Batch multiple edits to the same file into one trueline_edit call. Each edit needs the ref whose line range covers that edit's target lines — don't reuse a ref from one region for an edit in a different region.</tip>${atRefTip}
   </tips>
 </trueline_mcp_instructions>`;

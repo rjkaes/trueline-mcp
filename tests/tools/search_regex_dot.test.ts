@@ -29,7 +29,7 @@ test("trueline_search with dot regex and max_matches should not return entire fi
   // Currently this will return ALL 50 lines because each match extends the window.
 
   const result = await handleSearch({
-    file_path: testFile,
+    file_paths: [testFile],
     pattern: ".",
     regex: true,
     max_matches: 2,

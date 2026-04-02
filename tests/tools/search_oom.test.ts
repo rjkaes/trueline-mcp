@@ -31,7 +31,7 @@ test("trueline_search should reject excessive context_lines with an error", asyn
   let error: any;
   try {
     result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "line",
       context_lines: excessiveContext,
       projectDir: testDir,

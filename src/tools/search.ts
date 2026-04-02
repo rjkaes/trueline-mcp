@@ -10,6 +10,7 @@ import { issueRef } from "../ref-store.ts";
 import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 import { searchLineByLine } from "./search-line.ts";
+import { searchMultiline } from "./search-multiline.ts";
 import type { FileSearchResult, LineMatcher } from "./search-types.ts";
 
 interface SearchParams {
@@ -42,52 +43,91 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     return errorResult("file_paths must be a non-empty array");
   }
 
-  // Newline patterns only allowed in multiline mode
-  if (!params.multiline && (pattern.includes("\n") || pattern.includes("\r"))) {
-    return errorResult(
-      "Pattern contains newlines. trueline_search matches line-by-line, so multiline patterns cannot match. " +
-        "Set multiline=true for patterns spanning multiple lines, or search for a single-line substring instead.",
-    );
-  }
-
-  // Build matcher for line-by-line mode
-  const matcherResult = buildMatcher(pattern, params.regex || false, params.case_insensitive || false);
-  if (!matcherResult.ok) return matcherResult.error;
-  const matchLine = matcherResult.matcher;
-
   // Search each file, tracking global match budget
   let matchBudget = maxMatches;
   const results: FileSearchResult[] = [];
   const multiFile = filePaths.length > 1;
 
-  for (const fp of filePaths) {
-    const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
-    if (!validated.ok) {
-      results.push({
-        filePath: fp,
-        matches: [],
-        totalMatches: 0,
-        capped: false,
-        error: validated.error.content[0].text,
-      });
-      continue;
+  if (params.multiline) {
+    // Multiline mode: build regex with dotAll flag, delegate to multiline engine
+    const maxMatchLines = params.max_match_lines ?? 50;
+
+    if (pattern === "") {
+      return errorResult("Pattern must not be empty for multiline search");
     }
 
-    const fileResult = await searchLineByLine({
-      resolvedPath: validated.resolvedPath,
-      matchLine,
-      contextLines,
-      maxMatches: matchBudget,
-    });
-    fileResult.filePath = fp;
-    results.push(fileResult);
+    let regex: RegExp;
+    try {
+      regex = new RegExp(pattern, `s${params.case_insensitive ? "i" : ""}`);
+    } catch {
+      return errorResult(`Invalid regex pattern: "${pattern}"`);
+    }
 
-    // Deduct captured matches from budget
-    const captured = fileResult.matches.reduce((sum, m) => sum + m.lines.filter((l) => l.isMatch).length, 0);
-    matchBudget = Math.max(0, matchBudget - captured);
+    for (const fp of filePaths) {
+      const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
+      if (!validated.ok) {
+        results.push({
+          filePath: fp,
+          matches: [],
+          totalMatches: 0,
+          capped: false,
+          error: validated.error.content[0].text,
+        });
+        continue;
+      }
+
+      const fileResult = await searchMultiline({
+        resolvedPath: validated.resolvedPath,
+        regex,
+        contextLines,
+        maxMatches: matchBudget,
+        maxMatchLines,
+      });
+      fileResult.filePath = fp;
+      results.push(fileResult);
+      matchBudget = Math.max(0, matchBudget - fileResult.matches.length);
+    }
+  } else {
+    // Line-by-line mode: reject newline patterns, build line matcher
+    if (pattern.includes("\n") || pattern.includes("\r")) {
+      return errorResult(
+        "Pattern contains newlines. trueline_search matches line-by-line, so multiline patterns cannot match. " +
+          "Set multiline=true for patterns spanning multiple lines, or search for a single-line substring instead.",
+      );
+    }
+
+    const matcherResult = buildMatcher(pattern, params.regex || false, params.case_insensitive || false);
+    if (!matcherResult.ok) return matcherResult.error;
+    const matchLine = matcherResult.matcher;
+
+    for (const fp of filePaths) {
+      const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
+      if (!validated.ok) {
+        results.push({
+          filePath: fp,
+          matches: [],
+          totalMatches: 0,
+          capped: false,
+          error: validated.error.content[0].text,
+        });
+        continue;
+      }
+
+      const fileResult = await searchLineByLine({
+        resolvedPath: validated.resolvedPath,
+        matchLine,
+        contextLines,
+        maxMatches: matchBudget,
+      });
+      fileResult.filePath = fp;
+      results.push(fileResult);
+
+      const captured = fileResult.matches.reduce((sum, m) => sum + m.lines.filter((l) => l.isMatch).length, 0);
+      matchBudget = Math.max(0, matchBudget - captured);
+    }
   }
 
-  return formatResults(results, filePaths, pattern, maxMatches, multiFile, params.regex);
+  return formatResults(results, filePaths, pattern, maxMatches, multiFile, params.regex || params.multiline);
 }
 
 // ---------------------------------------------------------------------------

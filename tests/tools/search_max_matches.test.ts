@@ -21,7 +21,7 @@ afterAll(() => {
 describe("trueline_search max_matches strictness", () => {
   test("max_matches should strictly limit the number of matches shown", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "MATCH",
       max_matches: 1,
       context_lines: 2,

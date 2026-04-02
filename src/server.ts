@@ -201,12 +201,15 @@ const outlineSchema = z.object({
 });
 
 const searchSchema = z.object({
-  file_path: z.string(),
+  file_path: z.string().optional(),
+  file_paths: z.array(z.string()).optional(),
   pattern: z.string({ required_error: "pattern is required" }),
   context_lines: z.number().int().min(0).optional(),
   max_matches: z.number().int().positive().optional(),
+  max_match_lines: z.number().int().positive().optional(),
   case_insensitive: z.boolean().optional(),
   regex: z.boolean().optional(),
+  multiline: z.boolean().optional(),
 });
 
 const verifySchema = z.object({
@@ -327,9 +330,10 @@ const outlineJsonSchema = {
 const searchJsonSchema = {
   type: "object",
   properties: {
-    file_path: {
-      type: "string",
-      description: "Absolute path to the file to search.",
+    file_paths: {
+      type: "array",
+      items: { type: "string" },
+      description: "Absolute paths to the files to search.",
     },
     pattern: {
       type: "string",
@@ -343,7 +347,12 @@ const searchJsonSchema = {
     max_matches: {
       type: "integer",
       exclusiveMinimum: 0,
-      description: "Maximum number of matches to return. Default: 10.",
+      description: "Maximum number of matches to return (global across all files). Default: 10.",
+    },
+    max_match_lines: {
+      type: "integer",
+      exclusiveMinimum: 0,
+      description: "Maximum lines a single multiline match can span. Default: 50. Only used with multiline=true.",
     },
     case_insensitive: {
       type: "boolean",
@@ -353,8 +362,12 @@ const searchJsonSchema = {
       type: "boolean",
       description: "Treat pattern as a regular expression. Default: false (literal match).",
     },
+    multiline: {
+      type: "boolean",
+      description: "Enable multiline matching. Pattern can span multiple lines. Implies regex=true. Default: false.",
+    },
   },
-  required: ["file_path", "pattern"],
+  required: ["pattern"],
 };
 
 const verifyJsonSchema = {
@@ -432,12 +445,12 @@ registerTool(
 
 registerTool(
   "trueline_search",
-  "Search a file for a literal string or regex pattern. Returns matching lines with context, per-line hashes, and refs \u2014 " +
-    "ready for immediate editing. Use instead of outline+read when you know what to look for.",
+  "Search files for a literal string or regex pattern. Accepts multiple file_paths in one call. " +
+    "Returns matching lines with context, per-line hashes, and refs \u2014 ready for immediate editing. " +
+    "Set multiline=true for patterns spanning multiple lines.",
   searchJsonSchema,
   safeTool(async (rawParams) => {
     const coerced = coerceParams(rawParams) as Record<string, unknown>;
-    unwrapFilePath(coerced);
     const params = searchSchema.parse(coerced);
     return handleSearch({ ...params, projectDir, allowedDirs });
   }),

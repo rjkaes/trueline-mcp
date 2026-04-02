@@ -7,6 +7,7 @@ import { getText, resetRefStore } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
+let testFile2: string;
 
 beforeAll(() => {
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-search-test-")));
@@ -25,6 +26,11 @@ beforeAll(() => {
       "}",
       "const c = 3;",
     ].join("\n"),
+  );
+  testFile2 = join(testDir, "other.ts");
+  writeFileSync(
+    testFile2,
+    ["import { hello } from './sample';", "const greeting = hello();", "console.log(greeting);"].join("\n"),
   );
 });
 
@@ -206,5 +212,112 @@ describe("trueline_search", () => {
     });
     expect(result.isError).toBe(true);
     expect(getText(result)).toContain("line-by-line");
+  });
+});
+
+test("allows regex pattern with newlines when multiline=true", async () => {
+  const result = await handleSearch({
+    file_paths: [testFile],
+    pattern: "hello\\(\\).*\\n.*console",
+    multiline: true,
+    projectDir: testDir,
+  });
+  expect(result.isError).toBeUndefined();
+});
+
+test("still rejects literal newlines when multiline=false", async () => {
+  const result = await handleSearch({
+    file_paths: [testFile],
+    pattern: "hello\nworld",
+    projectDir: testDir,
+  });
+  expect(result.isError).toBe(true);
+  expect(getText(result)).toContain("multiline");
+});
+
+describe("multi-file search", () => {
+  test("searches multiple files in one call", async () => {
+    const result = await handleSearch({
+      file_paths: [testFile, testFile2],
+      pattern: "console.log",
+      projectDir: testDir,
+    });
+    expect(result.isError).toBeUndefined();
+    const text = getText(result);
+    expect(text).toContain("--- " + testFile + " ---");
+    expect(text).toContain("--- " + testFile2 + " ---");
+    expect(text).toContain('"hello"');
+    expect(text).toContain("greeting");
+    const refs = text.match(/ref: R\d+/g);
+    expect(refs!.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("global max_matches applies across files", async () => {
+    const result = await handleSearch({
+      file_paths: [testFile, testFile2],
+      pattern: "console.log",
+      max_matches: 1,
+      projectDir: testDir,
+    });
+    const text = getText(result);
+    const matchMarkers = text.match(/\u2190 match/g);
+    expect(matchMarkers?.length).toBe(1);
+    expect(text).toContain("showing 1 of");
+  });
+
+  test("per-file errors don't abort other files", async () => {
+    const result = await handleSearch({
+      file_paths: ["/nonexistent/file.ts", testFile],
+      pattern: "console.log",
+      projectDir: testDir,
+    });
+    expect(result.isError).toBeUndefined();
+    const text = getText(result);
+    expect(text).toContain("error:");
+    expect(text).toContain("console.log");
+    expect(text).toMatch(/ref: R\d+/);
+  });
+
+  test("single file_paths omits file header", async () => {
+    const result = await handleSearch({
+      file_paths: [testFile],
+      pattern: "console.log",
+      projectDir: testDir,
+    });
+    const text = getText(result);
+    expect(text).not.toContain("---");
+    expect(text).toContain("console.log");
+    expect(text).toMatch(/ref: R\d+/);
+  });
+
+  test("file_path string alias still works", async () => {
+    const result = await handleSearch({
+      file_path: testFile,
+      pattern: "console.log",
+      projectDir: testDir,
+    });
+    expect(result.isError).toBeUndefined();
+    const text = getText(result);
+    expect(text).toContain("console.log");
+  });
+
+  test("empty file_paths returns error", async () => {
+    const result = await handleSearch({
+      file_paths: [],
+      pattern: "console.log",
+      projectDir: testDir,
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  test("no matches across multiple files shows combined message", async () => {
+    const result = await handleSearch({
+      file_paths: [testFile, testFile2],
+      pattern: "nonexistent_xyz",
+      projectDir: testDir,
+    });
+    const text = getText(result);
+    expect(text).toContain("No matches");
+    expect(text).toContain("2 files");
   });
 });
