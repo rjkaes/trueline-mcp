@@ -1,44 +1,33 @@
 /**
- * trueline_search tool handler.
+ * trueline_search tool handler (orchestrator).
  *
- * Searches a file by regex and returns matching lines with context,
- * per-line hashes, and checksums — ready for immediate editing.
- *
- * Uses a single-pass sliding window so memory is O(contextLines) instead
- * of O(file_size). Decodes each line to a string exactly once.
+ * Accepts one or more files, delegates to the line-by-line or multiline
+ * engine per file, and formats unified output with per-line hashes,
+ * checksums, and refs ready for immediate editing.
  */
-import { transcodedLines } from "../encoding.ts";
-import { fnv1aHashBytes, hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
+import { hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
 import { issueRef } from "../ref-store.ts";
-import { binaryFileError, isBinaryError, validatePath } from "./shared.ts";
+import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
+import { searchLineByLine } from "./search-line.ts";
+import type { FileSearchResult, LineMatcher } from "./search-types.ts";
 
 interface SearchParams {
-  file_path: string;
+  file_path?: string;
+  file_paths?: string[];
   pattern: string;
   context_lines?: number;
   max_matches?: number;
+  max_match_lines?: number;
   case_insensitive?: boolean;
   regex?: boolean;
+  multiline?: boolean;
   projectDir?: string;
   allowedDirs?: string[];
 }
 
-// A decoded line with its hash, ready for output.
-interface DecodedLine {
-  lineNumber: number;
-  text: string;
-  hash: number;
-  isMatch: boolean;
-}
-
-// A contiguous window of lines to emit (one or more matches with context).
-interface OutputWindow {
-  lines: DecodedLine[];
-}
-
 export async function handleSearch(params: SearchParams): Promise<ToolResult> {
-  const { file_path, pattern, projectDir, allowedDirs } = params;
+  const { pattern, projectDir, allowedDirs } = params;
   const contextLines = params.context_lines ?? 2;
   const maxMatches = params.max_matches ?? 10;
 
@@ -47,212 +36,163 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     return errorResult(`context_lines must be between 0 and ${MAX_CONTEXT_LINES}`);
   }
 
-  const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
-  if (!validated.ok) return validated.error;
+  // Normalize file_path / file_paths
+  const filePaths = normalizeFilePaths(params);
+  if (filePaths.length === 0) {
+    return errorResult("file_paths must be a non-empty array");
+  }
 
-  // Build line matcher — search is line-by-line, so multiline patterns cannot match
-  if (pattern.includes("\n") || pattern.includes("\r")) {
+  // Newline patterns only allowed in multiline mode
+  if (!params.multiline && (pattern.includes("\n") || pattern.includes("\r"))) {
     return errorResult(
       "Pattern contains newlines. trueline_search matches line-by-line, so multiline patterns cannot match. " +
-        "Search for a single-line substring instead, or use trueline_outline + trueline_read to find multiline blocks.",
+        "Set multiline=true for patterns spanning multiple lines, or search for a single-line substring instead.",
     );
   }
 
-  let matchLine: (text: string) => boolean;
-  if (params.regex) {
-    let regex: RegExp;
+  // Build matcher for line-by-line mode
+  const matcherResult = buildMatcher(pattern, params.regex || false, params.case_insensitive || false);
+  if (!matcherResult.ok) return matcherResult.error;
+  const matchLine = matcherResult.matcher;
+
+  // Search each file, tracking global match budget
+  let matchBudget = maxMatches;
+  const results: FileSearchResult[] = [];
+  const multiFile = filePaths.length > 1;
+
+  for (const fp of filePaths) {
+    const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
+    if (!validated.ok) {
+      results.push({
+        filePath: fp,
+        matches: [],
+        totalMatches: 0,
+        capped: false,
+        error: validated.error.content[0].text,
+      });
+      continue;
+    }
+
+    const fileResult = await searchLineByLine({
+      resolvedPath: validated.resolvedPath,
+      matchLine,
+      contextLines,
+      maxMatches: matchBudget,
+    });
+    fileResult.filePath = fp;
+    results.push(fileResult);
+
+    // Deduct captured matches from budget
+    const captured = fileResult.matches.reduce((sum, m) => sum + m.lines.filter((l) => l.isMatch).length, 0);
+    matchBudget = Math.max(0, matchBudget - captured);
+  }
+
+  return formatResults(results, filePaths, pattern, maxMatches, multiFile, params.regex);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function normalizeFilePaths(params: SearchParams): string[] {
+  if (params.file_paths && params.file_paths.length > 0) return params.file_paths;
+  if (params.file_path) return [params.file_path];
+  return [];
+}
+
+function buildMatcher(
+  pattern: string,
+  regex: boolean,
+  caseInsensitive: boolean,
+): { ok: true; matcher: LineMatcher } | { ok: false; error: ToolResult } {
+  if (regex) {
     try {
-      regex = new RegExp(pattern, params.case_insensitive ? "i" : undefined);
+      const re = new RegExp(pattern, caseInsensitive ? "i" : undefined);
+      return { ok: true, matcher: (text) => re.test(text) };
     } catch {
-      return errorResult(`Invalid regex pattern: "${pattern}"`);
-    }
-    matchLine = (text) => regex.test(text);
-  } else {
-    if (params.case_insensitive) {
-      const lower = pattern.toLowerCase();
-      matchLine = (text) => text.toLowerCase().includes(lower);
-    } else {
-      matchLine = (text) => text.includes(pattern);
+      return { ok: false, error: errorResult(`Invalid regex pattern: "${pattern}"`) };
     }
   }
+  if (caseInsensitive) {
+    const lower = pattern.toLowerCase();
+    return { ok: true, matcher: (text) => text.toLowerCase().includes(lower) };
+  }
+  return { ok: true, matcher: (text) => text.includes(pattern) };
+}
 
-  const { resolvedPath } = validated;
+function formatResults(
+  results: FileSearchResult[],
+  filePaths: string[],
+  pattern: string,
+  maxMatches: number,
+  multiFile: boolean,
+  isRegex?: boolean,
+): ToolResult {
+  const grandTotal = results.reduce((sum, r) => sum + r.totalMatches, 0);
+  const anyCapped = results.some((r) => r.capped);
 
-  // ===========================================================================
-  // Single-pass sliding window
-  //
-  // We maintain a ring buffer of the last `contextLines` decoded lines for
-  // pre-context. When a match is found, we flush the ring buffer as pre-context
-  // and switch to collecting post-context. Overlapping windows are merged by
-  // extending the current window instead of starting a new one.
-  // ===========================================================================
-
-  const windows: OutputWindow[] = [];
-  let totalMatches = 0;
-  let matchesCaptured = 0;
-
-  // Ring buffer for pre-context (last `contextLines` non-matched lines)
-  const ring: DecodedLine[] = new Array(contextLines > 0 ? contextLines : 0);
-  let ringLen = 0; // how many valid entries in ring
-  let ringStart = 0; // oldest entry index
-
-  // Post-context state: when > 0, we're collecting post-context lines
-  let postRemaining = 0;
-
-  // Current window being built
-  let currentWindow: OutputWindow | null = null;
-
-  // Whether we've captured enough matches and finished all post-context
-  let done = false;
-  // After capturing all matches + post-context, scan at most this many more
-  // lines to estimate totalMatches. Avoids O(file) scan for huge files.
-  const POST_LIMIT_SCAN_CAP = 1000;
-  let postLimitScanned = 0;
-  let postLimitCapped = false;
-
-  try {
-    const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
-    for await (const { lineBytes, lineNumber } of transcoded.lines) {
-      if (done) {
-        // Count remaining matches up to the scan cap
-        postLimitScanned++;
-        if (postLimitScanned > POST_LIMIT_SCAN_CAP) {
-          postLimitCapped = true;
-          break;
-        }
-        const text = lineBytes.toString("utf-8");
-        if (matchLine(text)) totalMatches++;
-        continue;
-      }
-
-      const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
-      const text = lineBytes.toString("utf-8");
-      const isMatch = matchLine(text);
-      const decoded: DecodedLine = { lineNumber, text, hash: h, isMatch };
-
-      if (isMatch) totalMatches++;
-
-      if (isMatch && matchesCaptured < maxMatches) {
-        matchesCaptured++;
-
-        if (currentWindow === null) {
-          // Start a new window: flush ring buffer as pre-context
-          currentWindow = { lines: [] };
-
-          // Drain ring buffer in order (oldest to newest)
-          if (ringLen > 0) {
-            const count = Math.min(ringLen, ring.length);
-            for (let i = 0; i < count; i++) {
-              currentWindow.lines.push(ring[(ringStart + i) % ring.length]);
-            }
-          }
-        }
-
-        currentWindow.lines.push(decoded);
-        postRemaining = contextLines; // reset post-context counter
-
-        // With zero context lines, postRemaining is already 0 — flush immediately
-        if (matchesCaptured >= maxMatches && postRemaining === 0) {
-          windows.push(currentWindow);
-          currentWindow = null;
-          done = true;
-        }
-      } else if (postRemaining > 0 && currentWindow !== null) {
-        // Collecting post-context
-        currentWindow.lines.push(decoded);
-
-        if (isMatch && matchesCaptured < maxMatches) {
-          // Another captured match within post-context range — extend the window
-          postRemaining = contextLines; // reset
-        } else {
-          // Non-match line, or a match beyond the capture limit (treat as context)
-          postRemaining--;
-          if (postRemaining === 0 && matchesCaptured >= maxMatches) {
-            // Done collecting post-context for the last captured match
-            windows.push(currentWindow);
-            currentWindow = null;
-            done = true;
-          } else if (postRemaining === 0) {
-            // Finished this window's post-context, but more matches may come
-            windows.push(currentWindow);
-            currentWindow = null;
-            // Reset ring buffer
-            ringLen = 0;
-            ringStart = 0;
-          }
-        }
-      } else {
-        // Not in a window — add to ring buffer for future pre-context
-        if (contextLines > 0) {
-          if (ringLen < ring.length) {
-            ring[(ringStart + ringLen) % ring.length] = decoded;
-            ringLen++;
-          } else {
-            ring[ringStart] = decoded;
-            ringStart = (ringStart + 1) % ring.length;
-          }
-        }
-      }
-    }
-  } catch (err: unknown) {
-    if (isBinaryError(err)) return binaryFileError(file_path);
-    throw err;
+  // Single-file mode: if the only file had a validation/binary error, propagate it as an error result
+  if (!multiFile && results.length === 1 && results[0].error) {
+    return errorResult(results[0].error);
   }
 
-  // Flush any in-progress window
-  if (currentWindow !== null) {
-    windows.push(currentWindow);
-  }
-
-  if (totalMatches === 0) {
-    let msg = `No matches for pattern "${pattern}" in ${file_path}`;
-    // Hint when the pattern looks like a regex but was searched literally
-    if (!params.regex && /[.*+?^${}()|[\]\\]/.test(pattern)) {
+  if (grandTotal === 0) {
+    let msg = multiFile
+      ? `No matches for pattern "${pattern}" across ${filePaths.length} files`
+      : `No matches for pattern "${pattern}" in ${filePaths[0]}`;
+    if (!isRegex && /[.*+?^${}()|[\]\\]/.test(pattern)) {
       msg +=
         "\n\n(hint: pattern contains regex metacharacters but was searched literally — add regex=true for regex matching)";
     }
     return textResult(msg);
   }
 
-  // ===========================================================================
-  // Format output with hashes and checksums
-  // ===========================================================================
-
   const parts: string[] = [];
-
   let matchesEmitted = 0;
-  for (let i = 0; i < windows.length; i++) {
-    const window = windows[i];
-    let checksumHash = FNV_OFFSET_BASIS;
-    let firstLine = 0;
-    let lastLine = 0;
 
-    if (i > 0) parts.push("");
-
-    for (const line of window.lines) {
-      const letters = hashToLetters(line.hash);
-      if (firstLine === 0) {
-        firstLine = line.lineNumber;
+  for (const result of results) {
+    if (result.error) {
+      if (multiFile) {
+        parts.push(`--- ${result.filePath} ---`);
+        parts.push(`error: ${result.error}`);
+        parts.push("");
       }
-      lastLine = line.lineNumber;
-      checksumHash = foldHash(checksumHash, line.hash);
+      continue;
+    }
+    if (result.matches.length === 0) continue;
 
-      const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
-      if (line.isMatch && marker !== "") matchesEmitted++;
-      parts.push(`${letters}.${line.lineNumber}	${line.text}${marker}`);
+    if (multiFile) {
+      if (parts.length > 0) parts.push("");
+      parts.push(`--- ${result.filePath} ---`);
     }
 
-    const hex = checksumHash.toString(16).padStart(8, "0");
-    const refId = issueRef(resolvedPath, firstLine, lastLine, hex);
-    parts.push("");
-    parts.push(`ref: ${refId} (lines ${firstLine}-${lastLine})`);
+    for (let i = 0; i < result.matches.length; i++) {
+      const match = result.matches[i];
+      let checksumHash = FNV_OFFSET_BASIS;
+
+      if (!multiFile && i > 0) parts.push("");
+
+      for (const line of match.lines) {
+        const letters = hashToLetters(line.hash);
+        checksumHash = foldHash(checksumHash, line.hash);
+
+        const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
+        if (line.isMatch && marker !== "") matchesEmitted++;
+        parts.push(`${letters}.${line.lineNumber}\t${line.text}${marker}`);
+      }
+
+      const hex = checksumHash.toString(16).padStart(8, "0");
+      const refId = issueRef(result.filePath, match.firstLine, match.lastLine, hex);
+      parts.push("");
+      parts.push(`ref: ${refId} (lines ${match.firstLine}-${match.lastLine})`);
+    }
   }
 
-  // Truncation notice
-  if (totalMatches > maxMatches) {
+  if (grandTotal > maxMatches) {
     parts.push("");
-    const countLabel = postLimitCapped ? `${totalMatches}+` : `${totalMatches}`;
-    parts.push(`(showing ${maxMatches} of ${countLabel} matches — increase max_matches to see more)`);
+    const countLabel = anyCapped ? `${grandTotal}+` : `${grandTotal}`;
+    const scope = multiFile ? ` across ${filePaths.length} files` : "";
+    parts.push(`(showing ${maxMatches} of ${countLabel} matches${scope} — increase max_matches to see more)`);
   }
 
   return textResult(parts.join("\n"));
