@@ -16,6 +16,7 @@ export interface SearchMatch {
 // Result of searching a single file.
 export interface FileSearchResult {
   filePath: string;
+  resolvedPath: string;
   matches: SearchMatch[];
   totalMatches: number;
   capped: boolean;

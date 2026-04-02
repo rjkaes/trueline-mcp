@@ -32,13 +32,20 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
     }
   } catch (err: unknown) {
     if (isBinaryError(err)) {
-      return { filePath: resolvedPath, matches: [], totalMatches: 0, capped: false, error: "binary file" };
+      return {
+        filePath: resolvedPath,
+        resolvedPath,
+        matches: [],
+        totalMatches: 0,
+        capped: false,
+        error: "binary file",
+      };
     }
     throw err;
   }
 
   if (lines.length === 0) {
-    return { filePath: resolvedPath, matches: [], totalMatches: 0, capped: false };
+    return { filePath: resolvedPath, resolvedPath, matches: [], totalMatches: 0, capped: false };
   }
 
   // Join lines and build a character-offset-to-line-index map
@@ -110,7 +117,7 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
     });
   }
 
-  return { filePath: resolvedPath, matches, totalMatches, capped: false };
+  return { filePath: resolvedPath, resolvedPath, matches, totalMatches, capped: false };
 }
 
 // Binary search for the line index containing a character offset.

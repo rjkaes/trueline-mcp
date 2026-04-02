@@ -98,7 +98,14 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
     }
   } catch (err: unknown) {
     if (isBinaryError(err)) {
-      return { filePath: resolvedPath, matches: [], totalMatches: 0, capped: false, error: "binary file" };
+      return {
+        filePath: resolvedPath,
+        resolvedPath,
+        matches: [],
+        totalMatches: 0,
+        capped: false,
+        error: "binary file",
+      };
     }
     throw err;
   }
@@ -110,6 +117,7 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
 
   return {
     filePath: resolvedPath,
+    resolvedPath,
     matches,
     totalMatches,
     capped: postLimitCapped,

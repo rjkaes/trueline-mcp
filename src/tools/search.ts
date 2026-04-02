@@ -68,6 +68,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
       if (!validated.ok) {
         results.push({
           filePath: fp,
+          resolvedPath: fp,
           matches: [],
           totalMatches: 0,
           capped: false,
@@ -84,6 +85,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
         maxMatchLines,
       });
       fileResult.filePath = fp;
+      fileResult.resolvedPath = validated.resolvedPath;
       results.push(fileResult);
       matchBudget = Math.max(0, matchBudget - fileResult.matches.length);
     }
@@ -105,6 +107,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
       if (!validated.ok) {
         results.push({
           filePath: fp,
+          resolvedPath: fp,
           matches: [],
           totalMatches: 0,
           capped: false,
@@ -120,6 +123,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
         maxMatches: matchBudget,
       });
       fileResult.filePath = fp;
+      fileResult.resolvedPath = validated.resolvedPath;
       results.push(fileResult);
 
       const captured = fileResult.matches.reduce((sum, m) => sum + m.lines.filter((l) => l.isMatch).length, 0);
@@ -222,7 +226,7 @@ function formatResults(
       }
 
       const hex = checksumHash.toString(16).padStart(8, "0");
-      const refId = issueRef(result.filePath, match.firstLine, match.lastLine, hex);
+      const refId = issueRef(result.resolvedPath, match.firstLine, match.lastLine, hex);
       parts.push("");
       parts.push(`ref: ${refId} (lines ${match.firstLine}-${match.lastLine})`);
     }

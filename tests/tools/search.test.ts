@@ -321,3 +321,27 @@ describe("multi-file search", () => {
     expect(text).toContain("2 files");
   });
 });
+
+describe("search ref stores resolved path", () => {
+  test("ref from relative-path search contains the absolute resolved path", async () => {
+    const { resolveRef } = await import("../../src/ref-store.ts");
+
+    // Search using a relative path constructed from the testDir basename
+    const relative = join(".", "sample.ts");
+    const result = await handleSearch({
+      file_path: relative,
+      pattern: "hello",
+      context_lines: 0,
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    // Extract ref ID from output like "ref: R1 (lines 3-3)"
+    const refMatch = text.match(/ref: (R\d+)/);
+    expect(refMatch).not.toBeNull();
+
+    const entry = resolveRef(refMatch![1]);
+    // The stored filePath must be the absolute resolved path, not the relative input
+    expect(entry.filePath).toBe(join(testDir, "sample.ts"));
+  });
+});
