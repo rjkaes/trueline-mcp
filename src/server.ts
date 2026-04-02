@@ -179,6 +179,7 @@ const editSchema = z.object({
     .min(1),
   encoding: z.string().optional(),
   dry_run: z.boolean().optional(),
+  context_lines: z.number().int().min(0).optional(),
 });
 
 const changesSchema = z.object({
@@ -288,6 +289,12 @@ const editJsonSchema = {
     dry_run: {
       type: "boolean",
       description: "Preview edits as unified diff without writing. Defaults to false.",
+    },
+    context_lines: {
+      type: "integer",
+      minimum: 0,
+      description:
+        "Lines of hash.line context to return around each edit site. 0 or omitted = no context. Use when you plan to make follow-up edits to the same file.",
     },
   },
   required: ["file_path", "edits"],
@@ -401,7 +408,8 @@ registerTool(
   "Apply hash-verified edits to a file. Edits go in the edits array. " +
     'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", ref: "R1", content: "new text"}]}. ' +
     "Copy the ref from trueline_read/trueline_search output. The 2-letter hash prefix on each line number is required in ranges. " +
-    'Use action: "insert_after" to insert content after a line instead of replacing it.',
+    'Use action: "insert_after" to insert content after a line instead of replacing it. ' +
+    "Set context_lines to get hash.line context around edit sites for chaining edits without re-searching.",
   editJsonSchema,
   safeTool(async (rawParams) => {
     const coerced = coerceParams(rawParams) as Record<string, unknown>;

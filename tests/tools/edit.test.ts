@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, readFileSync, mkdirSync, rmSy
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
-import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, resetRefStore } from "../helpers.ts";
+import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, resetRefStore, getText } from "../helpers.ts";
 import { issueRef } from "../../src/ref-store.ts";
 
 let testDir: string;
@@ -647,5 +647,97 @@ describe("handleEdit", () => {
     expect(result.isError).toBeUndefined();
     const written = readFileSync(testFile, "utf-8");
     expect(written).toContain("ab.12 is a valid version string");
+  });
+
+  test("context_lines returns hash.line context around edit", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ ref, range: `${h2}.2`, content: "replaced 2" }],
+      context_lines: 2,
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    expect(text).toContain("context near line 2:");
+    // Should have hash.line formatted lines
+    expect(text).toMatch(/^[a-z]{2}\.\d+\t/m);
+  });
+
+  test("context_lines collapses large insertions", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h2 = lineHash("line 2");
+    const inserted = Array.from({ length: 20 }, (_, i) => `new ${i + 1}`).join("\n");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ ref, range: `${h2}.2`, content: inserted, action: "insert_after" }],
+      context_lines: 3,
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    expect(text).toContain("context near lines");
+    // Should collapse the middle: 3 before + 3 first + collapse marker + 3 last + 3 after
+    expect(text).toContain("── 14 lines ──");
+  });
+
+  test("context_lines 0 produces no context", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ ref, range: `${h2}.2`, content: "replaced 2" }],
+      context_lines: 0,
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    expect(text).not.toContain("context near");
+  });
+
+  test("context_lines with multiple edits shows separate blocks", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h1 = lineHash("line 1");
+    const h4 = lineHash("line 4");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        { ref, range: `${h1}.1`, content: "replaced 1" },
+        { ref, range: `${h4}.4`, content: "replaced 4" },
+      ],
+      context_lines: 1,
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    // Two separate context blocks
+    const contextMatches = text.match(/context near/g);
+    expect(contextMatches).toHaveLength(2);
+  });
+
+  test("context_lines at file boundaries does not overflow", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h1 = lineHash("line 1");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ ref, range: `${h1}.1`, content: "replaced 1" }],
+      context_lines: 5, // more than lines above/below
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    expect(text).toContain("context near");
+    expect(result.isError).toBeUndefined();
   });
 });

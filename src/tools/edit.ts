@@ -16,7 +16,8 @@ import { relative } from "node:path";
 import { DiffCollector } from "../diff-collector.ts";
 import { detectBOM } from "../encoding.ts";
 import { streamingEdit } from "../streaming-edit.ts";
-import { fnv1aHash, hashToLetters } from "../hash.ts";
+import { fnv1aHash, fnv1aHashBytes, hashToLetters } from "../hash.ts";
+import { splitLines } from "../line-splitter.ts";
 import { adjustRefsAfterEdit, issueRef, type EditRegion } from "../ref-store.ts";
 import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
@@ -26,13 +27,14 @@ interface EditParams {
   encoding?: string;
   edits: EditInput[];
   dry_run?: boolean;
+  context_lines?: number;
   projectDir?: string;
   allowedDirs?: string[];
 }
 
 export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const t0 = performance.now();
-  const { file_path, edits, dry_run, projectDir, allowedDirs } = params;
+  const { file_path, edits, dry_run, context_lines, projectDir, allowedDirs } = params;
 
   // dry_run uses Read deny patterns: it's a read-only preview, same as the old trueline_changes
   const toolName = dry_run ? "Read" : "Edit";
@@ -122,14 +124,21 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const summary = editSummary(built.ops);
   const warn = built.warnings.length > 0 ? `\n\n${built.warnings.join("\n")}` : "";
 
+  // Generate context around edit sites if requested
+  let contextBlock = "";
+  if (context_lines && context_lines > 0 && result.newLineCount > 0) {
+    const ctx = await readEditContext(resolvedPath, built.ops, context_lines, enc);
+    if (ctx) contextBlock = `\n\n${ctx}`;
+  }
+
   if (!result.changed) {
     return textResult(
-      `Edit produced no changes \u2014 file not written.\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}`,
+      `Edit produced no changes \u2014 file not written.\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}${contextBlock}`,
     );
   }
 
   return textResult(
-    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}`,
+    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}${contextBlock}`,
   );
 }
 
@@ -200,4 +209,121 @@ function truncatePreview(lines: string[]): string {
     result += lines[i].length <= remaining ? lines[i] : lines[i].slice(0, remaining);
   }
   return result.length > MAX ? `"${result.slice(0, MAX)}\u2026"` : `"${result}"`;
+}
+
+// ==============================================================================
+// Edit context: re-read edit sites from written file for chained edits
+// ==============================================================================
+
+interface EditSite {
+  /** First line of new content (or the line after deleted range for deletions). */
+  newStart: number;
+  /** Last line of new content (or newStart - 1 for deletions). */
+  newEnd: number;
+  /** Number of new content lines (0 for deletions). */
+  lineCount: number;
+}
+
+/**
+ * Re-reads the written file at each edit site and returns hash.line formatted
+ * context. For large edits (new content > 2 * contextLines), the middle is
+ * collapsed to show only the first/last contextLines of new content.
+ */
+async function readEditContext(
+  resolvedPath: string,
+  ops: StreamEditOp[],
+  contextLines: number,
+  encoding: BufferEncoding,
+): Promise<string> {
+  // Compute new line positions for each edit site (same shift logic as editSummary).
+  const sites: EditSite[] = [];
+  let shift = 0;
+  for (const op of ops) {
+    if (op.insertAfter) {
+      const newStart = op.startLine + 1 + shift;
+      const newEnd = op.startLine + op.content.length + shift;
+      sites.push({ newStart, newEnd, lineCount: op.content.length });
+      shift += op.content.length;
+    } else {
+      const span = op.endLine - op.startLine + 1;
+      const newStart = op.startLine + shift;
+      const newEnd = op.startLine + op.content.length - 1 + shift;
+      sites.push({ newStart, newEnd, lineCount: op.content.length });
+      shift += op.content.length - span;
+    }
+  }
+
+  // Build collection ranges: [newStart - contextLines, newEnd + contextLines]
+  const collectRanges = sites.map((s) => ({
+    from: Math.max(1, s.newStart - contextLines),
+    to: s.newEnd + contextLines, // clamped to file end naturally by iteration
+  }));
+
+  // Single pass over the file, collecting lines that fall in any range.
+  const collected = new Map<number, { letters: string; content: string }>();
+  const maxLine = Math.max(...collectRanges.map((r) => r.to));
+
+  for await (const { lineBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: false })) {
+    if (lineNumber > maxLine) break;
+    for (const range of collectRanges) {
+      if (lineNumber >= range.from && lineNumber <= range.to) {
+        const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
+        const letters = hashToLetters(h);
+        collected.set(lineNumber, { letters, content: lineBytes.toString(encoding) });
+        break;
+      }
+    }
+  }
+
+  // Format output blocks.
+  const blocks: string[] = [];
+  for (let i = 0; i < sites.length; i++) {
+    const site = sites[i];
+    const range = collectRanges[i];
+    const collapse = site.lineCount > 2 * contextLines;
+
+    const loc =
+      site.lineCount <= 1 || site.newStart === site.newEnd
+        ? `line ${site.newStart}`
+        : `lines ${site.newStart}-${site.newEnd}`;
+    const lines: string[] = [`context near ${loc}:`];
+
+    // Lines before the edit
+    for (let ln = range.from; ln < site.newStart; ln++) {
+      const entry = collected.get(ln);
+      if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+    }
+
+    if (collapse) {
+      // First contextLines of new content
+      for (let ln = site.newStart; ln < site.newStart + contextLines && ln <= site.newEnd; ln++) {
+        const entry = collected.get(ln);
+        if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+      }
+      const skipped = site.lineCount - 2 * contextLines;
+      lines.push(`  \u2500\u2500 ${skipped} lines \u2500\u2500`);
+      // Last contextLines of new content
+      for (let ln = site.newEnd - contextLines + 1; ln <= site.newEnd; ln++) {
+        const entry = collected.get(ln);
+        if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+      }
+    } else {
+      // All new content lines
+      for (let ln = site.newStart; ln <= site.newEnd; ln++) {
+        const entry = collected.get(ln);
+        if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+      }
+    }
+
+    // Lines after the edit
+    const afterStart = site.lineCount > 0 ? site.newEnd + 1 : site.newStart;
+    for (let ln = afterStart; ln <= range.to; ln++) {
+      const entry = collected.get(ln);
+      if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+    }
+
+    blocks.push(lines.join("\n"));
+  }
+
+  return blocks.join("\n\n");
 }

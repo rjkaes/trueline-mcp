@@ -88,6 +88,11 @@ export function getInstructions(platform = "claude-code") {
       \u2192 trueline_edit: range="ab.10", ref="R1", action="insert_after", content="new line here"
       action="insert_after" inserts content AFTER the line. Without it, range lines are REPLACED. Use action to make your intent explicit.
     </example>
+    <example name="chained-edit">
+      When making multiple sequential edits to the same file, pass context_lines on the first edit:
+      → trueline_edit: file_path, edits: [...], context_lines: 3
+      The response includes hash.line context around each edit site. Use those hashes for the next edit without re-searching.
+    </example>
     <rule>NEVER fabricate refs. Always copy the exact ref (e.g. "R1") from trueline_read or trueline_search output. A ref from a wide read (e.g. covering lines 1-157) is valid for editing any sub-range within it.</rule>
     <rule>To insert new content, use action="insert_after". Without it, the range lines are REPLACED (content is lost). If you want to add lines without removing existing ones, you must use action="insert_after".</rule>
   </editing>
@@ -102,6 +107,7 @@ export function getInstructions(platform = "claude-code") {
     <tip>Use ${p.writeTool} to create new files. To edit them afterward, use trueline_read or trueline_search to get refs first.</tip>
     <tip>When you need to search-then-edit across multiple files, ${p.grepAdvice}, then pass all file_paths to a single trueline_search call to get refs for all of them at once.</tip>
     <tip>Batch multiple edits to the same file into one trueline_edit call. Each edit needs the ref whose line range covers that edit's target lines — don't reuse a ref from one region for an edit in a different region.</tip>${atRefTip}
+    <tip>When you plan to make follow-up edits to the same file, pass context_lines (e.g. 3) on the current edit. The response will include hash.line identifiers around each edit site, letting you chain the next edit without a trueline_search round-trip.</tip>
   </tips>
 </trueline_mcp_instructions>`;
 }
