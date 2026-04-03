@@ -244,8 +244,8 @@ describe("multi-file search", () => {
     });
     expect(result.isError).toBeUndefined();
     const text = getText(result);
-    expect(text).toContain("--- " + testFile + " ---");
-    expect(text).toContain("--- " + testFile2 + " ---");
+    expect(text).toContain(`--- ${testFile} ---`);
+    expect(text).toContain(`--- ${testFile2} ---`);
     expect(text).toContain('"hello"');
     expect(text).toContain("greeting");
     const refs = text.match(/ref: R\d+/g);

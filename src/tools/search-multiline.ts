@@ -61,7 +61,7 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
 
   // Find all matches via global regex
   const allMatchRanges: { startIdx: number; endIdx: number }[] = [];
-  const flags = regex.flags.includes("g") ? regex.flags : regex.flags + "g";
+  const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
   const globalRegex = new RegExp(regex.source, flags);
 
   for (;;) {

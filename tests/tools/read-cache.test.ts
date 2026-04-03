@@ -144,3 +144,31 @@ describe("read cache — unchanged file", () => {
     expect(getText(r2)).toContain("File unchanged");
   });
 });
+
+describe("read cache — FIFO eviction", () => {
+  test("evicts oldest entries after MAX_READ_CACHE (500)", async () => {
+    // Create and read 502 files to exceed the 500-entry cache limit
+    for (let i = 0; i < 502; i++) {
+      const f = writeFile(`evict-${i}.txt`, `content ${i}\n`);
+      await handleRead({ file_path: f, allowedDirs: [testDir] });
+    }
+
+    // Re-read the first file — should be a cache miss (evicted), returning full content
+    const f0 = join(testDir, "evict-0.txt");
+    const result = await handleRead({ file_path: f0, allowedDirs: [testDir] });
+    expect(getText(result)).not.toContain("File unchanged");
+    expect(getText(result)).toContain("content 0");
+  });
+
+  test("recent entries survive eviction", async () => {
+    for (let i = 0; i < 502; i++) {
+      const f = writeFile(`evict2-${i}.txt`, `data ${i}\n`);
+      await handleRead({ file_path: f, allowedDirs: [testDir] });
+    }
+
+    // Re-read a recent file — should be a cache hit
+    const fRecent = join(testDir, "evict2-501.txt");
+    const result = await handleRead({ file_path: fRecent, allowedDirs: [testDir] });
+    expect(getText(result)).toContain("File unchanged");
+  });
+});
