@@ -65,10 +65,21 @@ collision resistance over the whole range.
 
 ```
 trueline_read({
-  file_path: "src/main.ts",
-  ranges: [{ start: 10, end: 25 }],  // optional, default: whole file
+  file_paths: ["src/main.ts:10-25"],  // inline range syntax
 })
 ```
+
+Multiple files with per-file ranges in a single call:
+
+```
+trueline_read({
+  file_paths: ["src/main.ts:10-25", "src/utils.ts:80-90", "src/config.ts"],
+})
+```
+
+The range suffix is `:<start>-<end>`, with comma-separated ranges for
+multiple disjoint sections: `"src/foo.ts:1-20,200-220"`. Omitting the
+suffix reads the whole file.
 
 The tool streams the file line-by-line — it never loads the entire
 file into memory. The pipeline:
@@ -85,16 +96,16 @@ file into memory. The pipeline:
 
 ### Partial reads
 
-When `ranges` are specified, each range produces its own ref
-covering only those lines. This matters for `trueline_edit`: the
-ref you pass in each edit must have been issued for a range that
-covers the lines that edit targets. Reading a few lines around your
-edit target is enough — you don't need to re-read a 2000-line file
-to edit line 500.
+When inline ranges are specified (e.g. `"src/foo.ts:10-25"`), each range
+produces its own ref covering only those lines. This matters for
+`trueline_edit`: the ref you pass in each edit must have been issued for
+a range that covers the lines that edit targets. Reading a few lines
+around your edit target is enough; you don't need to re-read a 2000-line
+file to edit line 500.
 
-Multiple disjoint ranges can be read in a single call, each producing
-its own ref. This is useful when editing lines in different parts
-of a file — one read call provides all the refs needed.
+Multiple disjoint ranges on a single file use comma-separated syntax:
+`"src/foo.ts:1-20,200-220"`. Each range gets its own ref, so one read
+call provides all the refs needed for edits in different parts of the file.
 
 ### Empty files
 

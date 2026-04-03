@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseChecksum, parseRange, parseRanges } from "../src/parse.ts";
+import { parseChecksum, parseFilePathWithRanges, parseRange, parseRanges } from "../src/parse.ts";
 
 describe("parseRanges", () => {
   test("returns whole-file sentinel for undefined input", () => {
@@ -176,5 +176,55 @@ describe("parseChecksum", () => {
 
   test("rejects garbage input", () => {
     expect(() => parseChecksum("notachecksum")).toThrow();
+  });
+});
+
+describe("parseFilePathWithRanges", () => {
+  test("plain path returns no ranges", () => {
+    const result = parseFilePathWithRanges("src/foo.ts");
+    expect(result.path).toBe("src/foo.ts");
+    expect(result.rangeSpecs).toBeUndefined();
+  });
+
+  test("single range", () => {
+    const result = parseFilePathWithRanges("src/foo.ts:10-25");
+    expect(result.path).toBe("src/foo.ts");
+    expect(result.rangeSpecs).toEqual(["10-25"]);
+  });
+
+  test("multiple comma-separated ranges", () => {
+    const result = parseFilePathWithRanges("src/foo.ts:1-20,200-220");
+    expect(result.path).toBe("src/foo.ts");
+    expect(result.rangeSpecs).toEqual(["1-20", "200-220"]);
+  });
+
+  test("single line", () => {
+    const result = parseFilePathWithRanges("src/foo.ts:42");
+    expect(result.path).toBe("src/foo.ts");
+    expect(result.rangeSpecs).toEqual(["42"]);
+  });
+
+  test("open-ended range", () => {
+    const result = parseFilePathWithRanges("src/foo.ts:10-");
+    expect(result.path).toBe("src/foo.ts");
+    expect(result.rangeSpecs).toEqual(["10-"]);
+  });
+
+  test("absolute path", () => {
+    const result = parseFilePathWithRanges("/Users/dev/project/src/foo.ts:10-25");
+    expect(result.path).toBe("/Users/dev/project/src/foo.ts");
+    expect(result.rangeSpecs).toEqual(["10-25"]);
+  });
+
+  test("path with no range suffix treats trailing digits as path", () => {
+    const result = parseFilePathWithRanges("src/file123.ts");
+    expect(result.path).toBe("src/file123.ts");
+    expect(result.rangeSpecs).toBeUndefined();
+  });
+
+  test("Windows drive letter is not split", () => {
+    const result = parseFilePathWithRanges("C:\\src\\foo.ts");
+    expect(result.path).toBe("C:\\src\\foo.ts");
+    expect(result.rangeSpecs).toBeUndefined();
   });
 });

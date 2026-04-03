@@ -230,13 +230,17 @@ const readJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: "One or more files to read. Accepts file_path as alias.",
+      description:
+        'One or more files to read. Append :range to read specific lines: "src/foo.ts:10-25", ' +
+        '"src/bar.ts:1-20,200-220". Without a range suffix, reads the whole file. Accepts file_path as alias.',
     },
     ranges: {
       type: "array",
       items: { type: "string" },
       description:
-        'Line ranges to read (applied to each file). Omit to read the whole file. Examples: ["10-25"], ["1-50", "200-220"], ["10"] (single line), ["10-"] (to EOF). Each range gets its own ref.',
+        "Line ranges (single-file shorthand). Only allowed with one file_path. " +
+        "For multiple files, use inline syntax on file_paths instead. " +
+        'Examples: ["10-25"], ["1-50", "200-220"], ["10"] (single line), ["10-"] (to EOF). Each range gets its own ref.',
     },
     encoding: {
       type: "string",
@@ -395,7 +399,8 @@ const verifyJsonSchema = {
 
 registerTool(
   "trueline_read",
-  'Read files. Example: {"file_paths": ["src/main.ts"], "ranges": ["10-25"]}. Returns per-line hashes and refs for editing. Supports multiple files in one call.',
+  'Read files. Example: {"file_paths": ["src/main.ts:10-25"]}. Returns per-line hashes and refs for editing. ' +
+    'Append :range to each path for per-file line ranges: ["src/foo.ts:10-25", "src/bar.ts"]. Supports multiple files in one call.',
   readJsonSchema,
   safeTool(async (rawParams) => {
     const params = readSchema.parse(coerceParams(rawParams));

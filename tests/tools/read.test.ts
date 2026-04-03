@@ -243,4 +243,90 @@ describe("handleRead", () => {
     expect(text).toMatch(/^[a-z]{2}\.1\tconst a = 1;$/m);
     expect(text).toMatch(/ref: R\d+ \(lines \d+-\d+\)/);
   });
+
+  test("inline range syntax reads specific lines per file", async () => {
+    const shortFile = join(testDir, "short.ts");
+    writeFileSync(shortFile, "line1\nline2\nline3\n");
+    const longFile = join(testDir, "long.ts");
+    writeFileSync(longFile, `${Array.from({ length: 50 }, (_, i) => `line${i + 1}`).join("\n")}\n`);
+
+    const result = await handleReadMulti({
+      file_paths: [`${longFile}:40-45`, `${shortFile}:2-3`],
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("line40");
+    expect(text).toContain("line45");
+    // line 39 appears as context (expandRanges adds 1-line padding)
+    expect(text).not.toContain("line38");
+    expect(text).toContain("line2");
+    expect(text).toContain("line3");
+    // Short file ref should cover lines 1-3 (range 2-3 + 1-line context expansion)
+    expect(text).toMatch(/ref: R\d+ \(lines 1-3\)/);
+  });
+
+  test("inline range with multiple ranges per file", async () => {
+    const file = join(testDir, "multi-range.ts");
+    writeFileSync(file, `${Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")}\n`);
+
+    const result = await handleReadMulti({
+      file_paths: [`${file}:1-3,18-20`],
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("line1");
+    expect(text).toContain("line3");
+    expect(text).toContain("line18");
+    expect(text).toContain("line20");
+    expect(text).not.toContain("line10");
+  });
+
+  test("top-level ranges still work for single file", async () => {
+    const file = join(testDir, "compat.ts");
+    writeFileSync(file, `${Array.from({ length: 10 }, (_, i) => `line${i + 1}`).join("\n")}\n`);
+
+    const result = await handleReadMulti({
+      file_paths: [file],
+      ranges: ["3-5"],
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("line3");
+    expect(text).toContain("line5");
+    // Context expansion adds 1 line padding, so line2 appears
+    expect(text).not.toContain("line1");
+  });
+
+  test("top-level ranges with multiple files returns error", async () => {
+    const file2 = join(testDir, "second2.ts");
+    writeFileSync(file2, "x\n");
+
+    const result = await handleReadMulti({
+      file_paths: [testFile, file2],
+      ranges: ["1-5"],
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+    expect(result.isError).toBe(true);
+    const text = result.content[0].text;
+    expect(text).toContain("inline range syntax");
+  });
+
+  test("file_path without colon range reads whole file", async () => {
+    const result = await handleReadMulti({
+      file_paths: [testFile],
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("const a = 1;");
+    expect(text).toContain("const c = 3;");
+  });
 });

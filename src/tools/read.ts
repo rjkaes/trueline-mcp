@@ -18,7 +18,7 @@
 import { LF_BUF } from "../line-splitter.ts";
 import { transcodedLines } from "../encoding.ts";
 import { FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, hashToLetters } from "../hash.ts";
-import { parseRanges, type ReadRange } from "../parse.ts";
+import { parseFilePathWithRanges, parseRanges, type ReadRange } from "../parse.ts";
 import { hasRef, issueRef } from "../ref-store.ts";
 import { binaryFileError, isBinaryError, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
@@ -264,16 +264,33 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 }
 
 export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResult> {
-  const { file_paths, ...rest } = params;
-  if (file_paths.length === 1) {
-    return handleRead({ ...rest, file_path: file_paths[0] });
+  const { file_paths, ranges, ...rest } = params;
+
+  // Parse inline ranges from file_paths (e.g. "src/foo.ts:10-25")
+  const parsed = file_paths.map(parseFilePathWithRanges);
+
+  // Top-level ranges with multiple files is ambiguous; reject it.
+  if (ranges?.length && parsed.length > 1) {
+    return errorResult(
+      "Top-level ranges cannot be used with multiple file_paths. " +
+        'Use inline range syntax instead: file_paths: ["src/foo.ts:10-25", "src/bar.ts:1-50"]',
+    );
   }
+
+  // Single file: top-level ranges still work for backward compat
+  if (parsed.length === 1) {
+    const fp = parsed[0];
+    const effectiveRanges = fp.rangeSpecs ?? ranges;
+    return handleRead({ ...rest, file_path: fp.path, ranges: effectiveRanges });
+  }
+
+  // Multiple files: each gets its own inline ranges (or whole file)
   const parts: string[] = [];
-  for (const fp of file_paths) {
-    const result = await handleRead({ ...rest, file_path: fp });
+  for (const fp of parsed) {
+    const result = await handleRead({ ...rest, file_path: fp.path, ranges: fp.rangeSpecs });
     if (result.isError) return result;
     const text = (result.content[0] as { text: string }).text;
-    parts.push(`--- ${fp} ---\n${text}`);
+    parts.push(`--- ${fp.path} ---\n${text}`);
   }
   return textResult(parts.join("\n\n"));
 }

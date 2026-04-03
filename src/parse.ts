@@ -312,3 +312,42 @@ export function parseRanges(ranges: string[] | undefined): ReadRange[] {
 
   return parsed;
 }
+
+// ---------------------------------------------------------------------------
+// Inline range parsing for file_paths entries (e.g. "src/foo.ts:10-25")
+// ---------------------------------------------------------------------------
+
+export interface FilePathWithRanges {
+  path: string;
+  rangeSpecs: string[] | undefined;
+}
+
+/**
+ * Split a file_path entry into path and optional inline ranges.
+ *
+ * Accepted forms:
+ *   "src/foo.ts"             → { path: "src/foo.ts", rangeSpecs: undefined }
+ *   "src/foo.ts:10-25"       → { path: "src/foo.ts", rangeSpecs: ["10-25"] }
+ *   "src/foo.ts:1-20,200-220" → { path: "src/foo.ts", rangeSpecs: ["1-20", "200-220"] }
+ *   "src/foo.ts:10"          → { path: "src/foo.ts", rangeSpecs: ["10"] }
+ *   "src/foo.ts:10-"         → { path: "src/foo.ts", rangeSpecs: ["10-"] }
+ *
+ * The split point is the last ':' followed by a digit. This avoids
+ * ambiguity with Windows drive letters (C:\...) or other colons in paths.
+ */
+export function parseFilePathWithRanges(entry: string): FilePathWithRanges {
+  // Find the last ':' followed by a digit
+  for (let i = entry.length - 1; i >= 0; i--) {
+    if (entry[i] === ":" && i + 1 < entry.length && /\d/.test(entry[i + 1])) {
+      const path = entry.slice(0, i);
+      const rangeStr = entry.slice(i + 1);
+      // Don't split if the path would be empty or a single letter (drive letter)
+      if (path.length <= 1) continue;
+      return {
+        path,
+        rangeSpecs: rangeStr.split(",").map((r) => r.trim()),
+      };
+    }
+  }
+  return { path: entry, rangeSpecs: undefined };
+}

@@ -58,8 +58,14 @@ source file, that's 10-20 lines instead of hundreds.
 ```
 
 The agent sees the full structure, then uses `trueline_read` to fetch only
-the ranges it needs. A 500-line file where the agent needs one 20-line
-function? It reads 20 lines, not 500.
+the ranges it needs. Ranges are specified inline on each path:
+
+```
+file_paths: ["src/server.ts:25-45", "src/utils.ts:1-10,80-90"]
+```
+
+A 500-line file where the agent needs one 20-line function? It reads 20
+lines, not 500. Multiple files with different ranges in a single call.
 
 `trueline_search` finds lines by literal string or regex and returns them
 with edit-ready refs, no outline or read step needed. For targeted
