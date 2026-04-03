@@ -5,7 +5,7 @@
  * Much smaller than reading the full file — useful for navigation and
  * understanding file structure before reading specific ranges.
  */
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { extractOutline, formatOutline } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
@@ -112,7 +112,7 @@ async function outlineOneFile(
 
   let source: string;
   try {
-    const buf = readFileSync(validated.resolvedPath);
+    const buf = await readFile(validated.resolvedPath);
     if (buf.includes(0)) {
       return errorResult(`"${file_path}" appears to be a binary file`);
     }

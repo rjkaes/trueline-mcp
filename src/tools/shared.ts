@@ -227,7 +227,7 @@ export function validateEdits(edits: EditInput[], resolvedPath?: string): Valida
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const hint = ` Your ref ${edit.ref} covers lines ${checksumRef.startLine}\u2013${checksumRef.endLine}.`;
-      throw new Error(msg + hint);
+      return { ok: false, error: errorResult(msg + hint) };
     }
 
     // Explicit action field takes precedence over + prefix in range.

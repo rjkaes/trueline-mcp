@@ -1,4 +1,5 @@
-import { execSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
@@ -19,7 +20,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 
   // Expand "*" to all changed files
   if (filePaths.length === 1 && filePaths[0] === "*") {
-    filePaths = getChangedFiles(projectDir ?? process.cwd(), compare_against);
+    filePaths = await getChangedFiles(projectDir ?? process.cwd(), compare_against);
     if (filePaths.length === 0) {
       return textResult("No changed files found.");
     }
@@ -52,7 +53,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     }
 
     // Read git content
-    const gitContent = getGitContent(resolvedPath, compare_against, projectDir ?? process.cwd());
+    const gitContent = await getGitContent(resolvedPath, compare_against, projectDir ?? process.cwd());
 
     // Extract symbols from both
     const [oldSymbols, newSymbols] = await Promise.all([
@@ -86,27 +87,30 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 // not from a parent worktree or other inherited context.
 const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
 
-function gitExec(cmd: string, cwd: string): string {
-  return execSync(cmd, { cwd, stdio: ["pipe", "pipe", "pipe"], env: gitEnv }).toString("utf-8");
+const execFileAsync = promisify(execFile);
+
+async function gitExec(args: string[], cwd: string): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd, env: gitEnv, maxBuffer: 10 * 1024 * 1024 });
+  return stdout;
 }
 
-function getGitContent(filePath: string, ref: string, cwd: string): string {
+async function getGitContent(filePath: string, ref: string, cwd: string): Promise<string> {
   try {
     // Use git's own toplevel to compute the relative path, so that
     // Windows 8.3 short-name mismatches between realpath() and the
     // test's realpathSync() don't produce wrong relative paths.
-    const toplevel = gitExec("git rev-parse --show-toplevel", cwd).trim();
+    const toplevel = (await gitExec(["rev-parse", "--show-toplevel"], cwd)).trim();
     const relPath = relative(toplevel, filePath).replace(/\\/g, "/");
-    return gitExec(`git show ${ref}:${relPath}`, cwd);
+    return await gitExec(["show", `${ref}:${relPath}`], cwd);
   } catch {
     return ""; // untracked or not in git
   }
 }
 
-function getChangedFiles(cwd: string, ref: string): string[] {
+async function getChangedFiles(cwd: string, ref: string): Promise<string[]> {
   try {
-    const output = gitExec(`git diff --name-only ${ref}`, cwd);
-    const untrackedOutput = gitExec("git ls-files --others --exclude-standard", cwd);
+    const output = await gitExec(["diff", "--name-only", ref], cwd);
+    const untrackedOutput = await gitExec(["ls-files", "--others", "--exclude-standard"], cwd);
     const files = [...output.trim().split("\n"), ...untrackedOutput.trim().split("\n")]
       .filter(Boolean)
       .map((f) => resolve(cwd, f));

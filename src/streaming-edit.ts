@@ -278,14 +278,13 @@ export async function streamingEdit(
     if (expected === BARE_LINE_HASH) {
       return (
         `wrong hash prefix for line ${lineNumber}. ` +
-        `The correct hash.line reference is ${got}.${lineNumber}. ` +
-        `Your ref is still valid \u2014 retry the edit with ${got}.${lineNumber}.`
+        `Re-read the file to get current hash.line references before retrying.`
       );
     }
     return (
       `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}. ` +
-      `The correct hash.line reference is ${got}.${lineNumber}. ` +
-      `Your ref is still valid \u2014 retry the edit with the corrected hash prefix.`
+      `The file content at this line is different from what you expect. ` +
+      `Re-read the file to see what is actually there before retrying.`
     );
   }
 
@@ -511,8 +510,8 @@ export async function streamingEdit(
       }
 
       const base =
-        `${resolvedPath}: checksum mismatch for lines ${ref.startLine}\u2013${ref.endLine}: ` +
-        `expected ${expected}, got ${actual}. File changed since last read.` +
+        `${resolvedPath}: checksum mismatch for lines ${ref.startLine}\u2013${ref.endLine}. ` +
+        `File changed since last read.` +
         `\n\nYour ref is stale \u2014 the file was modified after the ref was issued. ` +
         `Re-read with trueline_read to get a fresh ref. ` +
         `A wider ref from a prior read (covering more lines) is valid for editing any sub-range within it.`;

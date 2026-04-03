@@ -70,23 +70,23 @@ describe("range format parsing", () => {
   test("rejects malformed range — missing hash", async () => {
     const { path, ref } = setupFile("bad.txt", "aaa\nbbb\n");
 
-    await expect(
-      edit({
-        file_path: path,
-        edits: [{ ref, range: ".1", content: "x" }],
-      }),
-    ).rejects.toThrow();
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref, range: ".1", content: "x" }],
+    });
+
+    expect(result.isError).toBe(true);
   });
 
   test("rejects malformed range — non-numeric line number", async () => {
     const { path, ref } = setupFile("bad2.txt", "aaa\nbbb\n");
 
-    await expect(
-      edit({
-        file_path: path,
-        edits: [{ ref, range: "aa.abc-bb.2", content: "x" }],
-      }),
-    ).rejects.toThrow();
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref, range: "aa.abc-bb.2", content: "x" }],
+    });
+
+    expect(result.isError).toBe(true);
   });
 
   test("rejects range where start > end", async () => {
@@ -94,23 +94,23 @@ describe("range format parsing", () => {
     const h1 = lineHash("aaa");
     const h3 = lineHash("ccc");
 
-    await expect(
-      edit({
-        file_path: path,
-        edits: [{ ref, range: `${h3}.3-${h1}.1`, content: "x" }],
-      }),
-    ).rejects.toThrow();
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref, range: `${h3}.3-${h1}.1`, content: "x" }],
+    });
+
+    expect(result.isError).toBe(true);
   });
 
   test("rejects line 0 without + prefix", async () => {
     const { path, ref } = setupFile("zero.txt", "aaa\n");
 
-    await expect(
-      edit({
-        file_path: path,
-        edits: [{ ref, range: "aa.0-aa.0", content: "x" }],
-      }),
-    ).rejects.toThrow();
+    const result = await edit({
+      file_path: path,
+      edits: [{ ref, range: "aa.0-aa.0", content: "x" }],
+    });
+
+    expect(result.isError).toBe(true);
   });
 
   test("+0: prefix for prepend requires no hash", async () => {
@@ -874,7 +874,7 @@ describe("boundary hash verification", () => {
 });
 
 describe("wrong hash prefix recovery", () => {
-  test("bare line number in range returns correct hash.line in error", async () => {
+  test("bare line number in range tells LLM to re-read", async () => {
     const { path, ref } = setupFile("bare.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
@@ -884,12 +884,13 @@ describe("wrong hash prefix recovery", () => {
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    // Should include the correct hash.line so the LLM can retry immediately
-    expect(text).toContain(`${lineHash("bbb")}.2`);
     expect(text).toContain("wrong hash prefix");
+    expect(text).toContain("Re-read the file");
+    // Must NOT reveal the correct hash
+    expect(text).not.toContain(`${lineHash("bbb")}.2`);
   });
 
-  test("bare line number in insert-after range returns correct hash.line", async () => {
+  test("bare line number in insert-after range tells LLM to re-read", async () => {
     const { path, ref } = setupFile("bare-ia.txt", "aaa\nbbb\n");
 
     const result = await edit({
@@ -899,11 +900,12 @@ describe("wrong hash prefix recovery", () => {
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    expect(text).toContain(`${lineHash("aaa")}.1`);
     expect(text).toContain("wrong hash prefix");
+    expect(text).toContain("Re-read the file");
+    expect(text).not.toContain(`${lineHash("aaa")}.1`);
   });
 
-  test("bare line number in multi-line range returns correct hash.line", async () => {
+  test("bare line number in multi-line range tells LLM to re-read", async () => {
     const { path, ref } = setupFile("bare-multi.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
@@ -913,11 +915,12 @@ describe("wrong hash prefix recovery", () => {
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    expect(text).toContain(`${lineHash("aaa")}.1`);
     expect(text).toContain("wrong hash prefix");
+    expect(text).toContain("Re-read the file");
+    expect(text).not.toContain(`${lineHash("aaa")}.1`);
   });
 
-  test("invalid hash format (e.g. 78.78) returns correct hash.line", async () => {
+  test("invalid hash format (e.g. 78.78) tells LLM to re-read", async () => {
     const { path, ref } = setupFile("bad-fmt.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
@@ -927,8 +930,11 @@ describe("wrong hash prefix recovery", () => {
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    expect(text).toContain(`${lineHash("bbb")}.2`);
+    // "78" is not a valid 2-letter hash, so this hits the bare-line-number path
     expect(text).toContain("wrong hash prefix");
+    expect(text).toContain("Re-read the file");
+    // Must NOT reveal the correct hash.line
+    expect(text).not.toContain(`${lineHash("bbb")}.2`);
   });
 });
 // =============================================================================

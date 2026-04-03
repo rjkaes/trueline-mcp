@@ -34,7 +34,8 @@ interface ReadCacheEntry {
   encodingLine: string; // encoding metadata line, or empty
 }
 
-// Keyed by resolved (absolute) file path.
+// Keyed by resolved (absolute) file path. Bounded to match the ref store.
+const MAX_READ_CACHE = 500;
 const readCache = new Map<string, ReadCacheEntry>();
 
 /** Serialize ranges into a stable cache key. */
@@ -75,6 +76,13 @@ function unchangedStub(entry: ReadCacheEntry): string {
 /** Clear the read cache (for testing). */
 export function clearReadCache(): void {
   readCache.clear();
+}
+
+function evictReadCacheIfNeeded(): void {
+  if (readCache.size < MAX_READ_CACHE) return;
+  // FIFO eviction: Map iterates in insertion order
+  const key = readCache.keys().next().value;
+  if (key !== undefined) readCache.delete(key);
 }
 
 interface ReadParams {
@@ -207,6 +215,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   // Empty file
   if (totalLines === 0 && !truncated) {
     const emptyRef = issueRef(resolvedPath, 0, 0, "00000000");
+    evictReadCacheIfNeeded();
     readCache.set(resolvedPath, { mtimeMs, rangesKey: rKey, refs: [emptyRef], encodingLine: "" });
     return textResult(`(empty file)\n\nref: ${emptyRef} (empty file)`);
   }
@@ -255,6 +264,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     const encodingLine = bomInfo.hasBOM
       ? `encoding: ${bomInfo.encoding === "utf-8" ? "utf-8-bom" : bomInfo.encoding}`
       : "";
+    evictReadCacheIfNeeded();
     readCache.set(resolvedPath, { mtimeMs, rangesKey: rKey, refs: collectedRefs, encodingLine });
   }
 

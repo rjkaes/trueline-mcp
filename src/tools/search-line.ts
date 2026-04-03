@@ -68,21 +68,16 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
         }
       } else if (postRemaining > 0 && currentLines !== null) {
         currentLines.push(decoded);
-
-        if (isMatch && matchesCaptured < maxMatches) {
-          postRemaining = contextLines;
-        } else {
-          postRemaining--;
-          if (postRemaining === 0 && matchesCaptured >= maxMatches) {
-            flushWindow(matches, currentLines);
-            currentLines = null;
-            done = true;
-          } else if (postRemaining === 0) {
-            flushWindow(matches, currentLines);
-            currentLines = null;
-            ringLen = 0;
-            ringStart = 0;
-          }
+        postRemaining--;
+        if (postRemaining === 0 && matchesCaptured >= maxMatches) {
+          flushWindow(matches, currentLines);
+          currentLines = null;
+          done = true;
+        } else if (postRemaining === 0) {
+          flushWindow(matches, currentLines);
+          currentLines = null;
+          ringLen = 0;
+          ringStart = 0;
         }
       } else {
         if (contextLines > 0) {
