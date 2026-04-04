@@ -26,6 +26,30 @@ const XML_EXTENSIONS = new Set([
   ".fxml",
   ".xaml",
 ]);
+
+interface OutlineCacheEntry {
+  mtimeMs: number;
+  depth: number | undefined;
+  text: string;
+}
+
+const MAX_OUTLINE_CACHE = 500;
+const outlineCache = new Map<string, OutlineCacheEntry>();
+
+export function clearOutlineCache(): void {
+  outlineCache.clear();
+}
+
+function evictOutlineCacheIfNeeded(): void {
+  if (outlineCache.size < MAX_OUTLINE_CACHE) return;
+  const oldest = outlineCache.keys().next().value!;
+  outlineCache.delete(oldest);
+}
+
+function cacheOutline(resolvedPath: string, mtimeMs: number, depth: number | undefined, text: string): void {
+  evictOutlineCacheIfNeeded();
+  outlineCache.set(resolvedPath, { mtimeMs, depth, text });
+}
 import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
@@ -83,16 +107,26 @@ async function outlineOneFile(
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
-  const ext = extname(validated.resolvedPath).toLowerCase();
+  const { resolvedPath, mtimeMs } = validated;
+
+  // Cache check: same file, same mtime, same depth → return compact stub
+  const cached = outlineCache.get(resolvedPath);
+  if (cached && cached.mtimeMs === mtimeMs && cached.depth === depth) {
+    return textResult(`(outline unchanged)`);
+  }
+
+  const ext = extname(resolvedPath).toLowerCase();
 
   // Streaming extractors (no tree-sitter, no full-file load)
   if (MARKDOWN_EXTENSIONS.has(ext)) {
     try {
-      const { entries, totalLines } = await extractMarkdownOutline(validated.resolvedPath);
+      const { entries, totalLines } = await extractMarkdownOutline(resolvedPath);
       if (entries.length === 0) {
         return textResult(`(no outline entries found in ${totalLines}-line file)`);
       }
-      return textResult(formatOutline(entries, totalLines));
+      const text = formatOutline(entries, totalLines);
+      cacheOutline(resolvedPath, mtimeMs, depth, text);
+      return textResult(text);
     } catch (err: unknown) {
       return errorResult(`Markdown outline extraction failed: ${(err as Error).message}`);
     }
@@ -100,11 +134,13 @@ async function outlineOneFile(
 
   if (XML_EXTENSIONS.has(ext)) {
     try {
-      const { entries, totalLines } = await extractXmlOutline(validated.resolvedPath, depth);
+      const { entries, totalLines } = await extractXmlOutline(resolvedPath, depth);
       if (entries.length === 0) {
         return textResult(`(no outline entries found in ${totalLines}-line file)`);
       }
-      return textResult(formatOutline(entries, totalLines));
+      const text = formatOutline(entries, totalLines);
+      cacheOutline(resolvedPath, mtimeMs, depth, text);
+      return textResult(text);
     } catch (err: unknown) {
       return errorResult(`XML outline extraction failed: ${(err as Error).message}`);
     }
@@ -112,7 +148,7 @@ async function outlineOneFile(
 
   let source: string;
   try {
-    const buf = await readFile(validated.resolvedPath);
+    const buf = await readFile(resolvedPath);
     if (buf.includes(0)) {
       return errorResult(`"${file_path}" appears to be a binary file`);
     }
@@ -134,7 +170,9 @@ async function outlineOneFile(
     if (entries.length === 0) {
       return textResult(`(no outline entries found in ${totalLines}-line file)`);
     }
-    return textResult(formatOutline(entries, totalLines));
+    const text = formatOutline(entries, totalLines);
+    cacheOutline(resolvedPath, mtimeMs, depth, text);
+    return textResult(text);
   } catch (err: unknown) {
     return errorResult(`Outline extraction failed: ${(err as Error).message}`);
   }

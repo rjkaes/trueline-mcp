@@ -2,7 +2,7 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { handleOutline } from "../../src/tools/outline.ts";
+import { handleOutline, clearOutlineCache } from "../../src/tools/outline.ts";
 import { getText, writeTestFile as _writeTestFile } from "../helpers.ts";
 
 let testDir: string;
@@ -371,6 +371,7 @@ describe("trueline_outline", () => {
     );
 
     const withoutDepth = await handleOutline({ file_paths: [file], projectDir: testDir });
+    clearOutlineCache();
     const withInfinity = await handleOutline({ file_paths: [file], depth: undefined, projectDir: testDir });
     expect(getText(withoutDepth)).toEqual(getText(withInfinity));
     // Both should include members
@@ -451,5 +452,84 @@ describe("trueline_outline", () => {
     const result = await handleOutline({ file_paths: [], projectDir: testDir });
     expect(result.isError).toBe(true);
     expect(getText(result)).toContain("Provide at least one file path");
+  });
+});
+
+describe("outline caching", () => {
+  test("second call to unchanged file returns compact stub", async () => {
+    const file = writeTestFile(
+      "cache-test.ts",
+      'export function greet(name: string): string {\n  return "hello";\n}\n',
+    );
+    clearOutlineCache();
+
+    const first = await handleOutline({ file_paths: [file], projectDir: testDir });
+    const t1 = getText(first);
+    expect(t1).toContain("greet");
+    expect(t1).not.toContain("unchanged");
+
+    const second = await handleOutline({ file_paths: [file], projectDir: testDir });
+    const t2 = getText(second);
+    expect(t2).toContain("outline unchanged");
+    expect(t2).not.toContain("greet");
+  });
+
+  test("returns fresh outline after file modification", async () => {
+    const file = writeTestFile("cache-modify.ts", "export function alpha(): void {}\n");
+    clearOutlineCache();
+
+    await handleOutline({ file_paths: [file], projectDir: testDir });
+
+    // Write new content and force a different mtime (some filesystems have 1s granularity)
+    const { writeFileSync, utimesSync } = require("node:fs");
+    writeFileSync(file, "export function beta(): void {}\n");
+    const future = new Date(Date.now() + 2000);
+    utimesSync(file, future, future);
+
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+    const text = getText(result);
+    expect(text).toContain("beta");
+    expect(text).not.toContain("unchanged");
+  });
+
+  test("different depth does not return cached result", async () => {
+    const file = writeTestFile("cache-depth.ts", "export class Foo {\n  bar(): void {}\n}\n");
+    clearOutlineCache();
+
+    const first = await handleOutline({ file_paths: [file], depth: 0, projectDir: testDir });
+    expect(getText(first)).toContain("Foo");
+
+    // Same file, different depth -- must not return cached stub
+    const second = await handleOutline({ file_paths: [file], depth: 1, projectDir: testDir });
+    const t2 = getText(second);
+    expect(t2).not.toContain("unchanged");
+    expect(t2).toContain("Foo");
+  });
+
+  test("clearOutlineCache forces fresh outline", async () => {
+    const file = writeTestFile("cache-clear.ts", "export const X = 1;\n");
+    clearOutlineCache();
+
+    await handleOutline({ file_paths: [file], projectDir: testDir });
+    clearOutlineCache();
+
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+    expect(getText(result)).not.toContain("unchanged");
+  });
+
+  test("multi-file call caches per file independently", async () => {
+    const file1 = writeTestFile("cache-multi1.ts", "export function one(): void {}\n");
+    const file2 = writeTestFile("cache-multi2.ts", "export function two(): void {}\n");
+    clearOutlineCache();
+
+    // First call populates cache for both
+    await handleOutline({ file_paths: [file1, file2], projectDir: testDir });
+
+    // Second call: both should be cached
+    const result = await handleOutline({ file_paths: [file1, file2], projectDir: testDir });
+    const text = getText(result);
+    expect(text).toContain("outline unchanged");
+    // Both files should show as unchanged
+    expect(text.match(/outline unchanged/g)?.length).toBe(2);
   });
 });
