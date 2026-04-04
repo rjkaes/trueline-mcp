@@ -50,6 +50,19 @@ describe("getInstructions", () => {
     expect(out).toContain("ref");
   });
 
+  test("does not include redundant <tools> section", () => {
+    const out = getInstructions();
+    expect(out).not.toContain("<tools>");
+    expect(out).not.toContain("</tools>");
+  });
+
+  test("keeps exactly one example (search-then-edit)", () => {
+    const out = getInstructions();
+    expect(out).toContain('example name="search-then-edit"');
+    expect(out).not.toContain('example name="insert-after"');
+    expect(out).not.toContain('example name="chained-edit"');
+  });
+
   test("getSessionStartInstructions is a backwards-compatible alias", () => {
     expect(getSessionStartInstructions).toBe(getInstructions);
   });

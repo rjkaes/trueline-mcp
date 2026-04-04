@@ -61,14 +61,6 @@ export function getInstructions(platform = "claude-code") {
       : "";
 
   return `<trueline_mcp_instructions>
-  <tools>
-    <tool name="trueline_outline">List functions, classes, types, and key structures in the specified files (requires file_paths). Supports code, markdown (headings), and XML (elements). Returns line ranges. Always cheaper than reading the full file.</tool>
-    <tool name="trueline_changes">Semantic AST-based diff vs a git ref. Pass all files in one call via file_paths; use ["*"] for all changed files. No built-in equivalent.</tool>
-    <tool name="trueline_read">Read files with refs for editing. Use trueline_outline instead when you only need to understand structure.</tool>
-    <tool name="trueline_edit">Hash-verified edits. Needs ref from trueline_read or trueline_search. Pass dry_run=true to preview as unified diff.</tool>
-    <tool name="trueline_search">Search files for literal strings or regex patterns. Pass multiple file_paths in one call. Returns edit-ready results with verification refs. Set multiline=true for patterns spanning lines.</tool>
-    <tool name="trueline_verify">Check if held refs are still valid. Cheaper than re-reading.</tool>
-  </tools>
   <exploration>
     <rule>To understand a file's structure, use trueline_outline instead of ${p.readTool}. Outline returns ~10-20 lines for a typical file vs hundreds from a full read. This applies to all files, not just large ones.</rule>
     <rule>To review changes, use trueline_changes. It provides a semantic summary of structural changes (added/removed/renamed symbols, signature changes) that no built-in tool can produce.</rule>
@@ -79,19 +71,9 @@ export function getInstructions(platform = "claude-code") {
     <path name="exploratory">When you need context first: trueline_outline \u2192 trueline_read (targeted ranges) to understand, then trueline_search or trueline_read \u2192 trueline_edit.</path>
     <path name="small-edit">For files under ~200 lines or trivial one-line changes: ${p.readTool} and ${p.editTool} are fine. The MCP round-trip overhead outweighs hash verification savings on small files.</path>
     <example name="search-then-edit">
-      trueline_search output shows: ab.10 old line one / cd.11 old line two / ref: R1 (lines 10-11)
+      trueline_search output shows: ab.10 old line one / cd.11 old line two / ref:R1
       \u2192 trueline_edit: range="ab.10-cd.11", ref="R1", content="new line one\\nnew line two"
-      Key: range uses the hash.line identifiers (ab.10, cd.11) from the output. ref is the short token (R1) — copy it verbatim.
-    </example>
-    <example name="insert-after">
-      To insert new content after line 10 without replacing it:
-      \u2192 trueline_edit: range="ab.10", ref="R1", action="insert_after", content="new line here"
-      action="insert_after" inserts content AFTER the line. Without it, range lines are REPLACED. Use action to make your intent explicit.
-    </example>
-    <example name="chained-edit">
-      When making multiple sequential edits to the same file, pass context_lines on the first edit:
-      → trueline_edit: file_path, edits: [...], context_lines: 3
-      The response includes hash.line context around each edit site. Use those hashes for the next edit without re-searching.
+      Key: range uses the hash.line identifiers (ab.10, cd.11) from the output. ref is the short token (R1) \u2014 copy it verbatim.
     </example>
     <rule>NEVER fabricate refs. Always copy the exact ref (e.g. "R1") from trueline_read or trueline_search output. A ref from a wide read (e.g. covering lines 1-157) is valid for editing any sub-range within it.</rule>
     <rule>To insert new content, use action="insert_after". Without it, the range lines are REPLACED (content is lost). If you want to add lines without removing existing ones, you must use action="insert_after".</rule>
@@ -104,10 +86,7 @@ export function getInstructions(platform = "claude-code") {
 
   <tips>
     <tip>If you already have hash.line identifiers and a ref from a prior trueline_read or trueline_search, go straight to trueline_edit. Do not re-read or re-search for data you already have. A wide ref (e.g. covering lines 1-50) works for editing any sub-range within it.</tip>
-    <tip>Use ${p.writeTool} to create new files. To edit them afterward, use trueline_read or trueline_search to get refs first.</tip>
-    <tip>When you need to search-then-edit across multiple files, ${p.grepAdvice}, then pass all file_paths to a single trueline_search call to get refs for all of them at once.</tip>
-    <tip>Batch multiple edits to the same file into one trueline_edit call. Each edit needs the ref whose line range covers that edit's target lines — don't reuse a ref from one region for an edit in a different region.</tip>${atRefTip}
-    <tip>When you plan to make follow-up edits to the same file, pass context_lines (e.g. 3) on the current edit. The response will include hash.line identifiers around each edit site, letting you chain the next edit without a trueline_search round-trip.</tip>
+    <tip>When you need to search-then-edit across multiple files, ${p.grepAdvice}, then pass all file_paths to a single trueline_search call to get refs for all of them at once.</tip>${atRefTip}
   </tips>
 </trueline_mcp_instructions>`;
 }
