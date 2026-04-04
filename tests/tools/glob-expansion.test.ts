@@ -171,3 +171,92 @@ describe("search glob expansion", () => {
     expect(text).toMatch(/ref:R\d+/);
   });
 });
+
+// =============================================================================
+// gitignore-aware glob expansion
+// =============================================================================
+
+describe("gitignore-aware globs", () => {
+  let gitDir: string;
+
+  beforeAll(() => {
+    const { execSync } = require("node:child_process");
+    gitDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-glob-git-")));
+
+    // Create a git repo with .gitignore
+    execSync("git init", { cwd: gitDir });
+    execSync("git config user.email test@test.com", { cwd: gitDir });
+    execSync("git config user.name test", { cwd: gitDir });
+
+    mkdirSync(join(gitDir, "src"), { recursive: true });
+    mkdirSync(join(gitDir, "node_modules", "dep"), { recursive: true });
+    mkdirSync(join(gitDir, "dist"), { recursive: true });
+
+    writeFileSync(join(gitDir, "src", "main.ts"), "export function main(): void {}\n");
+    writeFileSync(join(gitDir, "src", "util.ts"), "export function util(): void {}\n");
+    writeFileSync(join(gitDir, "node_modules", "dep", "index.ts"), "export const dep = 1;\n");
+    writeFileSync(join(gitDir, "dist", "bundle.ts"), "export const bundle = 1;\n");
+    writeFileSync(join(gitDir, ".gitignore"), "node_modules/\ndist/\n");
+
+    // Stage files so git ls-files sees them
+    execSync("git add -A", { cwd: gitDir });
+  });
+
+  beforeEach(() => {
+    // Clear the git file list cache between tests
+    const { clearGitFilesCache } = require("../../src/tools/shared.ts");
+    clearGitFilesCache();
+    clearReadCache();
+    resetRefStore();
+  });
+
+  afterAll(() => {
+    rmSync(gitDir, { recursive: true, force: true });
+  });
+
+  test("recursive glob respects .gitignore", async () => {
+    const result = await handleReadMulti({
+      file_paths: ["**/*.ts"],
+      projectDir: gitDir,
+    });
+    const text = getText(result);
+    // Should find src/ files
+    expect(text).toContain("main");
+    expect(text).toContain("util");
+    // Should NOT find gitignored files
+    expect(text).not.toContain("dep");
+    expect(text).not.toContain("bundle");
+  });
+
+  test("non-recursive glob in non-ignored dir works", async () => {
+    const result = await handleReadMulti({
+      file_paths: ["src/*.ts"],
+      projectDir: gitDir,
+    });
+    const text = getText(result);
+    expect(text).toContain("main");
+    expect(text).toContain("util");
+  });
+
+  test("outline with recursive glob respects .gitignore", async () => {
+    const result = await handleOutline({
+      file_paths: ["**/*.ts"],
+      projectDir: gitDir,
+    });
+    const text = getText(result);
+    expect(text).toContain("main");
+    expect(text).not.toContain("dep");
+  });
+
+  test("search with recursive glob respects .gitignore", async () => {
+    const result = await handleSearch({
+      pattern: "export",
+      file_paths: ["**/*.ts"],
+      projectDir: gitDir,
+    });
+    const text = getText(result);
+    expect(text).toContain("main");
+    expect(text).not.toContain("dep");
+    expect(text).not.toContain("bundle");
+  });
+});
