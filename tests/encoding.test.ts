@@ -349,7 +349,7 @@ describe("trueline_edit — UTF-16 LE round-trip", () => {
     const readText = getText(readResult);
 
     // Extract ref from readResult
-    const refMatch = readText.match(/ref: (R\d+)/);
+    const refMatch = readText.match(/ref:(R\d+)/);
     expect(refMatch).toBeTruthy();
     const ref = refMatch![1];
 
@@ -401,7 +401,7 @@ describe("trueline_edit — UTF-8 BOM round-trip", () => {
     });
     const readText = getText(readResult);
 
-    const refMatch = readText.match(/ref: (R\d+)/);
+    const refMatch = readText.match(/ref:(R\d+)/);
     const ref = refMatch![1];
 
     const worldLine = readText.split("\n").find((l) => l.includes("world"));
@@ -449,7 +449,7 @@ describe("trueline_edit — UTF-16 BE round-trip", () => {
     });
     const readText = getText(readResult);
 
-    const refMatch = readText.match(/ref: (R\d+)/);
+    const refMatch = readText.match(/ref:(R\d+)/);
     const ref = refMatch![1];
 
     const twoLine = readText.split("\n").find((l) => l.includes("\ttwo"));

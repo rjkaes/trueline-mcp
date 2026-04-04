@@ -25,7 +25,7 @@ beforeEach(() => {
 
 /** Extract ref IDs from a trueline_read result. */
 function extractRefs(text: string): string[] {
-  const matches = text.matchAll(/ref: (R\d+)/g);
+  const matches = text.matchAll(/ref:(R\d+)/g);
   return [...matches].map((m) => m[1]);
 }
 

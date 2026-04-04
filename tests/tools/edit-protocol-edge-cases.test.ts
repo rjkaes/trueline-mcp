@@ -463,7 +463,7 @@ describe("content growth and shrinkage", () => {
     expect(r1.isError).toBeUndefined();
 
     // Extract returned ref and use for second edit
-    const refMatch = r1.content[0].text.match(/ref: (R\d+)/);
+    const refMatch = r1.content[0].text.match(/ref:(R\d+)/);
     expect(refMatch).not.toBeNull();
     const newRef = refMatch![1];
 
@@ -692,7 +692,7 @@ describe("returned ref enables chaining", () => {
     });
     expect(r1.isError).toBeUndefined();
 
-    const refMatch = r1.content[0].text.match(/ref: (R\d+)/);
+    const refMatch = r1.content[0].text.match(/ref:(R\d+)/);
     expect(refMatch).not.toBeNull();
     const newRef = refMatch![1];
 
@@ -744,7 +744,7 @@ describe("read-then-edit round-trip", () => {
     expect(readResult.isError).toBeUndefined();
 
     // Extract ref from read output
-    const refMatch = readResult.content[0].text.match(/ref: (R\d+)/);
+    const refMatch = readResult.content[0].text.match(/ref:(R\d+)/);
     expect(refMatch).not.toBeNull();
 
     const hBeta = lineHash("beta");
@@ -769,7 +769,7 @@ describe("read-then-edit round-trip", () => {
     });
     expect(readResult.isError).toBeUndefined();
 
-    const refMatch = readResult.content[0].text.match(/ref: (R\d+)/);
+    const refMatch = readResult.content[0].text.match(/ref:(R\d+)/);
     expect(refMatch).not.toBeNull();
 
     const hCcc = lineHash("ccc");

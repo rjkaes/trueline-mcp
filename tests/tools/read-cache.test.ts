@@ -38,15 +38,15 @@ describe("read cache — unchanged file", () => {
     expect(t1).toContain("line two");
 
     // Second read returns stub
-    expect(t2).toContain("File unchanged since last read");
+    expect(t2).toContain("unchanged");
     expect(t2).not.toContain("line one");
 
     // Stub includes refs
-    expect(t2).toMatch(/ref: R\d+ \(still valid\)/);
+    expect(t2).toMatch(/ref:R\d+/);
 
     // Refs match between full read and stub
-    const ref1 = t1.match(/ref: (R\d+)/)?.[1];
-    const ref2 = t2.match(/ref: (R\d+)/)?.[1];
+    const ref1 = t1.match(/ref:(R\d+)/)?.[1];
+    const ref2 = t2.match(/ref:(R\d+)/)?.[1];
     expect(ref1).toBeDefined();
     expect(ref1).toBe(ref2);
   });
@@ -63,8 +63,8 @@ describe("read cache — unchanged file", () => {
     const t2 = getText(r2);
 
     // Both should have the same ref
-    const ref1 = t1.match(/ref: (R\d+)/)?.[1];
-    const ref2 = t2.match(/ref: (R\d+)/)?.[1];
+    const ref1 = t1.match(/ref:(R\d+)/)?.[1];
+    const ref2 = t2.match(/ref:(R\d+)/)?.[1];
     expect(ref1).toBe(ref2);
   });
 
@@ -81,7 +81,7 @@ describe("read cache — unchanged file", () => {
     const r2 = await handleRead({ file_path: f, allowedDirs: [testDir] });
     const t2 = getText(r2);
 
-    expect(t2).not.toContain("File unchanged");
+    expect(t2).not.toContain("unchanged");
     expect(t2).toContain("modified");
   });
 
@@ -93,7 +93,7 @@ describe("read cache — unchanged file", () => {
     const t2 = getText(r2);
 
     // Different ranges = cache miss = full content
-    expect(t2).not.toContain("File unchanged");
+    expect(t2).not.toContain("unchanged");
     expect(t2).toContain("two");
   });
 
@@ -104,7 +104,7 @@ describe("read cache — unchanged file", () => {
     const r2 = await handleRead({ file_path: f, ranges: ["2-4"], allowedDirs: [testDir] });
     const t2 = getText(r2);
 
-    expect(t2).toContain("File unchanged");
+    expect(t2).toContain("unchanged");
   });
 
   test("clearReadCache forces a full re-read", async () => {
@@ -115,7 +115,7 @@ describe("read cache — unchanged file", () => {
     const r2 = await handleRead({ file_path: f, allowedDirs: [testDir] });
     const t2 = getText(r2);
 
-    expect(t2).not.toContain("File unchanged");
+    expect(t2).not.toContain("unchanged");
     expect(t2).toContain("content");
   });
 
@@ -126,8 +126,8 @@ describe("read cache — unchanged file", () => {
     const r2 = await handleRead({ file_path: f, allowedDirs: [testDir] });
 
     expect(getText(r1)).toContain("empty file");
-    expect(getText(r2)).toContain("File unchanged");
-    expect(getText(r2)).toMatch(/ref: R\d+/);
+    expect(getText(r2)).toContain("unchanged");
+    expect(getText(r2)).toMatch(/ref:R\d+/);
   });
 
   test("stub includes encoding metadata for BOM files", async () => {
@@ -141,7 +141,7 @@ describe("read cache — unchanged file", () => {
 
     expect(getText(r1)).toContain("encoding: utf-8-bom");
     expect(getText(r2)).toContain("encoding: utf-8-bom");
-    expect(getText(r2)).toContain("File unchanged");
+    expect(getText(r2)).toContain("unchanged");
   });
 });
 
@@ -156,7 +156,7 @@ describe("read cache — FIFO eviction", () => {
     // Re-read the first file — should be a cache miss (evicted), returning full content
     const f0 = join(testDir, "evict-0.txt");
     const result = await handleRead({ file_path: f0, allowedDirs: [testDir] });
-    expect(getText(result)).not.toContain("File unchanged");
+    expect(getText(result)).not.toContain("unchanged");
     expect(getText(result)).toContain("content 0");
   });
 
@@ -169,6 +169,6 @@ describe("read cache — FIFO eviction", () => {
     // Re-read a recent file — should be a cache hit
     const fRecent = join(testDir, "evict2-501.txt");
     const result = await handleRead({ file_path: fRecent, allowedDirs: [testDir] });
-    expect(getText(result)).toContain("File unchanged");
+    expect(getText(result)).toContain("unchanged");
   });
 });

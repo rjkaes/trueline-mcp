@@ -32,7 +32,7 @@ describe("empty and minimal files", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     expect(result.content[0].text).toContain("(empty file)");
-    expect(result.content[0].text).toMatch(/ref: R\d+ \(empty file\)/);
+    expect(result.content[0].text).toMatch(/ref:R\d+/);
   });
 
   test("single line with trailing newline", async () => {
@@ -299,7 +299,7 @@ describe("range parameters", () => {
     expect(result.isError).toBeUndefined();
 
     // Expanded: 2-4 → 1-5 (whole file)
-    expect(result.content[0].text).toMatch(/ref: R\d+ \(lines 1-5\)/);
+    expect(result.content[0].text).toMatch(/ref:R\d+/);
   });
 });
 
@@ -315,7 +315,7 @@ describe("ref consistency", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     // The ref should be present for lines 1-3
-    expect(result.content[0].text).toMatch(/ref: R\d+ \(lines 1-3\)/);
+    expect(result.content[0].text).toMatch(/ref:R\d+/);
   });
 
   test("identical content produces refs with matching line ranges", async () => {
@@ -340,8 +340,8 @@ describe("ref consistency", () => {
 
     const r1 = await handleRead({ file_path: f1, projectDir: testDir });
     const r2 = await handleRead({ file_path: f2, projectDir: testDir });
-    const ref1 = r1.content[0].text.match(/ref: (R\d+)/)?.[1];
-    const ref2 = r2.content[0].text.match(/ref: (R\d+)/)?.[1];
+    const ref1 = r1.content[0].text.match(/ref:(R\d+)/)?.[1];
+    const ref2 = r2.content[0].text.match(/ref:(R\d+)/)?.[1];
     // Refs are always unique IDs
     expect(ref1).toBeDefined();
     expect(ref2).toBeDefined();

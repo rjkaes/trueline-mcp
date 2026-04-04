@@ -31,7 +31,7 @@ describe("read → diff → edit roundtrip", () => {
     const readText = readResult.content[0].text;
 
     // Extract ref from read result
-    const refMatch = readText.match(/ref: (\S+)/m);
+    const refMatch = readText.match(/ref:(\S+)/m);
     expect(refMatch).not.toBeNull();
     const ref = refMatch![1];
 

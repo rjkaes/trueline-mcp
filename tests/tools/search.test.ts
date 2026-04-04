@@ -55,7 +55,7 @@ describe("trueline_search", () => {
     expect(text).toContain("hello");
     expect(text).toContain("world");
     // Should have refs
-    expect(text).toMatch(/ref: R\d+ \(lines \d+-\d+\)/);
+    expect(text).toMatch(/ref:R\d+/);
     // Should have per-line hashes
     expect(text).toMatch(/^[a-z]{2}\.\d+\t/m);
   });
@@ -82,7 +82,7 @@ describe("trueline_search", () => {
     });
     const text = getText(result);
     // With context_lines=5, the two matches (lines 4 and 8) overlap — should be one block
-    const refMatches = text.match(/ref: R\d+/g);
+    const refMatches = text.match(/ref:R\d+/g);
     expect(refMatches?.length).toBe(1);
   });
 
@@ -152,7 +152,7 @@ describe("trueline_search", () => {
     });
     const text = getText(result);
     expect(text).toContain("hello");
-    expect(text).toMatch(/ref: R\d+ \(lines \d+-\d+\)/);
+    expect(text).toMatch(/ref:R\d+/);
   });
 
   test("case_insensitive false (default) does not match wrong case", async () => {
@@ -174,7 +174,7 @@ describe("trueline_search", () => {
     });
     const text = getText(result);
     expect(text).toContain("console.log");
-    expect(text).toMatch(/ref: R\d+ \(lines \d+-\d+\)/);
+    expect(text).toMatch(/ref:R\d+/);
   });
 
   test("literal mode treats bare parens as literal text", async () => {
@@ -248,7 +248,7 @@ describe("multi-file search", () => {
     expect(text).toContain(`--- ${testFile2} ---`);
     expect(text).toContain('"hello"');
     expect(text).toContain("greeting");
-    const refs = text.match(/ref: R\d+/g);
+    const refs = text.match(/ref:R\d+/g);
     expect(refs!.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -275,7 +275,7 @@ describe("multi-file search", () => {
     const text = getText(result);
     expect(text).toContain("error:");
     expect(text).toContain("console.log");
-    expect(text).toMatch(/ref: R\d+/);
+    expect(text).toMatch(/ref:R\d+/);
   });
 
   test("single file_paths omits file header", async () => {
@@ -287,7 +287,7 @@ describe("multi-file search", () => {
     const text = getText(result);
     expect(text).not.toContain("---");
     expect(text).toContain("console.log");
-    expect(text).toMatch(/ref: R\d+/);
+    expect(text).toMatch(/ref:R\d+/);
   });
 
   test("file_path string alias still works", async () => {
@@ -336,8 +336,8 @@ describe("search ref stores resolved path", () => {
     });
 
     const text = getText(result);
-    // Extract ref ID from output like "ref: R1 (lines 3-3)"
-    const refMatch = text.match(/ref: (R\d+)/);
+    // Extract ref ID from output like "ref:R1"
+    const refMatch = text.match(/ref:(R\d+)/);
     expect(refMatch).not.toBeNull();
 
     const entry = resolveRef(refMatch![1]);

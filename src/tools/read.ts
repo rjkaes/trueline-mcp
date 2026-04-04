@@ -63,13 +63,8 @@ function expandRanges(ranges: ReadRange[]): ReadRange[] {
 }
 /** Build the stub response for an unchanged file. */
 function unchangedStub(entry: ReadCacheEntry): string {
-  const parts = [
-    "File unchanged since last read. Content from the earlier read is still current.",
-    "",
-    ...entry.refs.map((r) => `ref: ${r} (still valid)`),
-  ];
+  const parts = [`unchanged ${entry.refs.map((r) => `ref:${r}`).join(" ")}`];
   if (entry.encodingLine) parts.push(entry.encodingLine);
-  parts.push("", "To edit: trueline_edit (not Edit tool)");
   return parts.join("\n");
 }
 
@@ -170,7 +165,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
         const hex = rangeChecksumHash.toString(16).padStart(8, "0");
         const refId = issueRef(resolvedPath, rangeFirstLine, rangeLastLine, hex);
         collectedRefs.push(refId);
-        const refLine = `\nref: ${refId} (lines ${rangeFirstLine}-${rangeLastLine})\n`;
+        const refLine = `\nref:${refId}\n`;
         const cb = Buffer.from(refLine);
         outputChunks.push(cb);
         outputLen += cb.length;
@@ -217,7 +212,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     const emptyRef = issueRef(resolvedPath, 0, 0, "00000000");
     evictReadCacheIfNeeded();
     readCache.set(resolvedPath, { mtimeMs, rangesKey: rKey, refs: [emptyRef], encodingLine: "" });
-    return textResult(`(empty file)\n\nref: ${emptyRef} (empty file)`);
+    return textResult(`(empty file)\n\nref:${emptyRef}`);
   }
 
   // Check if first range's start is out of range
@@ -230,7 +225,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     const hex = rangeChecksumHash.toString(16).padStart(8, "0");
     const refId = issueRef(resolvedPath, rangeFirstLine, rangeLastLine, hex);
     collectedRefs.push(refId);
-    const refLine = `\nref: ${refId} (lines ${rangeFirstLine}-${rangeLastLine})`;
+    const refLine = `\nref:${refId}`;
     const cb = Buffer.from(refLine);
     outputChunks.push(cb);
     outputLen += cb.length;
@@ -252,11 +247,6 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     outputChunks.push(encLine);
     outputLen += encLine.length;
   }
-
-  // Steer agents toward trueline_edit instead of the built-in Edit tool.
-  const hint = Buffer.from("\n\nTo edit: trueline_edit (not Edit tool)");
-  outputChunks.push(hint);
-  outputLen += hint.length;
 
   // Populate cache for future unchanged-file checks (skip truncated reads —
   // they don't cover the full requested range, so the refs are incomplete)

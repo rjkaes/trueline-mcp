@@ -279,7 +279,7 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("line2");
 
     // Check ref to ensure it was correctly identified as 2 lines
-    expect(text).toMatch(/ref: \S+ \(lines 1-2\)/);
+    expect(text).toMatch(/ref:\S+/);
   });
 
   test("concurrent modification detection (mtime change)", async () => {
@@ -401,7 +401,7 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("line2");
     expect(text).toContain("line3");
     expect(text).toContain("line4");
-    expect(text).toMatch(/ref: \S+ \(lines 1-4\)/);
+    expect(text).toMatch(/ref:\S+/);
   });
 
   test("insert-after at last line of file without trailing newline", async () => {
@@ -505,7 +505,7 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     expect(text).toContain("line2");
-    expect(text).toMatch(/ref: \S+ \(lines 1-2\)/);
+    expect(text).toMatch(/ref:\S+/);
   });
 
   test("splitLines handles \\r at chunk boundary (not followed by \\n)", async () => {
@@ -519,7 +519,7 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     expect(text).toContain("line2");
-    expect(text).toMatch(/ref: \S+ \(lines 1-2\)/);
+    expect(text).toMatch(/ref:\S+/);
   });
 
   test("handleSearch with extremely long line in context", async () => {
@@ -555,7 +555,7 @@ describe("Adversarial Tests", () => {
     const text = readResult.content[0].text;
     expect(text).toContain("aé");
 
-    const refMatch = text.match(/ref: (\S+)/);
+    const refMatch = text.match(/ref:(\S+)/);
     const readRef = refMatch![1];
     const lhMatch = text.match(/^([a-z]{2})\.1\t/m);
     const lh = lhMatch![1];
@@ -591,7 +591,7 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     // parseRanges merges to 1-5 and 7-8, expansion merges them into one range
-    expect(text).toMatch(/ref: \S+ \(lines 1-9\)/);
+    expect(text).toMatch(/ref:\S+/);
   });
 
   test("handleSearch with empty pattern", async () => {
@@ -653,7 +653,7 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("line1");
     expect(text).toContain("line2");
     expect(text).toContain("line3");
-    expect(text).toMatch(/ref: \S+ \(lines 1-3\)/);
+    expect(text).toMatch(/ref:\S+/);
   });
 
   test("handleSearch pattern matching tab separator", async () => {

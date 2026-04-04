@@ -137,12 +137,12 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
 
   if (!result.changed) {
     return textResult(
-      `Edit produced no changes \u2014 file not written.\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}${contextBlock}`,
+      `Edit produced no changes \u2014 file not written.\n\n${summary}\nref:${newRef}${warn}${contextBlock}`,
     );
   }
 
   return textResult(
-    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}${contextBlock}`,
+    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref:${newRef}${warn}${contextBlock}`,
   );
 }
 

@@ -228,7 +228,7 @@ function formatResults(
       const hex = checksumHash.toString(16).padStart(8, "0");
       const refId = issueRef(result.resolvedPath, match.firstLine, match.lastLine, hex);
       parts.push("");
-      parts.push(`ref: ${refId} (lines ${match.firstLine}-${match.lastLine})`);
+      parts.push(`ref:${refId}`);
     }
   }
 

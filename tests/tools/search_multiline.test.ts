@@ -57,7 +57,7 @@ describe("multiline search", () => {
     expect(text).toContain("function processData(");
     expect(text).toContain("): Result {");
     expect(text).toContain("\u2190 match");
-    expect(text).toMatch(/ref: R\d+/);
+    expect(text).toMatch(/ref:R\d+/);
   });
 
   test("multiline implies regex", async () => {
@@ -82,7 +82,7 @@ describe("multiline search", () => {
       projectDir: testDir,
     });
     const text = getText(result);
-    const matchBlocks = text.match(/ref: R\d+/g);
+    const matchBlocks = text.match(/ref:R\d+/g);
     expect(matchBlocks?.length).toBe(1);
     expect(text).toContain("showing 1 of");
   });

@@ -657,7 +657,7 @@ describe("read-then-edit round-trip", () => {
     const text = readResult.content[0].text;
 
     // Extract ref
-    const refMatch = text.match(/ref: (R\d+)/);
+    const refMatch = text.match(/ref:(R\d+)/);
     expect(refMatch).toBeTruthy();
     const ref = refMatch![1];
 
@@ -697,7 +697,7 @@ describe("read-then-edit round-trip", () => {
     expect(readResult.isError).toBeUndefined();
     const text = readResult.content[0].text;
 
-    const refMatch = text.match(/ref: (R\d+)/);
+    const refMatch = text.match(/ref:(R\d+)/);
     const ref = refMatch![1];
     const lineMatch = text.match(/^([a-z]{2})\.3\t/m);
     const lh = lineMatch![1];
@@ -738,7 +738,7 @@ describe("read-then-edit round-trip", () => {
     expect(edit1.isError).toBeUndefined();
 
     // Extract the new ref from the edit output
-    const refMatch = edit1.content[0].text.match(/ref: (R\d+)/);
+    const refMatch = edit1.content[0].text.match(/ref:(R\d+)/);
     expect(refMatch).toBeTruthy();
     const _newRef = refMatch![1];
     const lineMatch2 = (await handleRead({ file_path: f, projectDir: testDir })).content[0].text.match(
@@ -748,7 +748,7 @@ describe("read-then-edit round-trip", () => {
 
     // Second edit using new ref from re-read
     const readResult = await handleRead({ file_path: f, projectDir: testDir });
-    const readRef = readResult.content[0].text.match(/ref: (R\d+)/)![1];
+    const readRef = readResult.content[0].text.match(/ref:(R\d+)/)![1];
 
     const edit2 = await handleEdit({
       file_path: f,
