@@ -1,28 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { formatDecision } from "../../hooks/core/formatters.js";
-
-describe("formatDecision — advise", () => {
-  test("claude-code: advise returns approve with reason", () => {
-    const result = formatDecision("claude-code", { action: "advise", reason: "use trueline" });
-    expect(result).toEqual({ decision: "approve", reason: "use trueline" });
-  });
-
-  test("gemini-cli: advise returns allow with reason", () => {
-    const result = formatDecision("gemini-cli", { action: "advise", reason: "use trueline" });
-    expect(result).toEqual({ decision: "allow", reason: "use trueline" });
-  });
-
-  test("vscode-copilot: advise returns allow with reason", () => {
-    const result = formatDecision("vscode-copilot", { action: "advise", reason: "use trueline" });
-    expect(result).toEqual({ permissionDecision: "allow", reason: "use trueline" });
-  });
-
-  test("unknown platform falls back to claude-code format", () => {
-    const result = formatDecision("unknown", { action: "advise", reason: "use trueline" });
-    expect(result).toEqual({ decision: "approve", reason: "use trueline" });
-  });
-});
-
 describe("formatDecision — block", () => {
   test("claude-code: block returns block with reason", () => {
     const result = formatDecision("claude-code", { action: "block", reason: "use trueline_read" });

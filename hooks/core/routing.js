@@ -3,7 +3,7 @@
 // ==============================================================================
 //
 // Normalizes tool names across platforms via TOOL_ALIASES, then makes
-// advise/approve decisions based on file size and edit token cost.
+// block/pass-through decisions based on file size and edit token cost.
 // Returns normalized {action, reason} objects that platform-specific
 // formatters translate to the right JSON shape.
 
@@ -116,12 +116,12 @@ function formatSize(bytes) {
  *   trueline_edit. Hash-verified edits prevent stale-content mismatches
  *   that built-in Edit can't detect.
  *
- * Returns null for silent approve, or { action, reason } for advise/block.
+ * Returns null for silent pass-through, or { action: "block", reason } to redirect.
  *
  * @param {string} toolName - Raw tool name from the platform
  * @param {Record<string, unknown> | undefined} toolInput
  * @param {(filePath: string, toolName: string) => Promise<boolean>} canAccessFn
- * @returns {Promise<{ action: "advise" | "block"; reason: string } | null>}
+ * @returns {Promise<{ action: "block"; reason: string } | null>}
  */
 export async function routePreToolUse(toolName, toolInput, canAccessFn) {
   const canonical = canonicalToolName(toolName);
