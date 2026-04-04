@@ -298,12 +298,16 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
     return handleRead({ ...rest, file_path: fp.path, ranges: effectiveRanges });
   }
 
-  // Multiple files: each gets its own inline ranges (or whole file)
+  // Multiple files: skip per-file errors (deny patterns, missing files) so one
+  // bad path from a glob doesn't abort the entire batch.
   const parts: string[] = [];
   for (const fp of parsed) {
     const result = await handleRead({ ...rest, file_path: fp.path, ranges: fp.rangeSpecs });
-    if (result.isError) return result;
     const text = (result.content[0] as { text: string }).text;
+    if (result.isError) {
+      parts.push(`--- ${fp.path} ---\nerror: ${text}`);
+      continue;
+    }
     parts.push(`--- ${fp.path} ---\n${text}`);
   }
   return textResult(parts.join("\n\n"));

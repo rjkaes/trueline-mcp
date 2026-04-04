@@ -103,6 +103,23 @@ describe("read glob expansion", () => {
     const alphaCount = (text.match(/--- src\/alpha\.ts ---/g) || []).length;
     expect(alphaCount).toBe(1);
   });
+
+  test("multi-file read skips missing files and continues", async () => {
+    const result = await handleReadMulti({
+      file_paths: ["src/alpha.ts", "src/nonexistent.ts", "src/beta.ts"],
+      projectDir: testDir,
+    });
+    const text = getText(result);
+    // Should contain both valid files
+    expect(text).toContain("--- src/alpha.ts ---");
+    expect(text).toContain("--- src/beta.ts ---");
+    // Should show error for missing file, not abort
+    expect(text).toContain("--- src/nonexistent.ts ---");
+    expect(text).toContain("error:");
+    expect(text).toContain("not found");
+    // Should NOT be an error result overall
+    expect(result.isError).toBeUndefined();
+  });
 });
 
 // =============================================================================
