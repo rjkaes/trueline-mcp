@@ -342,6 +342,6 @@ describe("search ref stores resolved path", () => {
 
     const entry = resolveRef(refMatch![1]);
     // The stored filePath must be the absolute resolved path, not the relative input
-    expect(entry.filePath).toBe(join(testDir, "sample.ts"));
+    expect(entry.filePath).toBe(realpathSync(join(testDir, "sample.ts")));
   });
 });
