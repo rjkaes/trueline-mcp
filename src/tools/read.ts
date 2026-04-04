@@ -20,7 +20,7 @@ import { transcodedLines } from "../encoding.ts";
 import { FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, hashToLetters } from "../hash.ts";
 import { parseFilePathWithRanges, parseRanges, type ReadRange } from "../parse.ts";
 import { hasRef, issueRef } from "../ref-store.ts";
-import { binaryFileError, isBinaryError, validateEncoding, validatePath } from "./shared.ts";
+import { binaryFileError, expandGlobs, isBinaryError, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 // ==============================================================================
@@ -277,8 +277,11 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResult> {
   const { file_paths, ranges, ...rest } = params;
 
+  // Expand globs before parsing inline ranges (globs never contain ':')
+  const expanded = await expandGlobs(file_paths, rest.projectDir);
+
   // Parse inline ranges from file_paths (e.g. "src/foo.ts:10-25")
-  const parsed = file_paths.map(parseFilePathWithRanges);
+  const parsed = expanded.map(parseFilePathWithRanges);
 
   // Top-level ranges with multiple files is ambiguous; reject it.
   if (ranges?.length && parsed.length > 1) {

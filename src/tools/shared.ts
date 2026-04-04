@@ -374,3 +374,46 @@ export function validateEncoding(encoding?: string): BufferEncoding {
   }
   return normalized;
 }
+
+import { glob } from "node:fs/promises";
+
+const GLOB_CHARS = /[*?{[]/;
+
+/**
+ * Expand glob patterns in a file_paths array.
+ *
+ * Entries without glob characters pass through unchanged. Glob entries are
+ * expanded relative to projectDir (or cwd), sorted alphabetically, and
+ * deduplicated. This keeps glob expansion contained to the file_paths layer
+ * so validatePath still runs on each resolved path.
+ */
+export async function expandGlobs(filePaths: string[], projectDir: string | undefined): Promise<string[]> {
+  const baseDir = projectDir ?? process.cwd();
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of filePaths) {
+    if (!GLOB_CHARS.test(entry)) {
+      if (!seen.has(entry)) {
+        seen.add(entry);
+        result.push(entry);
+      }
+      continue;
+    }
+
+    // Expand glob relative to project directory
+    const matches: string[] = [];
+    for await (const match of glob(entry, { cwd: baseDir })) {
+      matches.push(match);
+    }
+    matches.sort();
+    for (const match of matches) {
+      if (!seen.has(match)) {
+        seen.add(match);
+        result.push(match);
+      }
+    }
+  }
+
+  return result;
+}

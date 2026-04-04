@@ -231,8 +231,8 @@ const readJsonSchema = {
       type: "array",
       items: { type: "string" },
       description:
-        'One or more files to read. Append :range to read specific lines: "src/foo.ts:10-25", ' +
-        '"src/bar.ts:1-20,200-220". Without a range suffix, reads the whole file. Accepts file_path as alias.',
+        'One or more files to read. Supports globs: "src/tools/*.ts". ' +
+        'Append :range for specific lines: "src/foo.ts:10-25". Accepts file_path as alias.',
     },
     ranges: {
       type: "array",
@@ -326,7 +326,7 @@ const outlineJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: "One or more file paths to outline.",
+      description: 'One or more file paths or globs (e.g. "src/tools/*.ts") to outline.',
     },
     depth: {
       type: "integer",
@@ -344,7 +344,7 @@ const searchJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: "Paths to the files to search.",
+      description: 'Paths or globs (e.g. "src/tools/*.ts") to search.',
     },
     pattern: {
       type: "string",
@@ -399,8 +399,8 @@ const verifyJsonSchema = {
 
 registerTool(
   "trueline_read",
-  'Read files with per-line hashes and refs. Example: {"file_paths": ["src/foo.ts:10-25"]}. ' +
-    "Append :range for line ranges. Supports multiple files in one call.",
+  "Read files with per-line hashes and refs. Supports globs and :range syntax. " +
+    'Example: {"file_paths": ["src/tools/*.ts", "src/foo.ts:10-25"]}.',
   readJsonSchema,
   safeTool(async (rawParams) => {
     const params = readSchema.parse(coerceParams(rawParams));

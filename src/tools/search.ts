@@ -7,7 +7,7 @@
  */
 import { hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
 import { issueRef } from "../ref-store.ts";
-import { validatePath } from "./shared.ts";
+import { expandGlobs, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 import { searchLineByLine } from "./search-line.ts";
 import { searchMultiline } from "./search-multiline.ts";
@@ -37,8 +37,9 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     return errorResult(`context_lines must be between 0 and ${MAX_CONTEXT_LINES}`);
   }
 
-  // Normalize file_path / file_paths
-  const filePaths = normalizeFilePaths(params);
+  // Normalize file_path / file_paths, then expand globs
+  const rawPaths = normalizeFilePaths(params);
+  const filePaths = await expandGlobs(rawPaths, projectDir);
   if (filePaths.length === 0) {
     return errorResult("file_paths must be a non-empty array");
   }

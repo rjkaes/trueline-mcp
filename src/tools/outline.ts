@@ -11,6 +11,7 @@ import { extractOutline, formatOutline } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { extractMarkdownOutline } from "../outline/markdown.ts";
 import { extractXmlOutline } from "../outline/xml.ts";
+import { expandGlobs, validatePath } from "./shared.ts";
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 const XML_EXTENSIONS = new Set([
@@ -50,7 +51,6 @@ function cacheOutline(resolvedPath: string, mtimeMs: number, depth: number | und
   evictOutlineCacheIfNeeded();
   outlineCache.set(resolvedPath, { mtimeMs, depth, text });
 }
-import { validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
 interface OutlineParams {
@@ -63,7 +63,7 @@ interface OutlineParams {
 export async function handleOutline(params: OutlineParams): Promise<ToolResult> {
   const { projectDir, allowedDirs } = params;
 
-  const filePaths = params.file_paths;
+  const filePaths = await expandGlobs(params.file_paths, projectDir);
   if (filePaths.length === 0) {
     return errorResult("Provide at least one file path in file_paths.");
   }
