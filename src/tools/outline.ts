@@ -90,7 +90,7 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
     }
 
     const displayPath = projectDir && fp.startsWith(projectDir) ? fp.slice(projectDir.length + 1) : fp;
-    sections.push(`--- ${displayPath.replaceAll("\\\\", "/")} ---\n${text}`);
+    sections.push(`--- ${displayPath.replaceAll("\\", "/")} ---\n${text}`);
   }
 
   const combined = sections.join("\n\n");
