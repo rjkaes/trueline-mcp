@@ -44,7 +44,8 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("replaced line 2 (1\u21923 lines, +2, now");
+    expect(text).toContain("replaced 2 \u2192");
+    expect(text).toContain("(1\u21923)");
   });
 
   test("multi-line replace shows range and delta", async () => {
@@ -57,7 +58,8 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("replaced lines 2\u20134 (3\u21921 line, -2, now");
+    expect(text).toContain("replaced 2\u20134 \u2192");
+    expect(text).toContain("(3\u21921)");
   });
 
   test("replace with same line count shows \u00b10", async () => {
@@ -68,7 +70,8 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("replaced line 1 (1\u21921 line, \u00b10, now");
+    expect(text).toContain("replaced 1 \u2192");
+    expect(text).toContain("(1\u21921)");
   });
 
   test("deletion shows deleted with line count", async () => {
@@ -81,7 +84,7 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("deleted lines 1\u20132 (2 lines)");
+    expect(text).toContain("deleted 1\u20132 (2)");
     expect(text).toContain('"aaa\\nbbb"');
   });
 
@@ -93,7 +96,7 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("deleted line 2 (1 line)");
+    expect(text).toContain("deleted 2 (1)");
     expect(text).toContain('"bbb"');
   });
 
@@ -105,8 +108,8 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("inserted 3 lines after line 1 (now");
-    expect(text).toMatch(/now [a-z]{2}\.2/);
+    expect(text).toContain("inserted 3 after line 1 \u2192");
+    expect(text).toMatch(/[a-z]{2}\.[0-9]/);
   });
 
   test("prepend (insert at start of file) shows location", async () => {
@@ -117,8 +120,8 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("inserted 2 lines at start of file (now");
-    expect(text).toMatch(/now [a-z]{2}\.1/);
+    expect(text).toContain("inserted 2 at start of file \u2192");
+    expect(text).toMatch(/[a-z]{2}\.[0-9]/);
   });
 
   test("no-op edit includes summary", async () => {
@@ -130,7 +133,8 @@ describe("edit summary", () => {
 
     const text = result.content[0].text;
     expect(text).toContain("no changes");
-    expect(text).toContain("replaced line 1 (1\u21921 line, \u00b10, now");
+    expect(text).toContain("replaced 1 \u2192");
+    expect(text).toContain("(1\u21921)");
   });
 
   test("batch edit shows one summary line per op", async () => {
@@ -146,7 +150,7 @@ describe("edit summary", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("replaced line 1");
-    expect(text).toContain("inserted 1 line after line 3");
+    expect(text).toContain("replaced 1 \u2192");
+    expect(text).toContain("inserted 1 after line 3");
   });
 });

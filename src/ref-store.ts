@@ -163,3 +163,12 @@ export function resetRefStore(): void {
 export function refStoreSize(): number {
   return store.size;
 }
+
+/** Return ref IDs for a file, optionally excluding one ref. */
+export function getRefsForFile(filePath: string, excludeRef?: string): string[] {
+  const refs: string[] = [];
+  for (const [id, entry] of store) {
+    if (entry.filePath === filePath && id !== excludeRef) refs.push(id);
+  }
+  return refs;
+}

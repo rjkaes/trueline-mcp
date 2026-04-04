@@ -399,8 +399,8 @@ const verifyJsonSchema = {
 
 registerTool(
   "trueline_read",
-  'Read files. Example: {"file_paths": ["src/main.ts:10-25"]}. Returns per-line hashes and refs for editing. ' +
-    'Append :range to each path for per-file line ranges: ["src/foo.ts:10-25", "src/bar.ts"]. Supports multiple files in one call.',
+  'Read files with per-line hashes and refs. Example: {"file_paths": ["src/foo.ts:10-25"]}. ' +
+    "Append :range for line ranges. Supports multiple files in one call.",
   readJsonSchema,
   safeTool(async (rawParams) => {
     const params = readSchema.parse(coerceParams(rawParams));

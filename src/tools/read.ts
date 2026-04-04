@@ -240,6 +240,17 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     outputLen += nb.length;
   }
 
+  // Nudge toward targeted reads when a full-file read returns many lines.
+  // The LLM already has the content, so this doesn't block anything — it just
+  // encourages ranges on future reads of similar-sized files.
+  const LARGE_READ_NUDGE = 150;
+  const isFullFileRead = requestedRanges.length === 1 && requestedRanges[0].end === Infinity;
+  if (!truncated && isFullFileRead && outputLines > LARGE_READ_NUDGE) {
+    const nudge = Buffer.from(`\n\n(${outputLines} lines — consider ranges for targeted reads)`);
+    outputChunks.push(nudge);
+    outputLen += nudge.length;
+  }
+
   // Include encoding metadata when non-default, so trueline_edit can round-trip
   if (bomInfo.hasBOM) {
     const encLabel = bomInfo.encoding === "utf-8" ? "utf-8-bom" : bomInfo.encoding;

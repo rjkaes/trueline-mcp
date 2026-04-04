@@ -18,7 +18,7 @@ import { detectBOM } from "../encoding.ts";
 import { streamingEdit } from "../streaming-edit.ts";
 import { fnv1aHash, fnv1aHashBytes, hashToLetters } from "../hash.ts";
 import { splitLines } from "../line-splitter.ts";
-import { adjustRefsAfterEdit, issueRef, type EditRegion } from "../ref-store.ts";
+import { adjustRefsAfterEdit, getRefsForFile, issueRef, type EditRegion } from "../ref-store.ts";
 import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
@@ -135,14 +135,26 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     if (ctx) contextBlock = `\n\n${ctx}`;
   }
 
+  // Nudge toward trueline_verify when other refs exist for the edited file.
+  // After an edit, shifted/overlapping refs are adjusted or invalidated, but
+  // the LLM doesn't know which survived. A short hint costs ~15 tokens and
+  // saves a ~300-token re-search.
+  let verifyHint = "";
+  const otherRefs = getRefsForFile(resolvedPath, newRef);
+  if (otherRefs.length > 0) {
+    const refList = otherRefs.slice(0, 5).join(", ");
+    const more = otherRefs.length > 5 ? ` +${otherRefs.length - 5} more` : "";
+    verifyHint = `\n(${refList}${more} may be stale — trueline_verify to check)`;
+  }
+
   if (!result.changed) {
     return textResult(
-      `Edit produced no changes \u2014 file not written.\n\n${summary}\nref:${newRef}${warn}${contextBlock}`,
+      `Edit produced no changes — file not written.\n\n${summary}\nref:${newRef}${verifyHint}${warn}${contextBlock}`,
     );
   }
 
   return textResult(
-    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref:${newRef}${warn}${contextBlock}`,
+    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref:${newRef}${verifyHint}${warn}${contextBlock}`,
   );
 }
 
@@ -167,32 +179,29 @@ function editSummary(ops: StreamEditOp[]): string {
         const newEnd = op.startLine + lines + shift;
         const rangeHint =
           lines === 1
-            ? `(now ${hl(op.content[0], newStart)})`
-            : `(now ${hl(op.content[0], newStart)}\u2013${hl(op.content[lines - 1], newEnd)})`;
+            ? hl(op.content[0], newStart)
+            : `${hl(op.content[0], newStart)}–${hl(op.content[lines - 1], newEnd)}`;
         shift += lines;
-        return `inserted ${lines} line${lines !== 1 ? "s" : ""} ${location} ${rangeHint}`;
+        return `inserted ${lines} ${location} → ${rangeHint}`;
       }
 
       const span = op.endLine - op.startLine + 1;
-      const rangeStr =
-        op.startLine === op.endLine ? `line ${op.startLine}` : `lines ${op.startLine}\u2013${op.endLine}`;
+      const rangeStr = op.startLine === op.endLine ? `${op.startLine}` : `${op.startLine}–${op.endLine}`;
 
       if (lines === 0) {
         shift -= span;
         const preview = op.deletedContent ? `: ${truncatePreview(op.deletedContent)}` : "";
-        return `deleted ${rangeStr} (${span} line${span !== 1 ? "s" : ""})${preview}`;
+        return `deleted ${rangeStr} (${span})${preview}`;
       }
 
       const newStart = op.startLine + shift;
       const newEnd = op.startLine + lines - 1 + shift;
-      const delta = lines - span;
-      const sign = delta > 0 ? "+" : delta < 0 ? "" : "\u00b1";
       const hint =
         lines === 1
-          ? `now ${hl(op.content[0], newStart)}`
-          : `now ${hl(op.content[0], newStart)}\u2013${hl(op.content[lines - 1], newEnd)}`;
-      shift += delta;
-      return `replaced ${rangeStr} (${span}\u2192${lines} line${lines !== 1 ? "s" : ""}, ${sign}${delta}, ${hint})`;
+          ? hl(op.content[0], newStart)
+          : `${hl(op.content[0], newStart)}–${hl(op.content[lines - 1], newEnd)}`;
+      shift += lines - span;
+      return `replaced ${rangeStr} → ${hint} (${span}→${lines})`;
     })
     .join("\n");
 }
