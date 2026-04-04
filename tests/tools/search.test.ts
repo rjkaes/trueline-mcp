@@ -346,3 +346,48 @@ describe("search ref stores resolved path", () => {
     expect(entry.filePath).toBe(await realpath(join(testDir, "sample.ts")));
   });
 });
+
+describe("context_lines=0 non-adjacent matches", () => {
+  test("produces separate refs for non-adjacent matches", async () => {
+    // Lines 1-11: match on 1 and 11, gap of 9 non-matching lines between.
+    // With context_lines=0, each match must flush as its own window so the
+    // ref checksum covers only contiguous lines.  Before the fix, the two
+    // matches merged into one sparse window whose checksum excluded lines
+    // 2-10, causing a guaranteed mismatch in streamingEdit.
+    const lines = [
+      "MATCH_A",
+      "filler 2",
+      "filler 3",
+      "filler 4",
+      "filler 5",
+      "filler 6",
+      "filler 7",
+      "filler 8",
+      "filler 9",
+      "filler 10",
+      "MATCH_B",
+    ];
+    writeFileSync(testFile, `${lines.join("\n")}\n`);
+
+    const result = await handleSearch({
+      file_path: testFile,
+      pattern: "MATCH_",
+      context_lines: 0,
+      projectDir: testDir,
+    });
+    const text = getText(result);
+
+    // Should have two separate refs, one per match
+    const refs = [...text.matchAll(/ref:(R\d+)/g)];
+    expect(refs.length).toBe(2);
+
+    // Each ref should cover a single line, not a sparse range
+    const { resolveRef } = await import("../../src/ref-store.ts");
+    const ref1 = resolveRef(refs[0][1]);
+    const ref2 = resolveRef(refs[1][1]);
+    expect(ref1.startLine).toBe(1);
+    expect(ref1.endLine).toBe(1);
+    expect(ref2.startLine).toBe(11);
+    expect(ref2.endLine).toBe(11);
+  });
+});

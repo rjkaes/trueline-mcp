@@ -80,6 +80,14 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
           ringStart = 0;
         }
       } else {
+        // context_lines=0: a non-match line arrives while currentLines is open but
+        // postRemaining is already 0.  Flush now so the next match starts a fresh
+        // window -- otherwise non-adjacent matches merge into one sparse window
+        // whose checksum excludes intermediate lines, causing edit verification to fail.
+        if (currentLines !== null) {
+          flushWindow(matches, currentLines);
+          currentLines = null;
+        }
         if (contextLines > 0) {
           if (ringLen < ring.length) {
             ring[(ringStart + ringLen) % ring.length] = decoded;
