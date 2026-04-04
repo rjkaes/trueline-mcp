@@ -255,7 +255,7 @@ const editJsonSchema = {
   properties: {
     file_path: {
       type: "string",
-      description: "Absolute path to the file to edit.",
+      description: "Path to the file to edit.",
     },
     edits: {
       type: "array",
@@ -326,7 +326,7 @@ const outlineJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: "One or more absolute or project-relative file paths to outline.",
+      description: "One or more file paths to outline.",
     },
     depth: {
       type: "integer",
@@ -344,7 +344,7 @@ const searchJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: "Absolute paths to the files to search.",
+      description: "Paths to the files to search.",
     },
     pattern: {
       type: "string",
