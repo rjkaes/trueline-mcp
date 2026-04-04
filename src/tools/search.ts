@@ -198,7 +198,7 @@ function formatResults(
   for (const result of results) {
     if (result.error) {
       if (multiFile) {
-        parts.push(`--- ${result.filePath} ---`);
+        parts.push(`--- ${result.filePath.replaceAll("\\\\", "/")} ---`);
         parts.push(`error: ${result.error}`);
         parts.push("");
       }
@@ -208,7 +208,7 @@ function formatResults(
 
     if (multiFile) {
       if (parts.length > 0) parts.push("");
-      parts.push(`--- ${result.filePath} ---`);
+      parts.push(`--- ${result.filePath.replaceAll("\\\\", "/")} ---`);
     }
 
     for (let i = 0; i < result.matches.length; i++) {
