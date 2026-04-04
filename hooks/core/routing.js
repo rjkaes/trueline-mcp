@@ -37,8 +37,10 @@ const FILE_PATH_FIELDS = ["file_path", "path", "target_file"];
 //   Gemini CLI: start_line, end_line
 const PARTIAL_READ_FIELDS = ["offset", "limit", "start_line", "end_line"];
 
-// Files below this threshold are small enough for built-in tools.
-const LARGE_FILE_THRESHOLD = 15360; // 15KB
+// Files at or above this size are blocked with full redirect guidance.
+const LARGE_FILE_THRESHOLD = 10240; // 10KB
+// Files between MEDIUM and LARGE are blocked with a concise redirect.
+const MEDIUM_FILE_THRESHOLD = 3072; // 3KB
 
 /**
  * @param {string} toolName
@@ -104,9 +106,11 @@ function formatSize(bytes) {
  *   to trueline_read. Full reads of large files waste context; the agent
  *   should use trueline_outline or targeted trueline_read ranges instead.
  *
- * - Read, small file: **advise** trueline_outline but allow through.
- *   The MCP overhead of trueline_read isn't worth it on small files,
- *   but outline is still a better first step.
+ * - Read, medium file (>= MEDIUM_FILE_THRESHOLD): **block** with concise
+ *   redirect including estimated token cost.
+ *
+ * - Read, small file (< MEDIUM_FILE_THRESHOLD): **pass** silently.
+ *   No advisory overhead; built-in Read is fine for small files.
  *
  * - Edit/MultiEdit: **block** and redirect to trueline_search ->
  *   trueline_edit. Hash-verified edits prevent stale-content mismatches
@@ -148,11 +152,13 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
     const canRead = await canAccessFn(filePath, "Read");
     if (!canRead) return null;
 
-    const size = formatSize(fileSize);
+    // Small files: pass through without any advisory overhead.
+    if (fileSize < MEDIUM_FILE_THRESHOLD) return null;
 
+    const size = formatSize(fileSize);
     const canOutline = OUTLINEABLE_EXTENSIONS.has(extname(filePath).toLowerCase());
 
-    // Large files: block and redirect to trueline.
+    // Large files: block with full redirect guidance.
     if (fileSize >= LARGE_FILE_THRESHOLD) {
       const outlineHint = canOutline
         ? "Use trueline_outline for structure or trueline_search to find specific content, then "
@@ -168,24 +174,15 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
       };
     }
 
-    // Small files: advise outline/search but let the read through.
-    // Only mention outline when the file type supports it (tree-sitter or custom parser).
-    if (canOutline) {
-      return {
-        action: "advise",
-        reason:
-          "<trueline_advisory>trueline_outline gives a compact structural map " +
-          "and is often enough on its own. If you plan to edit, " +
-          "trueline_search returns matches with checksums ready for trueline_edit.</trueline_advisory>",
-      };
-    }
-
-    // Non-outlineable small files: advise search for edit prep only.
+    // Medium files (3-10KB): block with concise redirect.
+    const estTokens = Math.round(fileSize / 4);
+    const outlineHint = canOutline ? "Use trueline_outline for structure, or " : "Use ";
     return {
-      action: "advise",
+      action: "block",
       reason:
-        "<trueline_advisory>If you plan to edit this file, " +
-        "trueline_search returns matches with checksums ready for trueline_edit.</trueline_advisory>",
+        `<trueline_redirect>This file is ${size} (~${estTokens} tokens in context). ` +
+        outlineHint +
+        "trueline_read to get edit-ready refs.</trueline_redirect>",
     };
   }
 

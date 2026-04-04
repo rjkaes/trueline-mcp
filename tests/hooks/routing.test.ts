@@ -11,6 +11,8 @@ let smallFile: string;
 let largeFile: string;
 let smallNonOutlineable: string;
 let largeNonOutlineable: string;
+let mediumFile: string;
+let mediumNonOutlineable: string;
 
 beforeAll(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "routing-test-"));
@@ -22,6 +24,10 @@ beforeAll(() => {
   writeFileSync(smallNonOutlineable, '{"key": "value"}\n');
   largeNonOutlineable = join(tmpDir, "data.json");
   writeFileSync(largeNonOutlineable, '{"x": 1}\n'.repeat(2000)); // ~18KB
+  mediumFile = join(tmpDir, "medium.ts");
+  writeFileSync(mediumFile, "const x = 1;\n".repeat(400)); // ~5.2KB
+  mediumNonOutlineable = join(tmpDir, "medium.json");
+  writeFileSync(mediumNonOutlineable, '{"x": 1}\n'.repeat(600)); // ~5.4KB
 });
 
 afterAll(() => {
@@ -40,11 +46,25 @@ describe("routePreToolUse — Read routing", () => {
     expect(result!.reason).toContain("trueline_read");
   });
 
-  test("advises outline for small files on Read", async () => {
-    const result = await routePreToolUse("Read", { file_path: smallFile }, alwaysAccessible);
+  test("blocks Read on medium outlineable files (3-10KB)", async () => {
+    const result = await routePreToolUse("Read", { file_path: mediumFile }, alwaysAccessible);
     expect(result).not.toBeNull();
-    expect(result!.action).toBe("advise");
+    expect(result!.action).toBe("block");
     expect(result!.reason).toContain("trueline_outline");
+    expect(result!.reason).toContain("trueline_read");
+  });
+
+  test("blocks Read on medium non-outlineable files (3-10KB)", async () => {
+    const result = await routePreToolUse("Read", { file_path: mediumNonOutlineable }, alwaysAccessible);
+    expect(result).not.toBeNull();
+    expect(result!.action).toBe("block");
+    expect(result!.reason).not.toContain("trueline_outline");
+    expect(result!.reason).toContain("trueline_read");
+  });
+
+  test("passes through Read on small files without advisory", async () => {
+    const result = await routePreToolUse("Read", { file_path: smallFile }, alwaysAccessible);
+    expect(result).toBeNull();
   });
 
   test("returns null for Read when trueline cannot access the file", async () => {
@@ -60,12 +80,9 @@ describe("routePreToolUse — Read routing", () => {
     expect(result!.reason).toContain("trueline_read");
   });
 
-  test("omits outline from advise for non-outlineable small files", async () => {
+  test("passes through Read on small non-outlineable files without advisory", async () => {
     const result = await routePreToolUse("Read", { file_path: smallNonOutlineable }, alwaysAccessible);
-    expect(result).not.toBeNull();
-    expect(result!.action).toBe("advise");
-    expect(result!.reason).not.toContain("trueline_outline");
-    expect(result!.reason).toContain("trueline_search");
+    expect(result).toBeNull();
   });
 
   test("blocks Gemini CLI read_file on large files", async () => {

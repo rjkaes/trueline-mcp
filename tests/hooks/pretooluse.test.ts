@@ -36,13 +36,13 @@ afterAll(() => {
 });
 
 describe("PreToolUse hook — Read routing", () => {
-  test("advises outline for small files", async () => {
+  test("passes through Read on small files without advisory", async () => {
     const result = await processHookEvent({
       tool_name: "Read",
       tool_input: { file_path: smallFile },
     });
     expect(result.decision).toBe("approve");
-    expect(result.reason).toContain("trueline_outline");
+    expect(result.reason).toBeUndefined();
   });
 
   test("blocks Read on large files", async () => {
@@ -54,14 +54,13 @@ describe("PreToolUse hook — Read routing", () => {
     expect(result.reason).toContain("trueline_read");
   });
 
-  test("omits outline for non-outlineable small files", async () => {
+  test("passes through Read on small non-outlineable files without advisory", async () => {
     const result = await processHookEvent({
       tool_name: "Read",
       tool_input: { file_path: smallNonOutlineable },
     });
     expect(result.decision).toBe("approve");
-    expect(result.reason).not.toContain("trueline_outline");
-    expect(result.reason).toContain("trueline_search");
+    expect(result.reason).toBeUndefined();
   });
 
   test("omits outline from block for non-outlineable large files", async () => {
