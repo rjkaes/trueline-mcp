@@ -740,4 +740,64 @@ describe("handleEdit", () => {
     expect(text).toContain("context near");
     expect(result.isError).toBeUndefined();
   });
+
+  test("auto context_lines when multiple edits and context_lines omitted", async () => {
+    writeFileSync(testFile, "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n");
+    const lines = ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"];
+    const ref = issueTestRef(testFile, lines, 1, 6);
+    const h2 = lineHash("line 2");
+    const h5 = lineHash("line 5");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        { ref, range: `${h2}.2`, content: "replaced 2" },
+        { ref, range: `${h5}.5`, content: "replaced 5" },
+      ],
+      // context_lines intentionally omitted
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    // Auto context_lines=2 should produce context blocks
+    expect(text).toContain("context near");
+    expect(text).toMatch(/^[a-z]{2}\.\d+\t/m);
+  });
+
+  test("auto context_lines does not activate for single edit", async () => {
+    const lines = ["line 1", "line 2", "line 3"];
+    const ref = issueTestRef(testFile, lines, 1, 3);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ ref, range: `${h2}.2`, content: "replaced 2" }],
+      // context_lines intentionally omitted
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    expect(text).not.toContain("context near");
+  });
+
+  test("explicit context_lines=0 suppresses auto context_lines", async () => {
+    writeFileSync(testFile, "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n");
+    const lines = ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"];
+    const ref = issueTestRef(testFile, lines, 1, 6);
+    const h2 = lineHash("line 2");
+    const h5 = lineHash("line 5");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        { ref, range: `${h2}.2`, content: "replaced 2" },
+        { ref, range: `${h5}.5`, content: "replaced 5" },
+      ],
+      context_lines: 0,
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    expect(text).not.toContain("context near");
+  });
 });

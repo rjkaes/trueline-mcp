@@ -124,10 +124,14 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const summary = editSummary(built.ops);
   const warn = built.warnings.length > 0 ? `\n\n${built.warnings.join("\n")}` : "";
 
-  // Generate context around edit sites if requested
+  // Generate context around edit sites. Auto-provide context for batched edits
+  // (2+ edits) when context_lines is omitted -- the LLM is likely to need refs
+  // for follow-up edits, and 2 lines of context (~180 tokens) is far cheaper
+  // than a re-read (~1,000+ tokens).
   let contextBlock = "";
-  if (context_lines && context_lines > 0 && result.newLineCount > 0) {
-    const ctx = await readEditContext(resolvedPath, built.ops, context_lines, enc);
+  const effectiveContextLines = context_lines ?? (built.ops.length >= 2 ? 2 : 0);
+  if (effectiveContextLines > 0 && result.newLineCount > 0) {
+    const ctx = await readEditContext(resolvedPath, built.ops, effectiveContextLines, enc);
     if (ctx) contextBlock = `\n\n${ctx}`;
   }
 
