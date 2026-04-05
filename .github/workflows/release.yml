@@ -24,7 +24,9 @@ jobs:
       - run: bun test
       - run: bun run build
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken
+          npx npm@latest publish --provenance --access public
       - name: Generate release notes
         id: changelog
         uses: orhun/git-cliff-action@v4
