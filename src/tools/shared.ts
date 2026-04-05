@@ -408,7 +408,8 @@ export async function expandGlobs(filePaths: string[], projectDir: string | unde
   const result: string[] = [];
   const seen = new Set<string>();
 
-  function add(path: string): void {
+  function add(rawPath: string): void {
+    const path = rawPath.replaceAll("\\", "/");
     if (!seen.has(path)) {
       seen.add(path);
       result.push(path);
