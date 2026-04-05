@@ -305,10 +305,10 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
     const result = await handleRead({ ...rest, file_path: fp.path, ranges: fp.rangeSpecs });
     const text = (result.content[0] as { text: string }).text;
     if (result.isError) {
-      parts.push(`--- ${fp.path.replaceAll("\\\\", "/")} ---\nerror: ${text}`);
+      parts.push(`--- ${fp.path.replaceAll("\\", "/")} ---\nerror: ${text}`);
       continue;
     }
-    parts.push(`--- ${fp.path.replaceAll("\\\\", "/")} ---\n${text}`);
+    parts.push(`--- ${fp.path.replaceAll("\\", "/")} ---\n${text}`);
   }
   return textResult(parts.join("\n\n"));
 }
