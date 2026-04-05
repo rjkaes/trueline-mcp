@@ -125,7 +125,7 @@ describe("multiline search", () => {
     });
     expect(result.isError).toBeUndefined();
     const text = getText(result);
-    expect(text).toContain(`--- ${testFile} ---`);
-    expect(text).toContain(`--- ${testFile2} ---`);
+    expect(text).toContain(`--- ${testFile.replaceAll("\\", "/")} ---`);
+    expect(text).toContain(`--- ${testFile2.replaceAll("\\", "/")} ---`);
   });
 });

@@ -221,8 +221,8 @@ describe("handleRead", () => {
     });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    expect(text).toContain(`--- ${testFile} ---`);
-    expect(text).toContain(`--- ${file2} ---`);
+    expect(text).toContain(`--- ${testFile.replaceAll("\\", "/")} ---`);
+    expect(text).toContain(`--- ${file2.replaceAll("\\", "/")} ---`);
     expect(text).toContain("const a = 1;");
     expect(text).toContain("export const x = 42;");
     // Each file section should have its own ref
