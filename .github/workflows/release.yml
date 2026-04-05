@@ -24,10 +24,9 @@ jobs:
       - run: bun test
       - run: bun run build
       - name: Publish to npm
-        run: |
-          npm install -g npm@latest
-          npm config delete //registry.npmjs.org/:_authToken
-          npm publish --provenance --access public
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
       - name: Generate release notes
         id: changelog
         uses: orhun/git-cliff-action@v4
