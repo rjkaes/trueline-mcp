@@ -89,7 +89,9 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
       totalLines += Number(countsMatch[2]);
     }
 
-    const displayPath = projectDir && fp.startsWith(projectDir) ? fp.slice(projectDir.length + 1) : fp;
+    const normalizedProjectDir = projectDir?.replaceAll("\\", "/");
+    const displayPath =
+      normalizedProjectDir && fp.startsWith(normalizedProjectDir) ? fp.slice(normalizedProjectDir.length + 1) : fp;
     sections.push(`--- ${displayPath.replaceAll("\\", "/")} ---\n${text}`);
   }
 
