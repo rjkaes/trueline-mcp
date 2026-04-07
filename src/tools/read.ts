@@ -20,7 +20,7 @@ import { transcodedLines } from "../encoding.ts";
 import { FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, hashToLetters } from "../hash.ts";
 import { parseFilePathWithRanges, parseRanges, type ReadRange } from "../parse.ts";
 import { hasRef, issueRef } from "../ref-store.ts";
-import { binaryFileError, expandGlobs, isBinaryError, validateEncoding, validatePath } from "./shared.ts";
+import { binaryFileError, displayPath, expandGlobs, isBinaryError, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 // ==============================================================================
@@ -305,10 +305,10 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
     const result = await handleRead({ ...rest, file_path: fp.path, ranges: fp.rangeSpecs });
     const text = (result.content[0] as { text: string }).text;
     if (result.isError) {
-      parts.push(`--- ${fp.path.replaceAll("\\", "/")} ---\nerror: ${text}`);
+      parts.push(`--- ${displayPath(fp.path, rest.projectDir)} ---\nerror: ${text}`);
       continue;
     }
-    parts.push(`--- ${fp.path.replaceAll("\\", "/")} ---\n${text}`);
+    parts.push(`--- ${displayPath(fp.path, rest.projectDir)} ---\n${text}`);
   }
   return textResult(parts.join("\n\n"));
 }

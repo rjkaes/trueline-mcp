@@ -11,7 +11,7 @@ import { extractOutline, formatOutline } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { extractMarkdownOutline } from "../outline/markdown.ts";
 import { extractXmlOutline } from "../outline/xml.ts";
-import { expandGlobs, validatePath } from "./shared.ts";
+import { displayPath, expandGlobs, validatePath } from "./shared.ts";
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 const XML_EXTENSIONS = new Set([
@@ -89,10 +89,7 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
       totalLines += Number(countsMatch[2]);
     }
 
-    const normalizedProjectDir = projectDir?.replaceAll("\\", "/");
-    const displayPath =
-      normalizedProjectDir && fp.startsWith(normalizedProjectDir) ? fp.slice(normalizedProjectDir.length + 1) : fp;
-    sections.push(`--- ${displayPath.replaceAll("\\", "/")} ---\n${text}`);
+    sections.push(`--- ${displayPath(fp, projectDir)} ---\n${text}`);
   }
 
   const combined = sections.join("\n\n");

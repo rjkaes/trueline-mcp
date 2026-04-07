@@ -7,7 +7,7 @@
  */
 import { hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
 import { issueRef } from "../ref-store.ts";
-import { expandGlobs, validatePath } from "./shared.ts";
+import { displayPath, expandGlobs, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 import { searchLineByLine } from "./search-line.ts";
 import { searchMultiline } from "./search-multiline.ts";
@@ -132,7 +132,15 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     }
   }
 
-  return formatResults(results, filePaths, pattern, maxMatches, multiFile, params.regex || params.multiline);
+  return formatResults(
+    results,
+    filePaths,
+    pattern,
+    maxMatches,
+    multiFile,
+    projectDir,
+    params.regex || params.multiline,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -171,6 +179,7 @@ function formatResults(
   pattern: string,
   maxMatches: number,
   multiFile: boolean,
+  projectDir: string | undefined,
   isRegex?: boolean,
 ): ToolResult {
   const grandTotal = results.reduce((sum, r) => sum + r.totalMatches, 0);
@@ -184,7 +193,7 @@ function formatResults(
   if (grandTotal === 0) {
     let msg = multiFile
       ? `No matches for pattern "${pattern}" across ${filePaths.length} files`
-      : `No matches for pattern "${pattern}" in ${filePaths[0]}`;
+      : `No matches for pattern "${pattern}" in ${displayPath(filePaths[0], projectDir)}`;
     if (!isRegex && /[.*+?^${}()|[\]\\]/.test(pattern)) {
       msg +=
         "\n\n(hint: pattern contains regex metacharacters but was searched literally — add regex=true for regex matching)";
@@ -198,7 +207,7 @@ function formatResults(
   for (const result of results) {
     if (result.error) {
       if (multiFile) {
-        parts.push(`--- ${result.filePath.replaceAll("\\", "/")} ---`);
+        parts.push(`--- ${displayPath(result.filePath, projectDir)} ---`);
         parts.push(`error: ${result.error}`);
         parts.push("");
       }
@@ -208,7 +217,7 @@ function formatResults(
 
     if (multiFile) {
       if (parts.length > 0) parts.push("");
-      parts.push(`--- ${result.filePath.replaceAll("\\", "/")} ---`);
+      parts.push(`--- ${displayPath(result.filePath, projectDir)} ---`);
     }
 
     for (let i = 0; i < result.matches.length; i++) {

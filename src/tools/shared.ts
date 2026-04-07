@@ -481,3 +481,17 @@ async function gitListFiles(cwd: string): Promise<string[] | null> {
 export function clearGitFilesCache(): void {
   gitFilesCache.clear();
 }
+
+/**
+ * Convert a file path to a display-friendly form for tool output headers.
+ * Strips the projectDir prefix when the path is under it, so the LLM sees
+ * relative paths even when absolute paths were provided as input.
+ */
+export function displayPath(filePath: string, projectDir: string | undefined): string {
+  const normalized = filePath.replaceAll("\\", "/");
+  const normalizedProjectDir = projectDir?.replaceAll("\\", "/");
+  if (normalizedProjectDir && normalized.startsWith(`${normalizedProjectDir}/`)) {
+    return normalized.slice(normalizedProjectDir.length + 1);
+  }
+  return normalized;
+}
