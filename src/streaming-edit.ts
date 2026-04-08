@@ -282,9 +282,9 @@ export async function streamingEdit(
       );
     }
     return (
-      `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}. ` +
-      `The file content at this line is different from what you expect. ` +
-      `Re-read the file to see what is actually there before retrying.`
+      `hash mismatch at line ${lineNumber}: file has "${got}", edit specified "${expected}". ` +
+      `The file content at this line changed since your last read. ` +
+      `Re-read the file with trueline_read to get current hashes before retrying.`
     );
   }
 
@@ -479,7 +479,9 @@ export async function streamingEdit(
     // Skip empty-file sentinel
     if (ref.startLine === 0 && ref.endLine === 0) {
       if (totalLines !== 0) {
-        return await fail(`Checksum mismatch: expected empty file but file has ${totalLines} lines`);
+        return await fail(
+          `Checksum mismatch: ref indicates an empty file but the file has ${totalLines} lines. Re-read with trueline_read.`,
+        );
       }
       continue;
     }
@@ -487,7 +489,8 @@ export async function streamingEdit(
     // Check if checksum range exceeds file length
     if (ref.endLine > totalLines) {
       return await fail(
-        `Checksum range ${ref.startLine}-${ref.endLine} exceeds ` + `file length (${totalLines} lines)`,
+        `Edit range ${ref.startLine}–${ref.endLine} exceeds file length (${totalLines} lines). ` +
+          `The file may have been truncated since your last read. Re-read with trueline_read.`,
       );
     }
 
@@ -554,7 +557,9 @@ export async function streamingEdit(
       const fileStat = await stat(resolvedPath);
       originalMode = fileStat.mode;
       if (fileStat.mtimeMs !== mtimeMs) {
-        return await fail("File was modified by another process. Re-read with trueline_read.");
+        return await fail(
+          "File was modified by another process during the edit. Your ref is stale. Re-read with trueline_read to get a fresh ref.",
+        );
       }
     } catch (err: unknown) {
       // ENOENT means the file was deleted between validatePath and here —

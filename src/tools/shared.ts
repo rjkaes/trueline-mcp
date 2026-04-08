@@ -236,7 +236,9 @@ export function validateEdits(edits: EditInput[], resolvedPath?: string): Valida
       if (rangeRef.start.line !== rangeRef.end.line) {
         return {
           ok: false,
-          error: errorResult('action "insert_after" requires a single-line range, not a multi-line range'),
+          error: errorResult(
+            'action "insert_after" requires a single-line range (e.g. "ab.10"), not a multi-line range. To insert new lines after line 10, use range "ab.10" with action "insert_after".',
+          ),
         };
       }
       rangeRef.insertAfter = true;

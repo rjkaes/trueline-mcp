@@ -97,7 +97,9 @@ export function parseRange(range: string): RangeRef {
   const dashIdx = raw.indexOf("-");
 
   if (insertAfter && dashIdx !== -1) {
-    throw new Error(`Invalid range "${range}" — insert-after (+) cannot be used with a multi-line range`);
+    throw new Error(
+      `Invalid range "${range}" — insert-after (+) requires a single-line target, not a range. Use "+ab.10" to insert after line 10.`,
+    );
   }
 
   if (dashIdx === -1) {
@@ -109,7 +111,9 @@ export function parseRange(range: string): RangeRef {
   const end = parseHashLine(raw.slice(dashIdx + 1));
 
   if (start.line > end.line) {
-    throw new Error(`Invalid range "${range}" — start line ${start.line} must be ≤ end line ${end.line}`);
+    throw new Error(
+      `Invalid range "${range}" — start line ${start.line} must be ≤ end line ${end.line}. Did you swap start and end?`,
+    );
   }
 
   return { start, end, insertAfter };
