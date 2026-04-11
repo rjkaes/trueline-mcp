@@ -18,7 +18,7 @@ const formatters = {
   },
   "gemini-cli": {
     block: (reason) => ({ decision: "deny", reason }),
-    approve: () => null,
+    approve: () => ({}),
   },
   "vscode-copilot": {
     block: (reason) => ({

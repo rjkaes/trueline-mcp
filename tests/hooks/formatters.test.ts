@@ -35,9 +35,9 @@ describe("formatDecision — null (passthrough)", () => {
     expect(result).toBeNull();
   });
 
-  test("gemini-cli: null returns null", () => {
+  test("gemini-cli: null returns empty object", () => {
     const result = formatDecision("gemini-cli", null);
-    expect(result).toBeNull();
+    expect(result).toEqual({});
   });
 
   test("vscode-copilot: null returns null", () => {
