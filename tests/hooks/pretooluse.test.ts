@@ -41,8 +41,7 @@ describe("PreToolUse hook — Read routing", () => {
       tool_name: "Read",
       tool_input: { file_path: smallFile },
     });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toBeUndefined();
+    expect(result).toBeNull();
   });
 
   test("blocks Read on large files", async () => {
@@ -50,8 +49,8 @@ describe("PreToolUse hook — Read routing", () => {
       tool_name: "Read",
       tool_input: { file_path: largeFile },
     });
-    expect(result.decision).toBe("block");
-    expect(result.reason).toContain("trueline_read");
+    expect(result?.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result?.hookSpecificOutput?.permissionDecisionReason).toContain("trueline_read");
   });
 
   test("passes through Read on small non-outlineable files without advisory", async () => {
@@ -59,8 +58,7 @@ describe("PreToolUse hook — Read routing", () => {
       tool_name: "Read",
       tool_input: { file_path: smallNonOutlineable },
     });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toBeUndefined();
+    expect(result).toBeNull();
   });
 
   test("omits outline from block for non-outlineable large files", async () => {
@@ -68,9 +66,9 @@ describe("PreToolUse hook — Read routing", () => {
       tool_name: "Read",
       tool_input: { file_path: largeNonOutlineable },
     });
-    expect(result.decision).toBe("block");
-    expect(result.reason).not.toContain("trueline_outline");
-    expect(result.reason).toContain("trueline_read");
+    expect(result?.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result?.hookSpecificOutput?.permissionDecisionReason).not.toContain("trueline_outline");
+    expect(result?.hookSpecificOutput?.permissionDecisionReason).toContain("trueline_read");
   });
 
   test("approves Read for files outside project", async () => {
@@ -78,8 +76,7 @@ describe("PreToolUse hook — Read routing", () => {
       tool_name: "Read",
       tool_input: { file_path: "/nonexistent/outside/file.ts" },
     });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toBeUndefined();
+    expect(result).toBeNull();
   });
 
   test("approves Read when no file_path", async () => {
@@ -87,8 +84,7 @@ describe("PreToolUse hook — Read routing", () => {
       tool_name: "Read",
       tool_input: {},
     });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toBeUndefined();
+    expect(result).toBeNull();
   });
 });
 
@@ -98,8 +94,8 @@ describe("PreToolUse hook — Edit routing", () => {
       tool_name: "Edit",
       tool_input: { file_path: smallFile, old_string: "x", new_string: "y" },
     });
-    expect(result.decision).toBe("block");
-    expect(result.reason).toContain("trueline_edit");
+    expect(result?.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result?.hookSpecificOutput?.permissionDecisionReason).toContain("trueline_edit");
   });
 
   test("blocks Edit on large files", async () => {
@@ -107,8 +103,8 @@ describe("PreToolUse hook — Edit routing", () => {
       tool_name: "Edit",
       tool_input: { file_path: largeFile, old_string: "x", new_string: "y" },
     });
-    expect(result.decision).toBe("block");
-    expect(result.reason).toContain("trueline");
+    expect(result?.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result?.hookSpecificOutput?.permissionDecisionReason).toContain("trueline");
   });
 
   test("blocks MultiEdit on large files", async () => {
@@ -116,8 +112,8 @@ describe("PreToolUse hook — Edit routing", () => {
       tool_name: "MultiEdit",
       tool_input: { file_path: largeFile, edits: [] },
     });
-    expect(result.decision).toBe("block");
-    expect(result.reason).toContain("trueline");
+    expect(result?.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result?.hookSpecificOutput?.permissionDecisionReason).toContain("trueline");
   });
 
   test("approves Edit for files outside project", async () => {
@@ -125,8 +121,7 @@ describe("PreToolUse hook — Edit routing", () => {
       tool_name: "Edit",
       tool_input: { file_path: "/nonexistent/outside/file.ts", old_string: "x", new_string: "y" },
     });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toBeUndefined();
+    expect(result).toBeNull();
   });
 
   test("approves Edit when Read access is denied", async () => {
@@ -143,8 +138,7 @@ describe("PreToolUse hook — Edit routing", () => {
         tool_input: { file_path: secretFile, old_string: "secret", new_string: "public" },
       });
       // trueline can't read .secret files, so no block
-      expect(result.decision).toBe("approve");
-      expect(result.reason).toBeUndefined();
+      expect(result).toBeNull();
     } finally {
       rmSync(claudeDir, { recursive: true, force: true });
     }
@@ -165,8 +159,7 @@ describe("PreToolUse hook — Edit routing", () => {
         tool_input: { file_path: lockedFile, old_string: "config", new_string: "updated" },
       });
       // trueline can't edit .cfg files, so no block
-      expect(result.decision).toBe("approve");
-      expect(result.reason).toBeUndefined();
+      expect(result).toBeNull();
     } finally {
       rmSync(claudeDir, { recursive: true, force: true });
     }
@@ -177,8 +170,7 @@ describe("PreToolUse hook — other tools", () => {
   test("approves other tools unconditionally", async () => {
     for (const tool of ["Bash", "Glob"]) {
       const result = await processHookEvent({ tool_name: tool, tool_input: {} });
-      expect(result.decision).toBe("approve");
-      expect(result.reason).toBeUndefined();
+      expect(result).toBeNull();
     }
   });
 });

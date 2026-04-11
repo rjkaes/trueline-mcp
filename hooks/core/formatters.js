@@ -7,15 +7,27 @@
 
 const formatters = {
   "claude-code": {
-    block: (reason) => ({ decision: "block", reason }),
-    approve: () => ({ decision: "approve" }),
+    block: (reason) => ({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: reason,
+      },
+    }),
+    approve: () => null,
   },
   "gemini-cli": {
     block: (reason) => ({ decision: "deny", reason }),
     approve: () => null,
   },
   "vscode-copilot": {
-    block: (reason) => ({ permissionDecision: "deny", reason }),
+    block: (reason) => ({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: reason,
+      },
+    }),
     approve: () => null,
   },
   // OpenCode uses in-process TS plugins, not JSON hooks. Included for
