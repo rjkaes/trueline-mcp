@@ -1,6 +1,6 @@
 {
   "name": "trueline-mcp",
-  "version": "2.10.3",
+  "version": "2.10.4",
   "type": "module",
   "description": "Truth-verified file editing for AI coding agents via MCP",
   "license": "Apache-2.0",
