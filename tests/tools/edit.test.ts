@@ -2,6 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, readFileSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, resetRefStore, getText } from "../helpers.ts";
 import { issueRef } from "../../src/ref-store.ts";
@@ -799,5 +800,39 @@ describe("handleEdit", () => {
 
     const text = getText(result);
     expect(text).not.toContain("context near");
+  });
+
+  test("writes diff to temp file after successful edit", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        {
+          ref,
+          range: `${h2}.2`,
+          content: "replaced 2",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    expect(text).toContain("Edit applied");
+
+    const { existsSync, readFileSync: readFs } = await import("node:fs");
+    const cwdHash = createHash("sha256").update(`${testDir}\0${testFile}`).digest("hex").slice(0, 12);
+    const diffPath = join(tmpdir(), `trueline-edit-${cwdHash}.diff`);
+    expect(existsSync(diffPath)).toBe(true);
+
+    const diff = readFs(diffPath, "utf-8");
+    expect(diff).toContain("-line 2");
+    expect(diff).toContain("+replaced 2");
+
+    // Clean up
+    const { unlinkSync } = await import("node:fs");
+    unlinkSync(diffPath);
   });
 });

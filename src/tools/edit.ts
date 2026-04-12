@@ -10,9 +10,11 @@
 // The file is never loaded into memory as a whole.
 // ==============================================================================
 
-import { open } from "node:fs/promises";
+import { open, writeFile } from "node:fs/promises";
 import { unlink } from "node:fs/promises";
-import { relative } from "node:path";
+import { join, relative } from "node:path";
+import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { DiffCollector } from "../diff-collector.ts";
 import { detectBOM } from "../encoding.ts";
 import { streamingEdit } from "../streaming-edit.ts";
@@ -93,6 +95,7 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     return textResult(diff);
   }
 
+  const editCollector = new DiffCollector();
   const result = await streamingEdit(
     resolvedPath,
     built.ops,
@@ -100,12 +103,26 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     mtimeMs,
     false,
     enc,
-    undefined,
+    editCollector,
     bomInfo,
   );
 
   if (!result.ok) {
     return errorResult(result.error);
+  }
+
+  // Write diff to temp file for PostToolUse hook display (never enters LLM context).
+  if (result.changed) {
+    const relPath = file_path.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : file_path;
+    const diff = editCollector.format(`a/${relPath}`, `b/${relPath}`);
+    if (diff) {
+      const cwdHash = createHash("sha256")
+        .update(`${projectDir ?? process.cwd()}\0${file_path}`)
+        .digest("hex")
+        .slice(0, 12);
+      const diffPath = join(tmpdir(), `trueline-edit-${cwdHash}.diff`);
+      await writeFile(diffPath, diff, "utf-8").catch(() => {});
+    }
   }
 
   // Adjust surviving refs: invalidate those overlapping edits, shift those after.
