@@ -23,7 +23,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|MultiEdit|Read",
+        "matcher": "Edit|MultiEdit|Read|Bash",
         "hooks": [
           {
             "type": "command",

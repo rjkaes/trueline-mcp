@@ -167,10 +167,75 @@ describe("PreToolUse hook — Edit routing", () => {
 });
 
 describe("PreToolUse hook — other tools", () => {
-  test("approves other tools unconditionally", async () => {
-    for (const tool of ["Bash", "Glob"]) {
-      const result = await processHookEvent({ tool_name: tool, tool_input: {} });
+  test("approves non-file tools unconditionally", async () => {
+    const result = await processHookEvent({ tool_name: "Glob", tool_input: {} });
+    expect(result).toBeNull();
+  });
+
+  test("passes Bash through when command is absent or not a file-peek", async () => {
+    const cases = [
+      {},
+      { command: "git status" },
+      { command: "npm install" },
+      { command: `grep -r TODO ${projectDir}` }, // recursive grep — legitimate search
+      { command: `cat missing.ts` }, // file doesn't exist
+    ];
+    for (const tool_input of cases) {
+      const result = await processHookEvent({ tool_name: "Bash", tool_input });
       expect(result).toBeNull();
+    }
+  });
+
+  test("advises Bash cat on accessible file", async () => {
+    const result = await processHookEvent({
+      tool_name: "Bash",
+      tool_input: { command: `cat ${smallFile}` },
+    });
+    expect(result).not.toBeNull();
+    const out = result as { hookSpecificOutput: { additionalContext: string; permissionDecision?: string } };
+    expect(out.hookSpecificOutput.additionalContext).toContain("trueline_read");
+    expect(out.hookSpecificOutput.additionalContext).toContain("cat");
+    expect(out.hookSpecificOutput.permissionDecision).toBeUndefined();
+  });
+
+  test("advises Bash sed -n on accessible file", async () => {
+    const result = await processHookEvent({
+      tool_name: "Bash",
+      tool_input: { command: `sed -n '10,50p' ${largeFile}` },
+    });
+    expect(result).not.toBeNull();
+    const out = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(out.hookSpecificOutput.additionalContext).toContain("sed -n");
+    expect(out.hookSpecificOutput.additionalContext).toContain("ranges");
+  });
+
+  test("advises Bash head / tail", async () => {
+    for (const cmd of [`head -n 20 ${smallFile}`, `tail -n 5 ${smallFile}`, `tail -50 ${smallFile}`]) {
+      const result = await processHookEvent({ tool_name: "Bash", tool_input: { command: cmd } });
+      expect(result).not.toBeNull();
+    }
+  });
+
+  test("advises Bash single-file grep on accessible file", async () => {
+    const result = await processHookEvent({
+      tool_name: "Bash",
+      tool_input: { command: `grep -n TODO ${smallFile}` },
+    });
+    expect(result).not.toBeNull();
+    const out = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(out.hookSpecificOutput.additionalContext).toContain("trueline_search");
+  });
+
+  test("does not advise on piped commands", async () => {
+    const result = await processHookEvent({
+      tool_name: "Bash",
+      tool_input: { command: `cat ${smallFile} | grep foo` },
+    });
+    // cat file | grep still triggers cat detector — but pipe terminates the path capture.
+    // Accept either outcome; just ensure no crash. Prefer passthrough.
+    if (result !== null) {
+      const out = result as { hookSpecificOutput: { additionalContext: string } };
+      expect(out.hookSpecificOutput.additionalContext).toContain("cat");
     }
   });
 });

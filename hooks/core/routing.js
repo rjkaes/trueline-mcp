@@ -29,6 +29,28 @@ const TOOL_ALIASES = {
   shell: "Bash",
 };
 
+// Bash file-peek detection. These commands inspect file contents outside
+// trueline and miss hash-verified refs, ranged reads, and AST outlines.
+// We nudge (not block) so one-off uses still work.
+const BASH_PEEK_DETECTORS = [
+  // cat FILE (with or without leading flags, no piping *into* cat)
+  { rx: /^\s*cat\b(?:\s+-[A-Za-z]+)*\s+([^\s|><;&]+)/, tool: "cat", hint: "trueline_read" },
+  // sed -n 'N,Mp' FILE  or  sed -n N,Mp FILE
+  {
+    rx: /^\s*sed\s+-n\s+['"]?\d+(?:,\d+)?[pd]['"]?\s+([^\s|><;&]+)/,
+    tool: "sed -n",
+    hint: "trueline_read with ranges",
+  },
+  // head / tail FILE  (with optional -n N, -c N, or -N)
+  {
+    rx: /^\s*(head|tail)\b(?:\s+(?:-[nc]\s*\d+|-\d+))?\s+([^\s|><;&-][^\s|><;&]*)/,
+    tool: null,
+    hint: "trueline_read",
+    fileGroup: 2,
+    toolGroup: 1,
+  },
+];
+
 // Different platforms use different field names for file paths in tool input.
 const FILE_PATH_FIELDS = ["file_path", "path", "target_file"];
 
@@ -98,6 +120,47 @@ function formatSize(bytes) {
 }
 
 /**
+ * Detect a Bash command that inspects file contents — an operation that
+ * trueline tools do better (hash-verified refs, ranged reads, AST outlines).
+ *
+ * Conservative: returns null for compound commands, pipes into the detected
+ * tool, or when the file arg starts with `-` (likely a flag we missed).
+ *
+ * @param {unknown} command
+ * @returns {{ tool: string; file: string; hint: string } | null}
+ */
+export function detectBashFilePeek(command) {
+  if (typeof command !== "string") return null;
+
+  for (const det of BASH_PEEK_DETECTORS) {
+    const m = command.match(det.rx);
+    if (!m) continue;
+    const file = m[det.fileGroup ?? 1];
+    if (!file || file.startsWith("-")) continue;
+    const tool = det.tool ?? m[det.toolGroup];
+    return { tool, file, hint: det.hint };
+  }
+
+  // grep PATTERN FILE — single-file, non-recursive search.
+  // grep -r/-R/-l or piped grep are legitimate search uses.
+  const grepMatch = command.match(/^\s*grep\b([^|;&<>]*)$/);
+  if (grepMatch) {
+    const rest = grepMatch[1];
+    const isRecursive = /\s-[A-Za-z]*[rRl]/.test(rest);
+    if (!isRecursive) {
+      const tokens = rest.trim().split(/\s+/).filter(Boolean);
+      const last = tokens[tokens.length - 1];
+      // Heuristic: last token looks like a path (has / or .), not a flag.
+      if (last && !last.startsWith("-") && /[/.]/.test(last) && tokens.length >= 2) {
+        return { tool: "grep", file: last, hint: "trueline_search" };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Route a pre-tool-use event.
  *
  * Routing logic by tool, file size, and edit token cost:
@@ -116,17 +179,37 @@ function formatSize(bytes) {
  *   trueline_edit. Hash-verified edits prevent stale-content mismatches
  *   that built-in Edit can't detect.
  *
- * Returns null for silent pass-through, or { action: "block", reason } to redirect.
+ * - Bash (canonical): if the command looks like a file-peek (`cat`, `sed -n`,
+ *   `head`, `tail`, or single-file `grep`) on an accessible file, **advise**
+ *   (non-blocking) with a nudge toward trueline_read/trueline_search.
+ *
+ * Returns null for silent pass-through, { action: "block", reason } to redirect,
+ * or { action: "advise", reason } to inject context without blocking.
  *
  * @param {string} toolName - Raw tool name from the platform
  * @param {Record<string, unknown> | undefined} toolInput
  * @param {(filePath: string, toolName: string) => Promise<boolean>} canAccessFn
- * @returns {Promise<{ action: "block"; reason: string } | null>}
+ * @returns {Promise<{ action: "block" | "advise"; reason: string } | null>}
  */
 export async function routePreToolUse(toolName, toolInput, canAccessFn) {
   const canonical = canonicalToolName(toolName);
 
-  // Only intercept file read/edit tools.
+  // Bash: non-blocking nudge when a file-peek command is detected.
+  if (canonical === "Bash") {
+    const peek = detectBashFilePeek(toolInput?.command);
+    if (!peek) return null;
+    const accessible = await canAccessFn(peek.file, "Read").catch(() => false);
+    if (!accessible) return null;
+    return {
+      action: "advise",
+      reason:
+        `<trueline_nudge>\`${peek.tool}\` on ${peek.file} inspects file content outside trueline. ` +
+        `Prefer ${peek.hint} \u2014 it returns hash-verified refs ready for trueline_edit ` +
+        `and avoids flooding context. Use trueline_outline first for structure on larger files.</trueline_nudge>`,
+    };
+  }
+
+  // Only intercept file read/edit tools beyond this point.
   if (canonical !== "Read" && canonical !== "Edit" && canonical !== "MultiEdit") {
     return null;
   }

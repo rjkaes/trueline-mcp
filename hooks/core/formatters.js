@@ -14,10 +14,19 @@ const formatters = {
         permissionDecisionReason: reason,
       },
     }),
+    advise: (reason) => ({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        additionalContext: reason,
+      },
+    }),
     approve: () => null,
   },
   "gemini-cli": {
     block: (reason) => ({ decision: "deny", reason }),
+    // Gemini has no non-blocking advisory channel for PreToolUse. Surface the
+    // nudge via stderr; Gemini echoes stderr into model context on exit 0.
+    advise: (reason) => ({ stderr: reason }),
     approve: () => ({}),
   },
   "vscode-copilot": {
@@ -28,12 +37,19 @@ const formatters = {
         permissionDecisionReason: reason,
       },
     }),
+    advise: (reason) => ({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        additionalContext: reason,
+      },
+    }),
     approve: () => null,
   },
   // OpenCode uses in-process TS plugins, not JSON hooks. Included for
   // completeness but the CLI dispatcher is the only realistic consumer.
   opencode: {
     block: (reason) => ({ decision: "block", reason }),
+    advise: (reason) => ({ decision: "approve", reason }),
     approve: () => null,
   },
 };
@@ -50,5 +66,6 @@ export function formatDecision(platform, routing) {
 
   if (!routing) return fmt.approve();
   if (routing.action === "block") return fmt.block(routing.reason);
+  if (routing.action === "advise") return fmt.advise(routing.reason);
   return fmt.approve();
 }
