@@ -117,6 +117,9 @@ workflow:
 - **PreToolUse** intercepts calls to the built-in read and edit tools,
   redirecting reads of files over 3 KB to trueline and blocking
   unverified edits entirely.
+- **Shipped skill** (`skills/trueline-workflow/SKILL.md`) auto-discovers
+  on any file-editing prompt, carrying richer examples and workflow
+  guidance for clients that honor Claude Code skills.
 
 With hooks, agent compliance is ~98%. Without hooks (instruction-only
 platforms like OpenCode and Codex CLI), compliance is ~60%. The
