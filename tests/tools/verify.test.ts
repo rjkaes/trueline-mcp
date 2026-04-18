@@ -146,7 +146,7 @@ describe("trueline_verify", () => {
 
   test("multiple refs in one call — all valid", async () => {
     const file = join(testDir, "multi.txt");
-    const content = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
+    const content = `${Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n")}\n`;
     writeFileSync(file, content);
 
     const readResult = await handleRead({

@@ -1,6 +1,5 @@
 import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
-import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleSearch } from "../../src/tools/search.ts";

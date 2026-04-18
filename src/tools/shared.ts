@@ -174,7 +174,7 @@ type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
 
 // On Windows, async realpath() and realpathSync() may disagree on 8.3 short
 // names (e.g. RUNNER~1 vs runneradmin). Compare by inode to handle this.
-function sameFile(a: string, b: string): boolean {
+function _sameFile(a: string, b: string): boolean {
   if (process.platform !== "win32") return false;
   try {
     const sa = statSync(a);
@@ -192,7 +192,7 @@ function sameFile(a: string, b: string): boolean {
  * and overlap detection. File-content verification (hash match,
  * boundary hash match) is deferred to the streaming pass.
  */
-export function validateEdits(edits: EditInput[], resolvedPath?: string): ValidateEditsResult {
+export function validateEdits(edits: EditInput[], _resolvedPath?: string): ValidateEditsResult {
   const ops: StreamEditOp[] = [];
   const checksumRefMap = new Map<string, ChecksumRef>();
   const warnings: string[] = [];

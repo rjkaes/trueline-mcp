@@ -19,7 +19,7 @@ afterEach(() => {
  * Issue a ref from a checksum string like "1-4:abcdef".
  * For validateEdits tests that don't use real files, filePath defaults to "test.txt".
  */
-function refFromChecksum(checksum: string, filePath = "test.txt"): string {
+function refFromChecksum(checksum: string, _filePath = "test.txt"): string {
   // In stateless mode, the ref IS the inline checksum string
   return checksum;
 }
