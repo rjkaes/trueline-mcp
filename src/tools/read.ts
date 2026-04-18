@@ -3,45 +3,18 @@
 //
 // Streams the file line-by-line via `splitLines` — the file is never loaded
 // into memory as a whole.  Supports reading multiple disjoint ranges in a
-// single call, each producing its own checksum.
+// single call, each producing its own inline ref.
 //
 // Output is assembled as raw byte buffers (line prefixes are ASCII, line
 // content stays as the original bytes) and decoded to a string once at the
 // end.  This avoids a per-line `Buffer.toString()` allocation.
-//
-// Unchanged-file optimization: when a file has been read before and its mtime
-// hasn't changed, returns a stub message with cached checksums instead of
-// re-streaming the file. The model already has the content in context from the
-// earlier read.
 // ==============================================================================
-
 import { LF_BUF } from "../line-splitter.ts";
 import { transcodedLines } from "../encoding.ts";
-import { FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, hashToLetters } from "../hash.ts";
+import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, hashToLetters } from "../hash.ts";
 import { parseFilePathWithRanges, parseRanges, type ReadRange } from "../parse.ts";
-import { hasRef, issueRef } from "../ref-store.ts";
 import { binaryFileError, displayPath, expandGlobs, isBinaryError, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
-
-// ==============================================================================
-// Read cache — returns a stub when a file hasn't changed since the last read
-// ==============================================================================
-
-interface ReadCacheEntry {
-  mtimeMs: number;
-  rangesKey: string; // serialized ranges for cache key
-  refs: string[]; // ref IDs (e.g., "R1", "R2")
-  encodingLine: string; // encoding metadata line, or empty
-}
-
-// Keyed by resolved (absolute) file path. Bounded to match the ref store.
-const MAX_READ_CACHE = 500;
-const readCache = new Map<string, ReadCacheEntry>();
-
-/** Serialize ranges into a stable cache key. */
-function rangesKey(ranges: ReadRange[]): string {
-  return ranges.map((r) => `${r.start}-${r.end}`).join(",");
-}
 
 /** Expand each range by 1 line on each side for boundary context, then re-merge. */
 function expandRanges(ranges: ReadRange[]): ReadRange[] {
@@ -49,7 +22,6 @@ function expandRanges(ranges: ReadRange[]): ReadRange[] {
     start: r.start > 1 && r.end !== Infinity ? r.start - 1 : r.start,
     end: r.end !== Infinity ? r.end + 1 : r.end,
   }));
-  // Re-merge: expansion can make previously non-adjacent ranges overlap
   for (let i = 1; i < expanded.length; i++) {
     const prev = expanded[i - 1];
     const curr = expanded[i];
@@ -61,25 +33,6 @@ function expandRanges(ranges: ReadRange[]): ReadRange[] {
   }
   return expanded;
 }
-/** Build the stub response for an unchanged file. */
-function unchangedStub(entry: ReadCacheEntry): string {
-  const parts = [`unchanged ${entry.refs.map((r) => `ref:${r}`).join(" ")}`];
-  if (entry.encodingLine) parts.push(entry.encodingLine);
-  return parts.join("\n");
-}
-
-/** Clear the read cache (for testing). */
-export function clearReadCache(): void {
-  readCache.clear();
-}
-
-function evictReadCacheIfNeeded(): void {
-  if (readCache.size < MAX_READ_CACHE) return;
-  // FIFO eviction: Map iterates in insertion order
-  const key = readCache.keys().next().value;
-  if (key !== undefined) readCache.delete(key);
-}
-
 interface ReadParams {
   file_path: string;
   encoding?: string;
@@ -110,7 +63,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     return errorResult((err as Error).message);
   }
 
-  const { resolvedPath, mtimeMs } = validated;
+  const { resolvedPath } = validated;
 
   let ranges: ReadRange[];
   try {
@@ -119,16 +72,9 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     return errorResult((err as Error).message);
   }
 
-  // Cache key uses the requested ranges; actual streaming uses expanded ranges
-  // with 1 line of context on each side so the agent sees boundary lines.
+  // Expand each range by 1 line on each side for boundary context, then re-merge.
   const requestedRanges = ranges;
   ranges = expandRanges(ranges);
-  // Check cache: if same file, same ranges, same mtime → return stub + checksums
-  const rKey = rangesKey(requestedRanges);
-  const cached = readCache.get(resolvedPath);
-  if (cached && cached.mtimeMs === mtimeMs && cached.rangesKey === rKey && cached.refs.every(hasRef)) {
-    return textResult(unchangedStub(cached));
-  }
 
   const MAX_OUTPUT_LINES = 2000;
   const MAX_OUTPUT_BYTES = 20 * 1024 * 1024; // 20 MB
@@ -139,10 +85,11 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   let rangeChecksumHash = FNV_OFFSET_BASIS;
   let rangeFirstLine = 0;
   let rangeLastLine = 0;
+  let rangeFirstLetters = "";
+  let rangeLastLetters = "";
   let totalLines = 0;
   let outputLines = 0;
   let truncated = false;
-  const collectedRefs: string[] = [];
 
   // Resolve encoding before streaming — transcodedLines peeks at the BOM.
   const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
@@ -162,10 +109,8 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
       // Past current range — close it, advance
       if (lineNumber > currentRange.end) {
-        const hex = rangeChecksumHash.toString(16).padStart(8, "0");
-        const refId = issueRef(resolvedPath, rangeFirstLine, rangeLastLine, hex);
-        collectedRefs.push(refId);
-        const refLine = `\nref:${refId}\n`;
+        const ck = checksumToLetters(rangeChecksumHash);
+        const refLine = `\nref: ${rangeFirstLetters}.${rangeFirstLine}-${rangeLastLetters}.${rangeLastLine}:${ck}\n`;
         const cb = Buffer.from(refLine);
         outputChunks.push(cb);
         outputLen += cb.length;
@@ -174,6 +119,8 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
         rangeChecksumHash = FNV_OFFSET_BASIS;
         rangeFirstLine = 0;
         rangeLastLine = 0;
+        rangeFirstLetters = "";
+        rangeLastLetters = "";
 
         // Check if new range starts at this line
         if (rangeIdx >= ranges.length) break;
@@ -186,6 +133,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       const letters = hashToLetters(h);
       if (rangeFirstLine === 0) {
         rangeFirstLine = lineNumber;
+        rangeFirstLetters = letters;
       }
       const prefix = Buffer.from(`${letters}.${lineNumber}\t`);
       const lineLen = prefix.length + lineBytes.length + 1;
@@ -198,6 +146,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       }
 
       rangeLastLine = lineNumber;
+      rangeLastLetters = letters;
       rangeChecksumHash = foldHash(rangeChecksumHash, h);
       outputChunks.push(prefix, lineBytes, LF_BUF);
       outputLen += lineLen;
@@ -209,10 +158,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   // Empty file
   if (totalLines === 0 && !truncated) {
-    const emptyRef = issueRef(resolvedPath, 0, 0, "00000000");
-    evictReadCacheIfNeeded();
-    readCache.set(resolvedPath, { mtimeMs, rangesKey: rKey, refs: [emptyRef], encodingLine: "" });
-    return textResult(`(empty file)\n\nref:${emptyRef}`);
+    return textResult("(empty file)\n\nref: 0-0:aaaaaa");
   }
 
   // Check if first range's start is out of range
@@ -220,12 +166,10 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     return errorResult(`start_line ${ranges[0].start} out of range (file has ${totalLines} lines)`);
   }
 
-  // Emit ref for the last range (only if we output any lines in it)
+  // Emit inline ref for the last range (only if we output any lines in it)
   if (rangeFirstLine > 0 && rangeLastLine > 0) {
-    const hex = rangeChecksumHash.toString(16).padStart(8, "0");
-    const refId = issueRef(resolvedPath, rangeFirstLine, rangeLastLine, hex);
-    collectedRefs.push(refId);
-    const refLine = `\nref:${refId}`;
+    const ck = checksumToLetters(rangeChecksumHash);
+    const refLine = `\nref: ${rangeFirstLetters}.${rangeFirstLine}-${rangeLastLetters}.${rangeLastLine}:${ck}`;
     const cb = Buffer.from(refLine);
     outputChunks.push(cb);
     outputLen += cb.length;
@@ -241,8 +185,6 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   }
 
   // Nudge toward targeted reads when a full-file read returns many lines.
-  // The LLM already has the content, so this doesn't block anything — it just
-  // encourages ranges on future reads of similar-sized files.
   const LARGE_READ_NUDGE = 150;
   const isFullFileRead = requestedRanges.length === 1 && requestedRanges[0].end === Infinity;
   if (!truncated && isFullFileRead && outputLines > LARGE_READ_NUDGE) {
@@ -257,16 +199,6 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     const encLine = Buffer.from(`\nencoding: ${encLabel}`);
     outputChunks.push(encLine);
     outputLen += encLine.length;
-  }
-
-  // Populate cache for future unchanged-file checks (skip truncated reads —
-  // they don't cover the full requested range, so the refs are incomplete)
-  if (!truncated && collectedRefs.length > 0) {
-    const encodingLine = bomInfo.hasBOM
-      ? `encoding: ${bomInfo.encoding === "utf-8" ? "utf-8-bom" : bomInfo.encoding}`
-      : "";
-    evictReadCacheIfNeeded();
-    readCache.set(resolvedPath, { mtimeMs, rangesKey: rKey, refs: collectedRefs, encodingLine });
   }
 
   // UTF-16 content has been transcoded to UTF-8; always decode output as UTF-8.

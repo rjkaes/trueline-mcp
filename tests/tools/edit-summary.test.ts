@@ -3,19 +3,16 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
-import { lineHash, issueTestRef, resetRefStore } from "../helpers.ts";
-import { issueRef } from "../../src/ref-store.ts";
+import { lineHash, issueTestRef } from "../helpers.ts";
 
 let testDir: string;
 
 beforeEach(() => {
-  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-edit-summary-")));
 });
 
 afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
-  resetRefStore();
 });
 
 function setupFile(name: string, content: string) {
@@ -23,7 +20,7 @@ function setupFile(name: string, content: string) {
   writeFileSync(f, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : issueRef(f, 0, 0, "00000000");
+  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0:aaaaaa";
   return { path: f, lines, ref };
 }
 

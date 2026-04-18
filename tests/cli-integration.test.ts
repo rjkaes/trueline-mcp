@@ -106,6 +106,6 @@ describe("CLI integration", () => {
     // Verify that unknown refs are reported clearly.
     const { stdout: verifyOut, stderr, exitCode } = run("verify", testFile, "--refs", "BOGUS");
     expect(exitCode).toBe(1);
-    expect(verifyOut + stderr).toContain("Unknown ref");
+    expect(verifyOut + stderr).toContain("Invalid checksum");
   });
 });

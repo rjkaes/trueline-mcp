@@ -71,11 +71,11 @@ export function getInstructions(platform = "claude-code") {
     <path name="exploratory">When you need context first: trueline_outline \u2192 trueline_read (targeted ranges) to understand, then trueline_search or trueline_read \u2192 trueline_edit.</path>
     <path name="small-edit">For files under ~200 lines or trivial one-line changes: ${p.readTool} and ${p.editTool} are fine. The MCP round-trip overhead outweighs hash verification savings on small files.</path>
     <example name="search-then-edit">
-      trueline_search output shows: ab.10 old line one / cd.11 old line two / ref:R1
-      \u2192 trueline_edit: range="ab.10-cd.11", ref="R1", content="new line one\\nnew line two"
-      Key: range uses the hash.line identifiers (ab.10, cd.11) from the output. ref is the short token (R1) \u2014 copy it verbatim.
+      trueline_search output shows: ab.10 old line one / cd.11 old line two / ref: ab.10-cd.11:efghij
+      \u2192 trueline_edit: range="ab.10-cd.11", ref="ab.10-cd.11:efghij", content="new line one\\nnew line two"
+      Key: range uses the hash.line identifiers (ab.10, cd.11) from the output. ref is the inline checksum \u2014 copy it verbatim.
     </example>
-    <rule>NEVER fabricate refs. Always copy the exact ref (e.g. "R1") from trueline_read or trueline_search output. A ref from a wide read (e.g. covering lines 1-157) is valid for editing any sub-range within it.</rule>
+    <rule>NEVER fabricate refs. Always copy the exact ref (e.g. "ab.1-cd.50:efghij") from trueline_read or trueline_search output. A ref from a wide read (e.g. covering lines 1-157) is valid for editing any sub-range within it.</rule>
     <rule>To insert new content, use action="insert_after". Without it, the range lines are REPLACED (content is lost). If you want to add lines without removing existing ones, you must use action="insert_after".</rule>
   </editing>
   <workflow>trueline_outline \u2192 understand structure (any file, any size)</workflow>

@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, statSync, utimesSync, readdir
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { arbFileContent, arbLine } from "./arbitraries.ts";
-import { rangeChecksum, lineHash, issueTestRef, resetRefStore } from "../helpers.ts";
+import { rangeChecksum, lineHash, issueTestRef } from "../helpers.ts";
 import { streamingEdit } from "../../src/streaming-edit.ts";
 import type { StreamEditOp } from "../../src/streaming-edit.ts";
 import { parseChecksum } from "../../src/parse.ts";
@@ -19,9 +19,7 @@ function makeIterDir(): { iterDir: string; cleanup: () => void } {
   return { iterDir, cleanup: () => rmSync(iterDir, { recursive: true, force: true }) };
 }
 
-beforeEach(() => {
-  resetRefStore();
-});
+beforeEach(() => {});
 
 /** Write lines to a temp file inside iterDir and return {path, lines, mtime}. */
 function writeTestLines(iterDir: string, lines: string[]): { path: string; lines: string[]; mtimeMs: number } {
@@ -642,8 +640,6 @@ describe("Conformance: TLA+ ApplyOps model vs streamingEdit", () => {
       fc.asyncProperty(arbConformanceCase(), async ({ lines, ops }) => {
         const iterDir = mkdtempSync(join(tmpdir(), "conf-"));
         try {
-          resetRefStore();
-
           // 1. Compute expected result from the TLA+ model
           const expectedLines = applyOps(lines, ops);
 

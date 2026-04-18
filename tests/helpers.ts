@@ -1,5 +1,12 @@
-import { FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, fnv1aHash, formatChecksum, hashToLetters } from "../src/hash.ts";
-import { issueRef, resetRefStore } from "../src/ref-store.ts";
+import {
+  checksumToLetters,
+  FNV_OFFSET_BASIS,
+  fnv1aHashBytes,
+  foldHash,
+  fnv1aHash,
+  formatChecksum,
+  hashToLetters,
+} from "../src/hash.ts";
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 
@@ -103,29 +110,37 @@ export function writeTestFile(testDir: string, name: string, content: string): s
 }
 
 /**
- * Compute a checksum and issue a ref for a test file.
- * Returns the ref ID (e.g. "R1").
+ * Compute an inline ref string for a test file range.
+ * Returns "ab.N-cd.M:efghij" format used by trueline_read/trueline_search.
  */
-export function issueTestRef(filePath: string, lines: string[], startLine: number, endLine: number): string {
+export function issueTestRef(_filePath: string, lines: string[], startLine: number, endLine: number): string {
   let hash = FNV_OFFSET_BASIS;
   const effectiveEnd = Math.min(endLine, lines.length);
+  let firstLetters = "";
+  let lastLetters = "";
   for (let i = startLine - 1; i < effectiveEnd; i++) {
-    hash = foldHash(hash, fnv1aHash(lines[i]));
+    const h = fnv1aHash(lines[i]);
+    if (i === startLine - 1) firstLetters = hashToLetters(h);
+    lastLetters = hashToLetters(h);
+    hash = foldHash(hash, h);
   }
-  const hex = hash.toString(16).padStart(8, "0");
-  return issueRef(filePath, startLine, effectiveEnd, hex);
+  const ck = checksumToLetters(hash);
+  return `${firstLetters}.${startLine}-${lastLetters}.${endLine}:${ck}`;
 }
 
 /**
- * Issue a ref for a raw byte buffer range.
+ * Compute an inline ref string for a raw byte buffer range.
  */
-export function issueTestRefRaw(filePath: string, bufs: Buffer[], startLine: number, endLine: number): string {
+export function issueTestRefRaw(_filePath: string, bufs: Buffer[], startLine: number, endLine: number): string {
   let hash = FNV_OFFSET_BASIS;
-  for (const buf of bufs) {
-    hash = foldHash(hash, fnv1aHashBytes(buf, 0, buf.length));
+  let firstLetters = "";
+  let lastLetters = "";
+  for (let i = 0; i < bufs.length; i++) {
+    const h = fnv1aHashBytes(bufs[i], 0, bufs[i].length);
+    if (i === 0) firstLetters = hashToLetters(h);
+    lastLetters = hashToLetters(h);
+    hash = foldHash(hash, h);
   }
-  const hex = hash.toString(16).padStart(8, "0");
-  return issueRef(filePath, startLine, endLine, hex);
+  const ck = checksumToLetters(hash);
+  return `${firstLetters}.${startLine}-${lastLetters}.${endLine}:${ck}`;
 }
-
-export { resetRefStore };

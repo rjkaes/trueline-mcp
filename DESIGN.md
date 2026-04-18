@@ -44,16 +44,16 @@ ab.1	#!/usr/bin/env node
 mp.2	import { readFile } from "fs/promises";
 qk.3	console.log("hello");
 
-ref: R1 (lines 1-3)
+ref: ab.1-qk.3:efghij
 ```
 
 The **hash** is two characters from a 26-symbol alphabet (`a-z`) derived from the line's content via FNV-1a (a fast, non-cryptographic hash). Two characters give 676 possible values — enough to catch accidental mismatches, not enough to be a security mechanism.
 
-The **ref** is a short opaque token (e.g. `R1`, `R2`) issued by the
-server for each range of lines returned. Internally, the server maps
-each ref to the file path, line range, and an FNV-1a checksum over
-those lines. The agent copies the ref verbatim into `trueline_edit`;
-it never sees or handles raw checksums.
+The **ref** is a stateless inline checksum appended to each range of
+lines returned, in the form `ab.startLine-cd.endLine:efghij`. The
+six-letter suffix is a base-26 encoding of the 32-bit FNV-1a checksum
+over those lines. The agent copies the ref verbatim into `trueline_edit`;
+it never needs to construct or interpret the checksum.
 
 The internal checksum is an FNV-1a accumulator over the full 32-bit
 hashes of each line in the range. This is deliberately stronger than
@@ -119,7 +119,7 @@ an empty file without special-casing.
 trueline_edit({
   file_path: "src/main.ts",
   edits: [{
-    ref: "R1",
+    ref: "ab.1-qk.14:efghij",
     range: "mp.12-qk.14",
     content: "  const x = 1;\n  const y = 2;",
   }]
@@ -136,11 +136,12 @@ Each edit specifies:
   string. The resulting lines can be fewer or more than the range
   (shrinking or growing the file). An empty string deletes the range.
 
-Each edit carries a **`ref`** — a short token (e.g. `"R1"`) copied
-from a prior `trueline_read` or `trueline_search` output. The server
-resolves the ref to the file path, line range, and internal checksum.
-Edits targeting different ranges can use different refs from the same
-or different `trueline_read` calls.
+Each edit carries a **`ref`** — an inline checksum string (e.g.
+`"ab.1-cd.50:efghij"`) copied from a prior `trueline_read` or
+`trueline_search` output. The server decodes the embedded checksum
+and verifies it against the lines in the range before applying the
+edit. A wide ref covering a larger range is valid for editing any
+sub-range within it.
 
 ### Verification
 
@@ -422,54 +423,44 @@ prefix, same refs — so the agent can pass results directly to
 
 ```
 trueline_verify({
-  refs: ["R1", "R2"],
+  file_path: "src/main.ts",
+  refs: ["ab.1-cd.50:efghij", "mp.80-qk.100:stuvwx"],
 })
 ```
 
-`trueline_verify` checks whether held refs are still valid without
-re-reading the file. The server resolves each ref to its file path
-and line range, then streams only the covered lines to recompute
-the internal checksum. If the checksum matches, the ref is reported
-as valid; otherwise, it is reported as stale.
+`trueline_verify` checks whether inline refs are still valid without
+re-reading the file. It streams the lines covered by each ref, recomputes
+the FNV-1a checksum, and compares it to the embedded six-letter hash.
+If they match, the ref is reported as valid; otherwise, it is stale.
 
 This is cheaper than a full `trueline_read` — useful when the agent
 has been working for a while and wants to confirm its refs before
-attempting an edit. Multiple refs (even across different files) can
-be verified in a single call.
+attempting an edit.
 
-## Ref store
+## Ref encoding
 
-Refs are the only edit-authorization mechanism visible to the agent.
-Internally, each ref maps to a `RefEntry`:
+Refs are stateless inline strings embedded in tool output. The format is:
 
 ```
-{ filePath, startLine, endLine, hash }
+ab.startLine-cd.endLine:efghij
 ```
 
-where `hash` is the 8-hex-char FNV-1a checksum over the covered
-lines. The agent never sees this structure — it just copies `"R1"`.
+- `ab` / `cd` — the 2-letter hash prefix of the first and last line in the range
+- `startLine` / `endLine` — 1-based line numbers
+- `efghij` — a 6-letter base-26 encoding of the 32-bit FNV-1a checksum over the range
 
-Ref lifecycle:
+The 26^6 = 308M unique values (28.2 bits) give strong collision resistance
+for the purpose of detecting unintended edits. All characters are lowercase
+letters, matching the same character class as the per-line hash prefixes—
+eliminating the hex-digit transposition errors that affected earlier designs.
 
-1. **Issued** by `trueline_read`, `trueline_search`, or a successful
-   `trueline_edit` (which returns a new ref covering the post-edit
-   file).
-2. **Resolved** by `trueline_edit` and `trueline_verify`, which look
-   up the ref, extract the internal checksum, and feed it into the
-   existing hash-verification pipeline.
-3. **Invalidated** after a successful edit: all prior refs for the
-   edited file are deleted, replaced by the single post-edit ref.
+Refs are deterministic: the same file content always produces the same
+ref for a given range. No server-side state is required.
 
-Refs are scoped to the MCP server process. They do not persist across
-restarts.
+### Empty file
 
-The indirection serves two purposes:
-
-- **Reduced copying errors.** `"R1"` is trivially copyable; a raw
-  checksum like `"1-157:d3b4c152"` is not. LLMs frequently corrupt
-  hex strings or drop range prefixes.
-- **Server-side authority.** The server controls what a ref means.
-  The agent cannot forge a valid ref because the mapping is opaque.
+An empty file has no lines to hash. Its ref is the sentinel `0-0:aaaaaa`,
+where `aaaaaa` is `checksumToLetters(0)`.
 
 ## Security model
 

@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleSearch } from "../../src/tools/search.ts";
-import { getText, resetRefStore } from "../helpers.ts";
+import { getText } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -40,9 +40,7 @@ afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
-beforeEach(() => {
-  resetRefStore();
-});
+beforeEach(() => {});
 
 describe("multiline search", () => {
   test("matches pattern spanning multiple lines", async () => {
@@ -57,7 +55,7 @@ describe("multiline search", () => {
     expect(text).toContain("function processData(");
     expect(text).toContain("): Result {");
     expect(text).toContain("\u2190 match");
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: \S+/);
   });
 
   test("multiline implies regex", async () => {
@@ -82,7 +80,7 @@ describe("multiline search", () => {
       projectDir: testDir,
     });
     const text = getText(result);
-    const matchBlocks = text.match(/ref:R\d+/g);
+    const matchBlocks = text.match(/ref: \S+/g);
     expect(matchBlocks?.length).toBe(1);
     expect(text).toContain("showing 1 of");
   });

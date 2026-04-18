@@ -45,10 +45,10 @@ describe("lineHash", () => {
 });
 
 describe("rangeChecksum", () => {
-  test("produces startLine-endLine:8hex format", () => {
+  test("produces startLine-endLine:6letter format", () => {
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
-    expect(cs).toMatch(/^[a-z]{2}\.1-[a-z]{2}\.3:[0-9a-f]{8}$/);
+    expect(cs).toMatch(/^[a-z]{2}\.1-[a-z]{2}\.3:[a-z]{6}$/);
   });
 
   test("deterministic for same content", () => {
@@ -65,7 +65,7 @@ describe("rangeChecksum", () => {
   test("clamps endLine to file length", () => {
     const lines = ["a", "b"];
     const cs = rangeChecksum(lines, 1, 10);
-    expect(cs).toMatch(/^[a-z]{2}\.1-[a-z]{2}\.2:[0-9a-f]{8}$/);
+    expect(cs).toMatch(/^[a-z]{2}\.1-[a-z]{2}\.2:[a-z]{6}$/);
     expect(cs).toBe(rangeChecksum(lines, 1, 2));
   });
 });
@@ -108,36 +108,36 @@ describe("parseRange", () => {
 
 describe("parseChecksum", () => {
   test("parses valid checksum", () => {
-    const cs = parseChecksum("10-25:f7e2abcd");
-    expect(cs).toEqual({ startLine: 10, endLine: 25, hash: "f7e2abcd" });
+    const cs = parseChecksum("10-25:abcdef");
+    expect(cs).toEqual({ startLine: 10, endLine: 25, hash: "abcdef" });
   });
 
   test("throws on invalid hex", () => {
-    expect(() => parseChecksum("1-2:ZZZZZZZZ")).toThrow("8 hex chars");
+    expect(() => parseChecksum("1-2:ZZZZZZZZ")).toThrow("6 lowercase letters");
   });
 
   test("throws on too-short hex", () => {
-    expect(() => parseChecksum("1-2:f7e2")).toThrow("8 hex chars");
+    expect(() => parseChecksum("1-2:f7e2")).toThrow("6 lowercase letters");
   });
 
   test("allows 0-0 empty sentinel", () => {
-    const cs = parseChecksum("0-0:00000000");
-    expect(cs).toEqual({ startLine: 0, endLine: 0, hash: "00000000" });
+    const cs = parseChecksum("0-0:aaaaaa");
+    expect(cs).toEqual({ startLine: 0, endLine: 0, hash: "aaaaaa" });
   });
 
   test("throws on 0-5 (startLine 0 with non-zero endLine)", () => {
-    expect(() => parseChecksum("0-5:00000000")).toThrow("startLine 0 requires endLine 0");
+    expect(() => parseChecksum("0-5:aaaaaa")).toThrow("startLine 0 requires endLine 0");
   });
 
   test("rejects scientific notation in start line", () => {
-    expect(() => parseChecksum("1e2-3:00000000")).toThrow("decimal integer");
+    expect(() => parseChecksum("1e2-3:aaaaaa")).toThrow("decimal integer");
   });
 
   test("rejects scientific notation in end line", () => {
-    expect(() => parseChecksum("1-3e1:00000000")).toThrow("decimal integer");
+    expect(() => parseChecksum("1-3e1:aaaaaa")).toThrow("decimal integer");
   });
 
   test("rejects 0-0 sentinel with non-zero hash", () => {
-    expect(() => parseChecksum("0-0:abcdef01")).toThrow("empty-file sentinel must have hash 00000000");
+    expect(() => parseChecksum("0-0:abcdef")).toThrow("empty-file sentinel must have hash aaaaaa");
   });
 });

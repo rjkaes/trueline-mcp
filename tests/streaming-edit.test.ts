@@ -5,31 +5,28 @@ import { tmpdir } from "node:os";
 import { lineHash, rangeChecksum } from "./helpers.ts";
 import { type EditInput, validateEdits } from "../src/tools/shared.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
-import { issueRef, resetRefStore } from "../src/ref-store.ts";
-import { parseChecksum } from "../src/parse.ts";
 
 let testDir: string;
 
 beforeEach(() => {
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-stream-test-")));
-  resetRefStore();
 });
 
 afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 /**
- * Issue a ref from a checksum string like "1-4:abcdef01".
+ * Issue a ref from a checksum string like "1-4:abcdef".
  * For validateEdits tests that don't use real files, filePath defaults to "test.txt".
  */
 function refFromChecksum(checksum: string, filePath = "test.txt"): string {
-  const parsed = parseChecksum(checksum);
-  return issueRef(filePath, parsed.startLine, parsed.endLine, parsed.hash);
+  // In stateless mode, the ref IS the inline checksum string
+  return checksum;
 }
 
 describe("validateEdits", () => {
   test("accepts valid single replace edit", () => {
-    const ref = refFromChecksum("1-4:abcdef01");
+    const ref = refFromChecksum("1-4:abcdef");
     const result = validateEdits([{ ref, range: "ab.2-cd.3", content: "x\ny" }]);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -44,13 +41,13 @@ describe("validateEdits", () => {
   });
 
   test("accepts valid insert_after at line 0", () => {
-    const ref = refFromChecksum("0-0:00000000");
+    const ref = refFromChecksum("0-0:aaaaaa");
     const result = validateEdits([{ ref, range: "+0", content: "new" }]);
     expect(result.ok).toBe(true);
   });
 
   test("rejects line 0 without insert_after", () => {
-    const ref = refFromChecksum("0-0:00000000");
+    const ref = refFromChecksum("0-0:aaaaaa");
     const result = validateEdits([{ ref, range: "0", content: "x" }]);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -59,7 +56,7 @@ describe("validateEdits", () => {
   });
 
   test("rejects ref that does not cover edit range", () => {
-    const ref = refFromChecksum("1-2:abcdef01");
+    const ref = refFromChecksum("1-2:abcdef");
     const result = validateEdits([{ ref, range: "ab.4-ab.4", content: "x" }]);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -68,7 +65,7 @@ describe("validateEdits", () => {
   });
 
   test("rejects overlapping replace ranges", () => {
-    const ref = refFromChecksum("1-4:abcdef01");
+    const ref = refFromChecksum("1-4:abcdef");
     const result = validateEdits([
       { ref, range: "aa.1-bb.2", content: "A" },
       { ref, range: "bb.2-bb.2", content: "B" },
@@ -80,7 +77,7 @@ describe("validateEdits", () => {
   });
 
   test("allows insert_after ops at same anchor (no overlap)", () => {
-    const ref = refFromChecksum("1-4:abcdef01");
+    const ref = refFromChecksum("1-4:abcdef");
     const result = validateEdits([
       { ref, range: "+aa.1", content: "A" },
       { ref, range: "+aa.1", content: "B" },
@@ -93,7 +90,7 @@ describe("validateEdits", () => {
 
   test("rejects insert-after inside a replace range", () => {
     // Replace covers lines 2-4, insert-after at line 3 is ambiguous
-    const ref = refFromChecksum("1-5:abcdef01");
+    const ref = refFromChecksum("1-5:abcdef");
     const result = validateEdits([
       { ref, range: "aa.2-bb.4", content: "A\nB\nC" },
       { ref, range: "+cc.3", content: "inserted" },
@@ -106,7 +103,7 @@ describe("validateEdits", () => {
 
   test("allows insert-after at end of replace range (not inside)", () => {
     // Replace covers lines 2-4, insert-after at line 4 is at the boundary
-    const ref = refFromChecksum("1-5:abcdef01");
+    const ref = refFromChecksum("1-5:abcdef");
     const result = validateEdits([
       { ref, range: "aa.2-bb.4", content: "A\nB\nC" },
       { ref, range: "+bb.4", content: "after replace" },
@@ -287,7 +284,7 @@ describe("streamingEdit", () => {
     writeFileSync(f, "line 1\nline 2\nline 3\n");
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ ref: refFromChecksum("1-3:00000000", f), range: "aa.1-aa.1", content: "nope" }]);
+    const validated = validateEdits([{ ref: refFromChecksum("1-3:aaaaaa", f), range: "aa.1-aa.1", content: "nope" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
@@ -316,9 +313,7 @@ describe("streamingEdit", () => {
     const { mtimeMs } = statSync(f);
     const h = lineHash("only");
 
-    const validated = validateEdits([
-      { ref: refFromChecksum("1-5:abcdef01", f), range: `${h}.1-${h}.1`, content: "x" },
-    ]);
+    const validated = validateEdits([{ ref: refFromChecksum("1-5:abcdef", f), range: `${h}.1-${h}.1`, content: "x" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
@@ -361,7 +356,7 @@ describe("streamingEdit", () => {
     writeFileSync(f, Buffer.from([0x68, 0x65, 0x00, 0x6c, 0x6f]));
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ ref: refFromChecksum("1-1:abcdef01", f), range: "aa.1", content: "x" }]);
+    const validated = validateEdits([{ ref: refFromChecksum("1-1:abcdef", f), range: "aa.1", content: "x" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
@@ -374,7 +369,7 @@ describe("streamingEdit", () => {
     writeFileSync(f, "");
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ ref: refFromChecksum("0-0:00000000", f), range: "+0", content: "new content" }]);
+    const validated = validateEdits([{ ref: refFromChecksum("0-0:aaaaaa", f), range: "+0", content: "new content" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
@@ -423,7 +418,7 @@ describe("streamingEdit", () => {
     const { mtimeMs } = statSync(f);
 
     // Wrong checksum to trigger a mismatch error
-    const validated = validateEdits([{ ref: refFromChecksum("1-2:00000000", f), range: "aa.1-aa.1", content: "x" }]);
+    const validated = validateEdits([{ ref: refFromChecksum("1-2:aaaaaa", f), range: "aa.1-aa.1", content: "x" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
@@ -438,7 +433,7 @@ describe("streamingEdit", () => {
     writeFileSync(f, Buffer.from([0x68, 0x65, 0x00, 0x6c, 0x6f]));
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ ref: refFromChecksum("1-1:abcdef01", f), range: "aa.1", content: "x" }]);
+    const validated = validateEdits([{ ref: refFromChecksum("1-1:abcdef", f), range: "aa.1", content: "x" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);

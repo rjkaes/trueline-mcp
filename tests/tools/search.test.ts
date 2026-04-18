@@ -4,7 +4,7 @@ import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleSearch } from "../../src/tools/search.ts";
-import { getText, resetRefStore } from "../helpers.ts";
+import { getText } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -39,9 +39,7 @@ afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
-beforeEach(() => {
-  resetRefStore();
-});
+beforeEach(() => {});
 
 describe("trueline_search", () => {
   test("finds matching lines with context", async () => {
@@ -56,7 +54,7 @@ describe("trueline_search", () => {
     expect(text).toContain("hello");
     expect(text).toContain("world");
     // Should have refs
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}/);
     // Should have per-line hashes
     expect(text).toMatch(/^[a-z]{2}\.\d+\t/m);
   });
@@ -83,7 +81,7 @@ describe("trueline_search", () => {
     });
     const text = getText(result);
     // With context_lines=5, the two matches (lines 4 and 8) overlap — should be one block
-    const refMatches = text.match(/ref:R\d+/g);
+    const refMatches = text.match(/ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}/g);
     expect(refMatches?.length).toBe(1);
   });
 
@@ -153,7 +151,7 @@ describe("trueline_search", () => {
     });
     const text = getText(result);
     expect(text).toContain("hello");
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}/);
   });
 
   test("case_insensitive false (default) does not match wrong case", async () => {
@@ -175,7 +173,7 @@ describe("trueline_search", () => {
     });
     const text = getText(result);
     expect(text).toContain("console.log");
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}/);
   });
 
   test("literal mode treats bare parens as literal text", async () => {
@@ -249,7 +247,7 @@ describe("multi-file search", () => {
     expect(text).toContain("--- other.ts ---");
     expect(text).toContain('"hello"');
     expect(text).toContain("greeting");
-    const refs = text.match(/ref:R\d+/g);
+    const refs = text.match(/ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}/g);
     expect(refs!.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -276,7 +274,7 @@ describe("multi-file search", () => {
     const text = getText(result);
     expect(text).toContain("error:");
     expect(text).toContain("console.log");
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}/);
   });
 
   test("single file_paths omits file header", async () => {
@@ -288,7 +286,7 @@ describe("multi-file search", () => {
     const text = getText(result);
     expect(text).not.toContain("---");
     expect(text).toContain("console.log");
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}/);
   });
 
   test("file_path string alias still works", async () => {
@@ -323,30 +321,6 @@ describe("multi-file search", () => {
   });
 });
 
-describe("search ref stores resolved path", () => {
-  test("ref from relative-path search contains the absolute resolved path", async () => {
-    const { resolveRef } = await import("../../src/ref-store.ts");
-
-    // Search using a relative path constructed from the testDir basename
-    const relative = join(".", "sample.ts");
-    const result = await handleSearch({
-      file_path: relative,
-      pattern: "hello",
-      context_lines: 0,
-      projectDir: testDir,
-    });
-
-    const text = getText(result);
-    // Extract ref ID from output like "ref:R1"
-    const refMatch = text.match(/ref:(R\d+)/);
-    expect(refMatch).not.toBeNull();
-
-    const entry = resolveRef(refMatch![1]);
-    // The stored filePath must be the absolute resolved path, not the relative input
-    expect(entry.filePath).toBe(await realpath(join(testDir, "sample.ts")));
-  });
-});
-
 describe("context_lines=0 non-adjacent matches", () => {
   test("produces separate refs for non-adjacent matches", async () => {
     // Lines 1-11: match on 1 and 11, gap of 9 non-matching lines between.
@@ -377,14 +351,17 @@ describe("context_lines=0 non-adjacent matches", () => {
     });
     const text = getText(result);
 
-    // Should have two separate refs, one per match
-    const refs = [...text.matchAll(/ref:(R\d+)/g)];
+    // Should have two separate inline refs, one per match
+    const refs = [...text.matchAll(/ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}/g)];
     expect(refs.length).toBe(2);
 
-    // Each ref should cover a single line, not a sparse range
-    const { resolveRef } = await import("../../src/ref-store.ts");
-    const ref1 = resolveRef(refs[0][1]);
-    const ref2 = resolveRef(refs[1][1]);
+    // Each ref encodes its own line range — parse start/end from the ref string
+    const parseRefLines = (r: string) => {
+      const m = r.match(/[a-z]{2}\.(\d+)-[a-z]{2}\.(\d+):/);
+      return { startLine: parseInt(m![1], 10), endLine: parseInt(m![2], 10) };
+    };
+    const ref1 = parseRefLines(refs[0][0]);
+    const ref2 = parseRefLines(refs[1][0]);
     expect(ref1.startLine).toBe(1);
     expect(ref1.endLine).toBe(1);
     expect(ref2.startLine).toBe(11);

@@ -6,7 +6,7 @@ export const FNV_OFFSET_BASIS = 2166136261;
 export const FNV_PRIME = 16777619;
 
 /** Sentinel checksum representing an empty file (zero lines). */
-export const EMPTY_FILE_CHECKSUM = "0-0:00000000";
+export const EMPTY_FILE_CHECKSUM = "0-0:aaaaaa";
 
 /**
  * Compute FNV-1a 32-bit hash of a string's UTF-8 bytes.
@@ -95,7 +95,20 @@ export function foldHash(accumulator: number, h: number): number {
   return accumulator;
 }
 
-/** Format a checksum as `"<start>-<end>:<8hex>"`, optionally with hash letters. */
+const BASE26 = "abcdefghijklmnopqrstuvwxyz";
+
+/** Encode a 32-bit checksum as 6 lowercase letters via base-26. 26^6 = 308M values. */
+export function checksumToLetters(h: number): string {
+  let result = "";
+  let n = h >>> 0;
+  for (let i = 0; i < 6; i++) {
+    result = BASE26[n % 26] + result;
+    n = (n / 26) | 0;
+  }
+  return result;
+}
+
+/** Format a checksum as `"<start>-<end>:<6letters>"`, optionally with hash letters. */
 export function formatChecksum(
   startLine: number,
   endLine: number,
@@ -103,11 +116,11 @@ export function formatChecksum(
   startLetters?: string,
   endLetters?: string,
 ): string {
-  const hex = hash.toString(16).padStart(8, "0");
+  const ck = checksumToLetters(hash);
   if (startLetters && endLetters) {
-    return `${startLetters}.${startLine}-${endLetters}.${endLine}:${hex}`;
+    return `${startLetters}.${startLine}-${endLetters}.${endLine}:${ck}`;
   }
-  return `${startLine}-${endLine}:${hex}`;
+  return `${startLine}-${endLine}:${ck}`;
 }
 
 /**

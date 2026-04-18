@@ -2,16 +2,13 @@ import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:tes
 import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { handleRead, handleReadMulti, clearReadCache } from "../../src/tools/read.ts";
-import { LINE_PATTERN, resetRefStore } from "../helpers.ts";
+import { handleRead, handleReadMulti } from "../../src/tools/read.ts";
+import { LINE_PATTERN } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
 
-beforeEach(() => {
-  clearReadCache();
-  resetRefStore();
-});
+beforeEach(() => {});
 
 beforeAll(() => {
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-read-test-")));
@@ -58,7 +55,7 @@ describe("handleRead", () => {
     });
     const text = result.content[0].text;
     // Should contain a ref line
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: \S+/);
   });
 
   test("supports ranges param", async () => {
@@ -105,7 +102,7 @@ describe("handleRead", () => {
     const text = result.content[0].text;
 
     // Should have two ref lines
-    const refMatches = text.match(/^ref:R\d+$/gm);
+    const refMatches = text.match(/^ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}$/gm);
     expect(refMatches).toHaveLength(2);
 
     // Should contain lines 3-5 and 15-17 but not lines 6-14
@@ -145,7 +142,7 @@ describe("handleRead", () => {
     const text = result.content[0].text;
     expect(text).toMatch(/^[a-z]{2}\.1\t/m);
     expect(text).toMatch(/^[a-z]{2}\.4\t/m);
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: \S+/);
   });
 
   test("hash is based on raw file bytes, not decoded string", async () => {
@@ -179,7 +176,7 @@ describe("handleRead", () => {
     const text = (result.content[0] as { text: string }).text;
 
     // Should have a ref covering only the returned lines
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: \S+/);
     // Should include truncation notice
     expect(text).toContain("truncated");
     expect(text).toContain("2000 line limit");
@@ -198,7 +195,7 @@ describe("handleRead", () => {
     expect(result.isError).toBeUndefined();
     const text = (result.content[0] as { text: string }).text;
     expect(text).not.toContain("truncated");
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: \S+/);
   });
 
   test("output lines include per-line hashes", async () => {
@@ -226,7 +223,7 @@ describe("handleRead", () => {
     expect(text).toContain("const a = 1;");
     expect(text).toContain("export const x = 42;");
     // Each file section should have its own ref
-    const refs = text.match(/ref:R\d+/g);
+    const refs = text.match(/ref: \S+/g);
     expect(refs).toHaveLength(2);
   });
 
@@ -241,7 +238,7 @@ describe("handleRead", () => {
     expect(single.isError).toBeUndefined();
     const text = single.content[0].text;
     expect(text).toMatch(/^[a-z]{2}\.1\tconst a = 1;$/m);
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: \S+/);
   });
 
   test("inline range syntax reads specific lines per file", async () => {
@@ -264,7 +261,7 @@ describe("handleRead", () => {
     expect(text).toContain("line2");
     expect(text).toContain("line3");
     // Short file ref should cover lines 1-3 (range 2-3 + 1-line context expansion)
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: \S+/);
   });
 
   test("inline range with multiple ranges per file", async () => {

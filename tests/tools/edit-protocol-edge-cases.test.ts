@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
-import { lineHash, issueTestRef, resetRefStore } from "../helpers.ts";
-import { issueRef } from "../../src/ref-store.ts";
+import { lineHash, issueTestRef } from "../helpers.ts";
 
 // =============================================================================
 // Shared fixture setup
@@ -14,13 +13,11 @@ import { issueRef } from "../../src/ref-store.ts";
 let testDir: string;
 
 beforeEach(() => {
-  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-proto-edge-")));
 });
 
 afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
-  resetRefStore();
 });
 
 function setupFile(name: string, content: string) {
@@ -28,7 +25,7 @@ function setupFile(name: string, content: string) {
   writeFileSync(f, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : issueRef(f, 0, 0, "00000000");
+  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0:aaaaaa";
   return { path: f, lines, ref };
 }
 
@@ -207,7 +204,7 @@ describe("insert-after (+) semantics", () => {
   test("insert into empty file via +0:", async () => {
     const f = join(testDir, "empty.txt");
     writeFileSync(f, "");
-    const emptyRef = issueRef(f, 0, 0, "00000000");
+    const emptyRef = "0-0:aaaaaa";
 
     const result = await edit({
       file_path: f,
@@ -381,7 +378,7 @@ describe("checksum coverage", () => {
 
   test("empty-file sentinel rejected for non-empty file", async () => {
     const { path } = setupFile("notempty.txt", "aaa\n");
-    const emptyRef = issueRef(path, 0, 0, "00000000");
+    const emptyRef = "0-0:aaaaaa";
 
     const result = await edit({
       file_path: path,
@@ -463,7 +460,7 @@ describe("content growth and shrinkage", () => {
     expect(r1.isError).toBeUndefined();
 
     // Extract returned ref and use for second edit
-    const refMatch = r1.content[0].text.match(/ref:(R\d+)/);
+    const refMatch = r1.content[0].text.match(/ref: (\S+)/);
     expect(refMatch).not.toBeNull();
     const newRef = refMatch![1];
 
@@ -692,7 +689,7 @@ describe("returned ref enables chaining", () => {
     });
     expect(r1.isError).toBeUndefined();
 
-    const refMatch = r1.content[0].text.match(/ref:(R\d+)/);
+    const refMatch = r1.content[0].text.match(/ref: (\S+)/);
     expect(refMatch).not.toBeNull();
     const newRef = refMatch![1];
 
@@ -744,7 +741,7 @@ describe("read-then-edit round-trip", () => {
     expect(readResult.isError).toBeUndefined();
 
     // Extract ref from read output
-    const refMatch = readResult.content[0].text.match(/ref:(R\d+)/);
+    const refMatch = readResult.content[0].text.match(/ref: (\S+)/);
     expect(refMatch).not.toBeNull();
 
     const hBeta = lineHash("beta");
@@ -769,7 +766,7 @@ describe("read-then-edit round-trip", () => {
     });
     expect(readResult.isError).toBeUndefined();
 
-    const refMatch = readResult.content[0].text.match(/ref:(R\d+)/);
+    const refMatch = readResult.content[0].text.match(/ref: (\S+)/);
     expect(refMatch).not.toBeNull();
 
     const hCcc = lineHash("ccc");
@@ -948,7 +945,7 @@ describe("security and file validation", () => {
     writeFileSync(outsideFile, "secret\n");
 
     try {
-      const staleRef = issueRef(outsideFile, 1, 1, "00000000");
+      const staleRef = "aa.1-aa.1:aaaaaa";
       const result = await edit({
         file_path: outsideFile,
         edits: [{ ref: staleRef, range: "aa.1", content: "hacked" }],
@@ -964,7 +961,7 @@ describe("security and file validation", () => {
     const binFile = join(testDir, "binary.dat");
     writeFileSync(binFile, Buffer.from([0x48, 0x65, 0x00, 0x6c, 0x6f]));
 
-    const staleRef = issueRef(binFile, 1, 1, "00000000");
+    const staleRef = "aa.1-aa.1:aaaaaa";
     const result = await edit({
       file_path: binFile,
       edits: [{ ref: staleRef, range: "aa.1", content: "text" }],
@@ -975,7 +972,7 @@ describe("security and file validation", () => {
   });
 
   test("rejects directory path", async () => {
-    const staleRef = issueRef(testDir, 1, 1, "00000000");
+    const staleRef = "aa.1-aa.1:aaaaaa";
     const result = await edit({
       file_path: testDir,
       edits: [{ ref: staleRef, range: "aa.1", content: "x" }],
@@ -985,7 +982,7 @@ describe("security and file validation", () => {
   });
 
   test("rejects nonexistent file", async () => {
-    const staleRef = issueRef(join(testDir, "does-not-exist.txt"), 1, 1, "00000000");
+    const staleRef = "aa.1-aa.1:aaaaaa";
     const result = await edit({
       file_path: join(testDir, "does-not-exist.txt"),
       edits: [{ ref: staleRef, range: "aa.1", content: "x" }],
@@ -1022,7 +1019,7 @@ describe("security and file validation", () => {
     symlinkSync(outsideFile, linkFile);
 
     try {
-      const staleRef = issueRef(linkFile, 1, 1, "00000000");
+      const staleRef = "aa.1-aa.1:aaaaaa";
       const result = await edit({
         file_path: linkFile,
         edits: [{ ref: staleRef, range: "aa.1", content: "hacked" }],
@@ -1128,7 +1125,7 @@ describe("ref validation", () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Unknown ref");
+    expect(result.content[0].text).toContain("Invalid checksum");
   });
 
   test("rejects garbled ref", async () => {
@@ -1141,6 +1138,6 @@ describe("ref validation", () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Unknown ref");
+    expect(result.content[0].text).toContain("Invalid checksum");
   });
 });

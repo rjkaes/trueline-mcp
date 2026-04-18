@@ -4,13 +4,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../src/tools/edit.ts";
 import { handleRead } from "../src/tools/read.ts";
-import { lineHash, issueTestRef, resetRefStore } from "./helpers.ts";
-import { issueRef } from "../src/ref-store.ts";
+import { lineHash, issueTestRef } from "./helpers.ts";
 
 let testDir: string;
 
 beforeEach(() => {
-  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-logical-bugs-")));
 });
 
@@ -95,7 +93,7 @@ describe("logical bugs and edge cases", () => {
     const f = join(testDir, "empty-multi.txt");
     writeFileSync(f, "");
 
-    const ref = issueRef(f, 0, 0, "00000000");
+    const ref = "0-0:aaaaaa";
 
     await handleEdit({
       file_path: f,

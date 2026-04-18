@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { streamingEdit } from "../../src/streaming-edit.ts";
-import { FNV_OFFSET_BASIS, foldHash, fnv1aHashBytes } from "../../src/hash.ts";
+import { FNV_OFFSET_BASIS, foldHash, fnv1aHashBytes, checksumToLetters } from "../../src/hash.ts";
 
 let testDir: string;
 let testFile: string;
@@ -49,8 +49,8 @@ test("streamingEdit should handle overlapping checksum ranges", async () => {
     testFile,
     ops,
     [
-      { startLine: 1, endLine: 3, hash: acc1.toString(16).padStart(8, "0") },
-      { startLine: 2, endLine: 4, hash: acc2.toString(16).padStart(8, "0") },
+      { startLine: 1, endLine: 3, hash: checksumToLetters(acc1) },
+      { startLine: 2, endLine: 4, hash: checksumToLetters(acc2) },
     ],
     mtimeMs,
     false,

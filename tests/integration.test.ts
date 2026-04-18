@@ -4,13 +4,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead } from "../src/tools/read.ts";
 import { handleEdit } from "../src/tools/edit.ts";
-import { resetRefStore } from "./helpers.ts";
 
 let testDir: string;
 let testFile: string;
 
 beforeEach(() => {
-  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-integration-")));
   testFile = join(testDir, "app.ts");
   writeFileSync(testFile, 'function greet(name: string) {\n  return "Hello, " + name;\n}\n');
@@ -31,7 +29,7 @@ describe("read → diff → edit roundtrip", () => {
     const readText = readResult.content[0].text;
 
     // Extract ref from read result
-    const refMatch = readText.match(/ref:(\S+)/m);
+    const refMatch = readText.match(/ref: (\S+)/m);
     expect(refMatch).not.toBeNull();
     const ref = refMatch![1];
 

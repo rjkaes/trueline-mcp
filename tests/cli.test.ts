@@ -27,13 +27,13 @@ describe("parseArgs", () => {
   });
 
   test("edit with edits JSON and dry-run", () => {
-    const edits = JSON.stringify([{ checksum: "1-5:abcdef01", range: "1:ab-5:cd", content: "hello" }]);
+    const edits = JSON.stringify([{ checksum: "1-5:abcdef", range: "1:ab-5:cd", content: "hello" }]);
     const result = parseArgs(["edit", "src/foo.ts", "--edits", edits, "--dry-run"]);
     expect(result).toEqual({
       command: "edit",
       params: {
         file_path: "src/foo.ts",
-        edits: [{ checksum: "1-5:abcdef01", range: "1:ab-5:cd", content: "hello" }],
+        edits: [{ checksum: "1-5:abcdef", range: "1:ab-5:cd", content: "hello" }],
         dry_run: true,
       },
     });

@@ -2,10 +2,9 @@ import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:tes
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { handleReadMulti, clearReadCache } from "../../src/tools/read.ts";
+import { handleReadMulti } from "../../src/tools/read.ts";
 import { handleOutline, clearOutlineCache } from "../../src/tools/outline.ts";
 import { handleSearch } from "../../src/tools/search.ts";
-import { resetRefStore } from "../helpers.ts";
 
 let testDir: string;
 
@@ -23,9 +22,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  clearReadCache();
   clearOutlineCache();
-  resetRefStore();
 });
 
 afterAll(() => {
@@ -185,7 +182,7 @@ describe("search glob expansion", () => {
       projectDir: testDir,
     });
     const text = getText(result);
-    expect(text).toMatch(/ref:R\d+/);
+    expect(text).toMatch(/ref: \S+/);
   });
 });
 
@@ -223,8 +220,6 @@ describe("gitignore-aware globs", () => {
     // Clear the git file list cache between tests
     const { clearGitFilesCache } = require("../../src/tools/shared.ts");
     clearGitFilesCache();
-    clearReadCache();
-    resetRefStore();
   });
 
   afterAll(() => {

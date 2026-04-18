@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync, readFileSync } from "
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { streamingEdit } from "../../src/streaming-edit.ts";
-import { FNV_OFFSET_BASIS, foldHash, fnv1aHashBytes } from "../../src/hash.ts";
+import { FNV_OFFSET_BASIS, foldHash, fnv1aHashBytes, checksumToLetters } from "../../src/hash.ts";
 
 let testDir: string;
 let testFile: string;
@@ -52,7 +52,7 @@ test("streamingEdit should preserve original EOL in a no-op replace when other c
   const result = await streamingEdit(
     testFile,
     ops,
-    [{ startLine: 1, endLine: 2, hash: acc.toString(16).padStart(8, "0") }],
+    [{ startLine: 1, endLine: 2, hash: checksumToLetters(acc) }],
     mtimeMs,
     false,
   );

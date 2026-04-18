@@ -5,8 +5,7 @@
  * engine per file, and formats unified output with per-line hashes,
  * checksums, and refs ready for immediate editing.
  */
-import { hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
-import { issueRef } from "../ref-store.ts";
+import { checksumToLetters, hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
 import { displayPath, expandGlobs, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 import { searchLineByLine } from "./search-line.ts";
@@ -223,22 +222,25 @@ function formatResults(
     for (let i = 0; i < result.matches.length; i++) {
       const match = result.matches[i];
       let checksumHash = FNV_OFFSET_BASIS;
+      let firstLetters = "";
+      let lastLetters = "";
 
       if (!multiFile && i > 0) parts.push("");
 
       for (const line of match.lines) {
         const letters = hashToLetters(line.hash);
         checksumHash = foldHash(checksumHash, line.hash);
+        if (!firstLetters) firstLetters = letters;
+        lastLetters = letters;
 
         const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
         if (line.isMatch && marker !== "") matchesEmitted++;
         parts.push(`${letters}.${line.lineNumber}\t${line.text}${marker}`);
       }
 
-      const hex = checksumHash.toString(16).padStart(8, "0");
-      const refId = issueRef(result.resolvedPath, match.firstLine, match.lastLine, hex);
+      const ck = checksumToLetters(checksumHash);
       parts.push("");
-      parts.push(`ref:${refId}`);
+      parts.push(`ref: ${firstLetters}.${match.firstLine}-${lastLetters}.${match.lastLine}:${ck}`);
     }
   }
 

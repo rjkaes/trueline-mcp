@@ -26,6 +26,7 @@ import { dirname, resolve } from "node:path";
 import {
   EMPTY_FILE_CHECKSUM,
   FNV_OFFSET_BASIS,
+  checksumToLetters,
   fnv1aHashBytes,
   foldHash,
   formatChecksum,
@@ -56,7 +57,16 @@ export interface StreamEditOp {
 // ==============================================================================
 
 type StreamingEditResult =
-  | { ok: true; newChecksum: string; newLineCount: number; newHash: string; changed: boolean; tmpPath?: string }
+  | {
+      ok: true;
+      newChecksum: string;
+      newLineCount: number;
+      newHash: string;
+      newStartLetters: string;
+      newEndLetters: string;
+      changed: boolean;
+      tmpPath?: string;
+    }
   | { ok: false; error: string };
 
 function buffersEqual(a: Buffer[], b: Buffer[]): boolean {
@@ -179,6 +189,8 @@ export async function streamingEdit(
   let lastEolBytes: Buffer = EMPTY_BUF; // EOL of the last source line seen
   let outputLineCount = 0;
   let outputChecksumAcc = FNV_OFFSET_BASIS; // full-file checksum of output
+  let outputFirstLineHash = 0;
+  let outputLastLineHash = 0;
 
   // Track which replace op we're currently inside (skipping source lines)
   let activeReplace: StreamEditOp | null = null;
@@ -200,6 +212,8 @@ export async function streamingEdit(
     pendingWrite = buf;
     pendingEol = eol ?? detectedEol;
     const lineH = precomputedHash ?? fnv1aHashBytes(buf, 0, buf.length);
+    if (outputLineCount === 0) outputFirstLineHash = lineH;
+    outputLastLineHash = lineH;
     outputChecksumAcc = foldHash(outputChecksumAcc, lineH);
     outputLineCount++;
   }
@@ -270,8 +284,8 @@ export async function streamingEdit(
     return outputLineCount > 0 ? formatChecksum(1, outputLineCount, outputChecksumAcc) : EMPTY_FILE_CHECKSUM;
   }
 
-  function outputHashHex(): string {
-    return outputChecksumAcc.toString(16).padStart(8, "0");
+  function outputHashLetters(): string {
+    return checksumToLetters(outputChecksumAcc);
   }
 
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
@@ -495,7 +509,7 @@ export async function streamingEdit(
     }
 
     const expected = ref.hash;
-    const actual = acc.hash.toString(16).padStart(8, "0");
+    const actual = checksumToLetters(acc.hash);
     if (actual !== expected) {
       await cleanupTmp();
 
@@ -545,7 +559,9 @@ export async function streamingEdit(
       ok: true,
       newChecksum: outputChecksumStr(),
       newLineCount: outputLineCount,
-      newHash: outputHashHex(),
+      newHash: outputHashLetters(),
+      newStartLetters: hashToLetters(outputFirstLineHash),
+      newEndLetters: hashToLetters(outputLastLineHash),
       changed: false,
     };
   }
@@ -586,7 +602,9 @@ export async function streamingEdit(
     ok: true,
     newChecksum: outputChecksumStr(),
     newLineCount: outputLineCount,
-    newHash: outputHashHex(),
+    newHash: outputHashLetters(),
+    newStartLetters: hashToLetters(outputFirstLineHash),
+    newEndLetters: hashToLetters(outputLastLineHash),
     changed: true,
     ...(dryRun ? { tmpPath } : {}),
   };

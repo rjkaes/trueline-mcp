@@ -1,8 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { statSync } from "node:fs";
 import { resolve, sep } from "node:path";
-import { type ChecksumRef, parseRange } from "../parse.ts";
-import { refToChecksumRef, resolveRef } from "../ref-store.ts";
+import { type ChecksumRef, parseRange, parseInlineRef } from "../parse.ts";
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
 
@@ -199,28 +198,13 @@ export function validateEdits(edits: EditInput[], resolvedPath?: string): Valida
   const warnings: string[] = [];
 
   for (const edit of edits) {
-    let refEntry: ReturnType<typeof resolveRef>;
+    let checksumRef: ChecksumRef;
     try {
-      refEntry = resolveRef(edit.ref);
+      checksumRef = parseInlineRef(edit.ref);
     } catch (err) {
       return { ok: false, error: errorResult((err as Error).message) };
     }
-    const checksumRef = refToChecksumRef(refEntry);
     checksumRefMap.set(edit.ref, checksumRef);
-
-    // Cross-file check: ensure the ref was issued for the file being edited.
-    // Without this, an LLM could accidentally use a ref from file A to edit file B.
-    if (resolvedPath && refEntry.filePath !== resolvedPath && !sameFile(refEntry.filePath, resolvedPath)) {
-      return {
-        ok: false,
-        error: errorResult(
-          `Ref ${edit.ref} was issued for a different file (${refEntry.filePath}), ` +
-            `not the file being edited (${resolvedPath}). ` +
-            `Use a ref from trueline_read or trueline_search on the target file.`,
-        ),
-      };
-    }
-
     let rangeRef: ReturnType<typeof parseRange>;
     try {
       rangeRef = parseRange(edit.range);

@@ -20,7 +20,6 @@ import { detectBOM } from "../encoding.ts";
 import { streamingEdit } from "../streaming-edit.ts";
 import { fnv1aHash, fnv1aHashBytes, hashToLetters } from "../hash.ts";
 import { splitLines } from "../line-splitter.ts";
-import { adjustRefsAfterEdit, getRefsForFile, issueRef, type EditRegion } from "../ref-store.ts";
 import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
@@ -125,26 +124,13 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     }
   }
 
-  // Adjust surviving refs: invalidate those overlapping edits, shift those after.
-  const regions: EditRegion[] = built.ops.map((op) => ({
-    startLine: op.startLine,
-    endLine: op.endLine,
-    insertAfter: op.insertAfter,
-    newLineCount: op.content.length,
-  }));
-  adjustRefsAfterEdit(resolvedPath, regions);
   const newRef =
     result.newLineCount > 0
-      ? issueRef(resolvedPath, 1, result.newLineCount, result.newHash)
-      : issueRef(resolvedPath, 0, 0, "00000000");
+      ? `${result.newStartLetters}.1-${result.newEndLetters}.${result.newLineCount}:${result.newHash}`
+      : "0-0:aaaaaa";
 
   const summary = editSummary(built.ops);
   const warn = built.warnings.length > 0 ? `\n\n${built.warnings.join("\n")}` : "";
-
-  // Generate context around edit sites. Auto-provide context for batched edits
-  // (2+ edits) when context_lines is omitted -- the LLM is likely to need refs
-  // for follow-up edits, and 2 lines of context (~180 tokens) is far cheaper
-  // than a re-read (~1,000+ tokens).
   let contextBlock = "";
   const effectiveContextLines = context_lines ?? (built.ops.length >= 2 ? 2 : 0);
   if (effectiveContextLines > 0 && result.newLineCount > 0) {
@@ -152,26 +138,14 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     if (ctx) contextBlock = `\n\n${ctx}`;
   }
 
-  // Nudge toward trueline_verify when other refs exist for the edited file.
-  // After an edit, shifted/overlapping refs are adjusted or invalidated, but
-  // the LLM doesn't know which survived. A short hint costs ~15 tokens and
-  // saves a ~300-token re-search.
-  let verifyHint = "";
-  const otherRefs = getRefsForFile(resolvedPath, newRef);
-  if (otherRefs.length > 0) {
-    const refList = otherRefs.slice(0, 5).join(", ");
-    const more = otherRefs.length > 5 ? ` +${otherRefs.length - 5} more` : "";
-    verifyHint = `\n(${refList}${more} may be stale — trueline_verify to check)`;
-  }
-
   if (!result.changed) {
     return textResult(
-      `Edit produced no changes — file not written.\n\n${summary}\nref:${newRef}${verifyHint}${warn}${contextBlock}`,
+      `Edit produced no changes — file not written.\n\n${summary}\nref: ${newRef}${warn}${contextBlock}`,
     );
   }
 
   return textResult(
-    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref:${newRef}${verifyHint}${warn}${contextBlock}`,
+    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref: ${newRef}${warn}${contextBlock}`,
   );
 }
 

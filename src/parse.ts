@@ -126,14 +126,13 @@ export interface ChecksumRef {
 }
 
 /**
- * Parse a checksum string from trueline_read.
+ * Parse a checksum string from trueline_read or trueline_search.
  *
- * Accepts both the legacy decimal format ("9-10:abcdef01") and the new
- * hash.line format ("aj.9-na.10:abcdef01") as well as mixed and single-line
- * forms. Strips a "checksum: " label prefix and trims whitespace so the
- * caller can paste output verbatim without pre-processing.
+ * Accepts both the decimal format ("9-10:abcdef") and the hash.line
+ * format ("aj.9-na.10:abcdef") as well as mixed and single-line forms.
+ * Strips a "checksum: " or "ref: " label prefix and trims whitespace.
  *
- * The special sentinel "0-0:00000000" represents an empty file.
+ * The special sentinel "0-0:aaaaaa" represents an empty file.
  * Throws on invalid format.
  */
 export function parseChecksum(checksum: string): ChecksumRef {
@@ -141,20 +140,24 @@ export function parseChecksum(checksum: string): ChecksumRef {
   let raw = checksum.trim();
   if (raw.startsWith("checksum:")) {
     raw = raw.slice("checksum:".length).trimStart();
+  } else if (raw.startsWith("ref:")) {
+    raw = raw.slice("ref:".length).trimStart();
   }
 
   // Step 2: Split on the last ":" to separate the range part from the hex hash.
   // We use lastIndexOf so that dots/letters in hash.line refs don't interfere.
   const colonIdx = raw.lastIndexOf(":");
   if (colonIdx === -1) {
-    throw new Error(`Invalid checksum "${checksum}" — expected format "startLine-endLine:hex", e.g. "9-10:ab12cd34"`);
+    throw new Error(
+      `Invalid checksum "${checksum}" — expected format "startLine-endLine:letters", e.g. "aj.9-na.10:abcdef"`,
+    );
   }
 
   const rangePart = raw.slice(0, colonIdx);
   const hash = raw.slice(colonIdx + 1);
 
-  if (!/^[0-9a-f]{8}$/.test(hash)) {
-    throw new Error(`Invalid checksum "${checksum}" — hash must be 8 hex chars, got "${hash}"`);
+  if (!/^[a-z]{6}$/.test(hash)) {
+    throw new Error(`Invalid checksum "${checksum}" — hash must be 6 lowercase letters, got "${hash}"`);
   }
 
   // Step 3: Find the dash separating start from end. The first "-" that is
@@ -186,12 +189,17 @@ export function parseChecksum(checksum: string): ChecksumRef {
   if (startLine > endLine) {
     throw new Error(`Invalid checksum "${checksum}" — start ${startLine} must be ≤ end ${endLine}`);
   }
-  if (startLine === 0 && endLine === 0 && hash !== "00000000") {
-    throw new Error(`Invalid checksum "${checksum}" — empty-file sentinel must have hash 00000000`);
+  if (startLine === 0 && endLine === 0 && hash !== "aaaaaa") {
+    throw new Error(`Invalid checksum "${checksum}" — empty-file sentinel must have hash aaaaaa`);
   }
 
   const result: ChecksumRef = { startLine, endLine, hash };
   return result;
+}
+
+/** Parse an inline ref string as emitted by trueline_read/trueline_search. Delegates to parseChecksum. */
+export function parseInlineRef(ref: string): ChecksumRef {
+  return parseChecksum(ref);
 }
 
 /**

@@ -4,19 +4,16 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
-import { lineHash, rangeChecksum, issueTestRef, resetRefStore } from "../helpers.ts";
-import { issueRef } from "../../src/ref-store.ts";
+import { lineHash, rangeChecksum, issueTestRef } from "../helpers.ts";
 
 let testDir: string;
 
 beforeEach(() => {
-  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-edit-edge-")));
 });
 
 afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
-  resetRefStore();
 });
 
 // Convenience: write a file, compute ref over all lines
@@ -26,7 +23,7 @@ function setupFile(name: string, content: string) {
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   // Remove trailing empty element if content ends with newline
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : issueRef(f, 0, 0, "00000000");
+  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0:aaaaaa";
   return { path: f, lines, ref };
 }
 
@@ -179,7 +176,7 @@ describe("empty file operations", () => {
 
   test("empty-file checksum against non-empty file fails", async () => {
     const { path } = setupFile("not-empty.txt", "content\n");
-    const emptyRef = issueRef(path, 0, 0, "00000000");
+    const emptyRef = "0-0:aaaaaa";
 
     const result = await handleEdit({
       file_path: path,
@@ -498,7 +495,7 @@ describe("checksum validation", () => {
     // Fabricate a ref claiming to cover lines 1-10 with the correct hash for lines 1-2
     const cs = rangeChecksum(lines, 1, 2);
     const hashHex = cs.slice(cs.indexOf(":") + 1);
-    const fakeRef = issueRef(path, 1, 10, hashHex);
+    const fakeRef = `${lineHash(lines[0])}.1-${lineHash(lines[0])}.10:${hashHex}`;
 
     const result = await handleEdit({
       file_path: path,
@@ -657,7 +654,7 @@ describe("read-then-edit round-trip", () => {
     const text = readResult.content[0].text;
 
     // Extract ref
-    const refMatch = text.match(/ref:(R\d+)/);
+    const refMatch = text.match(/ref: (\S+)/);
     expect(refMatch).toBeTruthy();
     const ref = refMatch![1];
 
@@ -697,7 +694,7 @@ describe("read-then-edit round-trip", () => {
     expect(readResult.isError).toBeUndefined();
     const text = readResult.content[0].text;
 
-    const refMatch = text.match(/ref:(R\d+)/);
+    const refMatch = text.match(/ref: (\S+)/);
     const ref = refMatch![1];
     const lineMatch = text.match(/^([a-z]{2})\.3\t/m);
     const lh = lineMatch![1];
@@ -738,7 +735,7 @@ describe("read-then-edit round-trip", () => {
     expect(edit1.isError).toBeUndefined();
 
     // Extract the new ref from the edit output
-    const refMatch = edit1.content[0].text.match(/ref:(R\d+)/);
+    const refMatch = edit1.content[0].text.match(/ref: (\S+)/);
     expect(refMatch).toBeTruthy();
     const _newRef = refMatch![1];
     const lineMatch2 = (await handleRead({ file_path: f, projectDir: testDir })).content[0].text.match(
@@ -748,7 +745,7 @@ describe("read-then-edit round-trip", () => {
 
     // Second edit using new ref from re-read
     const readResult = await handleRead({ file_path: f, projectDir: testDir });
-    const readRef = readResult.content[0].text.match(/ref:(R\d+)/)![1];
+    const readRef = readResult.content[0].text.match(/ref: (\S+)/)![1];
 
     const edit2 = await handleEdit({
       file_path: f,

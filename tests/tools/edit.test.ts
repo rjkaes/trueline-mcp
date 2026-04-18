@@ -4,15 +4,13 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { handleEdit } from "../../src/tools/edit.ts";
-import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, resetRefStore, getText } from "../helpers.ts";
-import { issueRef } from "../../src/ref-store.ts";
+import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, getText } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
 
 // Fresh file before each test
 beforeEach(() => {
-  resetRefStore();
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-edit-test-")));
   testFile = join(testDir, "target.ts");
   writeFileSync(testFile, "line 1\nline 2\nline 3\nline 4\n");
@@ -20,7 +18,6 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
-  resetRefStore();
 });
 
 describe("handleEdit", () => {
@@ -251,7 +248,7 @@ describe("handleEdit", () => {
   });
 
   test("rejects directory path", async () => {
-    const staleRef = issueRef(testDir, 1, 1, "00000000");
+    const staleRef = "aa.1-aa.1:aaaaaa";
     const result = await handleEdit({
       file_path: testDir,
       edits: [{ ref: staleRef, range: "aa.1-aa.1", content: "x" }],
@@ -264,7 +261,7 @@ describe("handleEdit", () => {
   test("rejects binary files", async () => {
     const binFile = join(testDir, "binary.bin");
     writeFileSync(binFile, Buffer.from([0x00, 0x01, 0x02, 0x03]));
-    const staleRef = issueRef(binFile, 1, 1, "00000000");
+    const staleRef = "aa.1-aa.1:aaaaaa";
     const result = await handleEdit({
       file_path: binFile,
       edits: [{ ref: staleRef, range: "aa.1-aa.1", content: "x" }],
@@ -275,7 +272,7 @@ describe("handleEdit", () => {
   });
 
   test("rejects nonexistent projectDir", async () => {
-    const staleRef = issueRef(testFile, 1, 1, "00000000");
+    const staleRef = "aa.1-aa.1:aaaaaa";
     const result = await handleEdit({
       file_path: testFile,
       edits: [{ ref: staleRef, range: "aa.1-aa.1", content: "x" }],
@@ -347,7 +344,7 @@ describe("handleEdit", () => {
     const emptyFile = join(testDir, "empty.ts");
     writeFileSync(emptyFile, "");
 
-    const emptyRef = issueRef(emptyFile, 0, 0, "00000000");
+    const emptyRef = "0-0:aaaaaa";
 
     const result = await handleEdit({
       file_path: emptyFile,

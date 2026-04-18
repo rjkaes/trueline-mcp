@@ -169,7 +169,8 @@ const editSchema = z.object({
     .array(
       z.object({
         ref: z.string({
-          required_error: 'Missing "ref" — copy the ref ID (e.g. "R1") from trueline_read or trueline_search output.',
+          required_error:
+            'Missing "ref" — copy the inline ref (e.g. "ab.1-cd.50:efghij") from trueline_read or trueline_search output.',
         }),
         range: z.string(),
         content: z.string(),
@@ -214,6 +215,7 @@ const searchSchema = z.object({
 });
 
 const verifySchema = z.object({
+  file_path: z.string(),
   refs: z.array(z.string()),
 });
 
@@ -265,7 +267,7 @@ const editJsonSchema = {
           ref: {
             type: "string",
             description:
-              'Required. Copy the ref ID (e.g. "R1") from trueline_read/trueline_search output. A ref from a wide read works for editing any sub-range within it.',
+              'Required. Copy the ref from trueline_read/trueline_search output (e.g. "ab.1-cd.50:efghij"). A ref from a wide read works for editing any sub-range within it.',
           },
           range: {
             type: "string",
@@ -384,13 +386,17 @@ const searchJsonSchema = {
 const verifyJsonSchema = {
   type: "object",
   properties: {
+    file_path: {
+      type: "string",
+      description: "Path to the file whose refs should be verified.",
+    },
     refs: {
       type: "array",
       items: { type: "string" },
-      description: 'Ref IDs from a prior trueline_read/trueline_search, e.g. ["R1", "R2"].',
+      description: 'Inline ref strings from a prior trueline_read/trueline_search, e.g. ["ab.1-cd.50:efghij"].',
     },
   },
-  required: ["refs"],
+  required: ["file_path", "refs"],
 };
 
 // =============================================================================
@@ -411,7 +417,7 @@ registerTool(
 registerTool(
   "trueline_edit",
   "Apply hash-verified edits to a file. Edits go in the edits array. " +
-    'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", ref: "R1", content: "new text"}]}. ' +
+    'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", ref: "ab.10-cd.20:efghij", content: "new text"}]}. ' +
     "Copy the ref from trueline_read/trueline_search output. The 2-letter hash prefix on each line number is required in ranges. " +
     'Use action: "insert_after" to insert content after a line instead of replacing it. ' +
     "Set context_lines to get hash.line context around edit sites for chaining edits without re-searching.",
@@ -471,8 +477,9 @@ registerTool(
 
 registerTool(
   "trueline_verify",
-  "Check if held refs are still valid. Returns which are valid or stale. " +
-    "Cheaper than re-reading \u2014 use before editing when the file may have changed.",
+  "Check if inline refs are still valid against the current file content. Returns valid or stale per ref. " +
+    "Pass file_path and the refs[] array from a prior trueline_read/trueline_search. " +
+    "Cheaper than re-reading — use before editing when the file may have changed.",
   verifyJsonSchema,
   safeTool(async (rawParams) => {
     const params = verifySchema.parse(coerceParams(rawParams));
