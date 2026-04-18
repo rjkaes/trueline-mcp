@@ -5,7 +5,12 @@
 export const FNV_OFFSET_BASIS = 2166136261;
 export const FNV_PRIME = 16777619;
 
-/** Sentinel checksum representing an empty file (zero lines). */
+/**
+ * Sentinel checksum representing an empty file (zero lines).
+ * The `0-0` range is what disambiguates this from a non-empty range that
+ * happens to fold to checksum 0 (which also encodes to `aaaaaa`); never
+ * match on the letter suffix alone.
+ */
 export const EMPTY_FILE_CHECKSUM = "0-0:aaaaaa";
 
 /**

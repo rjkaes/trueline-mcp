@@ -154,7 +154,7 @@ export function parseChecksum(checksum: string): ChecksumRef {
   }
 
   const rangePart = raw.slice(0, colonIdx);
-  const hash = raw.slice(colonIdx + 1);
+  const hash = raw.slice(colonIdx + 1).toLowerCase();
 
   if (!/^[a-z]{6}$/.test(hash)) {
     throw new Error(`Invalid checksum "${checksum}" — hash must be 6 lowercase letters, got "${hash}"`);
@@ -232,7 +232,7 @@ function extractLineNumber(
   const dotIdx = ref.indexOf(".");
   if (dotIdx !== -1) {
     // hash.line format: "aj.9"
-    const hashPrefix = ref.slice(0, dotIdx);
+    const hashPrefix = ref.slice(0, dotIdx).toLowerCase();
     const lineStr = ref.slice(dotIdx + 1);
     if (!/^[a-z]{2}$/.test(hashPrefix)) {
       throw new Error(

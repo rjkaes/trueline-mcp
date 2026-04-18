@@ -557,10 +557,11 @@ Because FNV-1a is sequential, the order of lines matters — swapping
 two lines produces a different checksum even if the set of line hashes
 is the same.
 
-The result is formatted as `startLine-endLine:8hex`
-(e.g. `1-50:f7e2a1b0`). The 8 hex digits are the full 32-bit
-accumulator, giving much stronger collision resistance than the
-2-letter per-line tags.
+The result is formatted as `startLine-endLine:letters`
+(e.g. `1-50:efghij`). The 6 lowercase letters are a base-26 encoding
+of the 32-bit accumulator (26^6 ≈ 308M values), giving much stronger
+collision resistance than the 2-letter per-line tags while staying
+compact to copy.
 
 ### Three layers of edit protection
 
