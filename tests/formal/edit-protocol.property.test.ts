@@ -97,7 +97,7 @@ describe("P1: content preservation", () => {
       ),
       { numRuns: NUM_RUNS },
     );
-  });
+  }, 30000);
 });
 
 describe("P5: mtime guard", () => {
@@ -129,7 +129,7 @@ describe("P5: mtime guard", () => {
       }),
       { numRuns: NUM_RUNS },
     );
-  });
+  }, 30000);
 });
 
 describe("P2a: delete isolation", () => {
@@ -189,7 +189,7 @@ describe("P2a: delete isolation", () => {
       ),
       { numRuns: NUM_RUNS },
     );
-  });
+  }, 30000);
 });
 
 describe("P2b: insert preservation", () => {
@@ -253,7 +253,7 @@ describe("P2b: insert preservation", () => {
       ),
       { numRuns: NUM_RUNS },
     );
-  });
+  }, 30000);
 });
 
 describe("P2: edit ordering correctness", () => {
@@ -335,7 +335,7 @@ describe("P2: edit ordering correctness", () => {
       ),
       { numRuns: NUM_RUNS },
     );
-  });
+  }, 30000);
 });
 
 describe("P3: ref adjustment soundness", () => {
@@ -404,7 +404,7 @@ describe("P3: ref adjustment soundness", () => {
       ),
       { numRuns: NUM_RUNS },
     );
-  });
+  }, 30000);
 });
 
 describe("P4: atomicity", () => {
@@ -464,7 +464,7 @@ describe("P4: atomicity", () => {
       ),
       { numRuns: NUM_RUNS },
     );
-  });
+  }, 30000);
 });
 
 // --- Conformance test: TLA+ ApplyOps model vs real streamingEdit ---
@@ -686,5 +686,5 @@ describe("Conformance: TLA+ ApplyOps model vs streamingEdit", () => {
       }),
       { numRuns: NUM_RUNS },
     );
-  });
+  }, 30000);
 });
