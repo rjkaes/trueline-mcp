@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/rjkaes-trueline-mcp-badge.png)](https://mseep.ai/app/rjkaes-trueline-mcp)
+
 # trueline-mcp
 
 [![CI](https://github.com/rjkaes/trueline-mcp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rjkaes/trueline-mcp/actions/workflows/ci.yml)
