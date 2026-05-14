@@ -228,3 +228,26 @@ describe("parseFilePathWithRanges", () => {
     expect(result.rangeSpecs).toBeUndefined();
   });
 });
+
+describe("leading zeros in line numbers", () => {
+  test("parseChecksum accepts zero-padded hash.line format", () => {
+    // trueline_read now zero-pads line numbers; the parser must accept them.
+    const result = parseChecksum("ab.0010-cd.0100:abcdef");
+    expect(result.startLine).toBe(10);
+    expect(result.endLine).toBe(100);
+    expect(result.hash).toBe("abcdef");
+  });
+
+  test("parseChecksum accepts leading zeros in decimal format", () => {
+    const result = parseChecksum("0009-0010:abcdef");
+    expect(result.startLine).toBe(9);
+    expect(result.endLine).toBe(10);
+    expect(result.hash).toBe("abcdef");
+  });
+
+  test("parseRange accepts zero-padded line number", () => {
+    const result = parseRange("ab.0010-cd.0020");
+    expect(result.start.line).toBe(10);
+    expect(result.end.line).toBe(20);
+  });
+});

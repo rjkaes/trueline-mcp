@@ -383,7 +383,7 @@ describe("long lines", () => {
     const contentLines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(contentLines).toHaveLength(1000);
     // Verify line numbering at boundaries
-    expect(contentLines[0]).toMatch(/^[a-z]{2}\.1\t/);
+    expect(contentLines[0]).toMatch(/^[a-z]{2}\.0001\t/);
     expect(contentLines[999]).toMatch(/^[a-z]{2}\.1000\t/);
   });
 });

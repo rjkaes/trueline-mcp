@@ -107,12 +107,12 @@ describe("handleRead", () => {
 
     // Should contain lines 3-5 and 15-17 but not lines 6-14
     // Expanded: 3-5 → 2-6, 15-17 → 14-18
-    expect(text).toMatch(/^[a-z]{2}\.2\t/m);
-    expect(text).toMatch(/^[a-z]{2}\.6\t/m);
+    expect(text).toMatch(/^[a-z]{2}\.02\t/m);
+    expect(text).toMatch(/^[a-z]{2}\.06\t/m);
     expect(text).toMatch(/^[a-z]{2}\.14\t/m);
     expect(text).toMatch(/^[a-z]{2}\.18\t/m);
     // Lines 7-13 should NOT be present (gap between expanded ranges)
-    expect(text).not.toMatch(/^[a-z]{2}\.7\t/m);
+    expect(text).not.toMatch(/^[a-z]{2}\.07\t/m);
     expect(text).not.toMatch(/^[a-z]{2}\.13\t/m);
   });
 

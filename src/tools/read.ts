@@ -90,6 +90,15 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   let totalLines = 0;
   let outputLines = 0;
   let truncated = false;
+  // Tracks the highest line number actually pushed to events; used after the
+  // loop to compute the zero-padding width independently of range resets.
+  let maxLineEmitted = 0;
+
+  // Collect line entries during the streaming pass so we can zero-pad line
+  // numbers to a uniform width after we know the maximum line emitted.
+  type LineEntry = { letters: string; lineNumber: number; lineBytes: Buffer };
+  type RefEntry = { kind: "ref"; text: string };
+  const events: Array<LineEntry | RefEntry> = [];
 
   // Resolve encoding before streaming — transcodedLines peeks at the BOM.
   const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
@@ -111,9 +120,9 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       if (lineNumber > currentRange.end) {
         const ck = checksumToLetters(rangeChecksumHash);
         const refLine = `\nref: ${rangeFirstLetters}.${rangeFirstLine}-${rangeLastLetters}.${rangeLastLine}:${ck}\n`;
-        const cb = Buffer.from(refLine);
-        outputChunks.push(cb);
-        outputLen += cb.length;
+        events.push({ kind: "ref", text: refLine });
+        // account for the ref line bytes in the output length estimate
+        outputLen += Buffer.byteLength(refLine);
 
         rangeIdx++;
         rangeChecksumHash = FNV_OFFSET_BASIS;
@@ -135,8 +144,9 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
         rangeFirstLine = lineNumber;
         rangeFirstLetters = letters;
       }
-      const prefix = Buffer.from(`${letters}.${lineNumber}\t`);
-      const lineLen = prefix.length + lineBytes.length + 1;
+      // Estimate line length using unpadded width for output limit checks;
+      // actual prefix is assembled after the loop with zero-padded width.
+      const lineLen = 2 + 1 + String(lineNumber).length + 1 + lineBytes.length + 1;
 
       // Check output limits before committing this line
       outputLines++;
@@ -148,7 +158,8 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       rangeLastLine = lineNumber;
       rangeLastLetters = letters;
       rangeChecksumHash = foldHash(rangeChecksumHash, h);
-      outputChunks.push(prefix, lineBytes, LF_BUF);
+      events.push({ letters, lineNumber, lineBytes });
+      if (lineNumber > maxLineEmitted) maxLineEmitted = lineNumber;
       outputLen += lineLen;
     }
   } catch (err: unknown) {
@@ -164,6 +175,24 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   // Check if first range's start is out of range
   if (rangeFirstLine === 0 && ranges[0].start > totalLines) {
     return errorResult(`start_line ${ranges[0].start} out of range (file has ${totalLines} lines)`);
+  }
+
+  // Now that we know the highest line number emitted, compute the zero-padding
+  // width so every line's number occupies the same number of characters.
+  // Width 1 when nothing was emitted (edge case: truncated before first line).
+  const lineNumWidth = maxLineEmitted > 0 ? String(maxLineEmitted).length : 1;
+
+  // Assemble events into outputChunks: line entries get zero-padded prefixes,
+  // ref events are emitted as-is.
+  for (const ev of events) {
+    if ("kind" in ev) {
+      const cb = Buffer.from(ev.text);
+      outputChunks.push(cb);
+    } else {
+      const paddedNum = String(ev.lineNumber).padStart(lineNumWidth, "0");
+      const prefix = Buffer.from(`${ev.letters}.${paddedNum}\t`);
+      outputChunks.push(prefix, ev.lineBytes, LF_BUF);
+    }
   }
 
   // Emit inline ref for the last range (only if we output any lines in it)
@@ -203,7 +232,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   // UTF-16 content has been transcoded to UTF-8; always decode output as UTF-8.
   const outputEnc = bomInfo.encoding === "utf-8" ? enc : "utf-8";
-  return textResult(Buffer.concat(outputChunks, outputLen).toString(outputEnc));
+  return textResult(Buffer.concat(outputChunks).toString(outputEnc));
 }
 
 export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResult> {
