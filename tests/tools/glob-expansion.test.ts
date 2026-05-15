@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleReadMulti } from "../../src/tools/read.ts";
-import { handleOutline, clearOutlineCache } from "../../src/tools/outline.ts";
+import { handleOutline } from "../../src/tools/outline.ts";
 import { handleSearch } from "../../src/tools/search.ts";
 
 let testDir: string;
@@ -19,10 +19,6 @@ beforeAll(() => {
   writeFileSync(join(testDir, "src", "gamma.js"), "function gamma() {}\n");
   writeFileSync(join(testDir, "lib", "delta.ts"), "export function delta(): void {}\n");
   writeFileSync(join(testDir, "config.json"), '{"key": "value"}\n');
-});
-
-beforeEach(() => {
-  clearOutlineCache();
 });
 
 afterAll(() => {

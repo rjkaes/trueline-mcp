@@ -28,29 +28,6 @@ const XML_EXTENSIONS = new Set([
   ".xaml",
 ]);
 
-interface OutlineCacheEntry {
-  mtimeMs: number;
-  depth: number | undefined;
-  text: string;
-}
-
-const MAX_OUTLINE_CACHE = 500;
-const outlineCache = new Map<string, OutlineCacheEntry>();
-
-export function clearOutlineCache(): void {
-  outlineCache.clear();
-}
-
-function evictOutlineCacheIfNeeded(): void {
-  if (outlineCache.size < MAX_OUTLINE_CACHE) return;
-  const oldest = outlineCache.keys().next().value!;
-  outlineCache.delete(oldest);
-}
-
-function cacheOutline(resolvedPath: string, mtimeMs: number, depth: number | undefined, text: string): void {
-  evictOutlineCacheIfNeeded();
-  outlineCache.set(resolvedPath, { mtimeMs, depth, text });
-}
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
 interface OutlineParams {
@@ -106,14 +83,7 @@ async function outlineOneFile(
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
-  const { resolvedPath, mtimeMs } = validated;
-
-  // Cache check: same file, same mtime, same depth → return compact stub
-  const cached = outlineCache.get(resolvedPath);
-  if (cached && cached.mtimeMs === mtimeMs && cached.depth === depth) {
-    return textResult(`(outline unchanged)`);
-  }
-
+  const { resolvedPath } = validated;
   const ext = extname(resolvedPath).toLowerCase();
 
   // Streaming extractors (no tree-sitter, no full-file load)
@@ -124,7 +94,6 @@ async function outlineOneFile(
         return textResult(`(no outline entries found in ${totalLines}-line file)`);
       }
       const text = formatOutline(entries, totalLines);
-      cacheOutline(resolvedPath, mtimeMs, depth, text);
       return textResult(text);
     } catch (err: unknown) {
       return errorResult(`Markdown outline extraction failed: ${(err as Error).message}`);
@@ -138,7 +107,6 @@ async function outlineOneFile(
         return textResult(`(no outline entries found in ${totalLines}-line file)`);
       }
       const text = formatOutline(entries, totalLines);
-      cacheOutline(resolvedPath, mtimeMs, depth, text);
       return textResult(text);
     } catch (err: unknown) {
       return errorResult(`XML outline extraction failed: ${(err as Error).message}`);
@@ -170,7 +138,6 @@ async function outlineOneFile(
       return textResult(`(no outline entries found in ${totalLines}-line file)`);
     }
     const text = formatOutline(entries, totalLines);
-    cacheOutline(resolvedPath, mtimeMs, depth, text);
     return textResult(text);
   } catch (err: unknown) {
     return errorResult(`Outline extraction failed: ${(err as Error).message}`);
