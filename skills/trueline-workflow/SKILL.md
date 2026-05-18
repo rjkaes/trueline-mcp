@@ -7,6 +7,23 @@ description: Use when editing, reading, searching, or exploring files with truel
 
 Trueline MCP tools replace built-in `Read`/`Edit`/`Grep` with hash-verified, streaming, ref-based equivalents. Catches hallucinated edits, cuts tokens. Use in right order.
 
+## CLI vs MCP
+
+The same six tools are also available as a standalone `trueline` shell binary (at `bin/trueline` in the repo), useful for shell scripts, CI pipelines, and git hooks where no MCP-aware agent is running. The same hash-verification guarantees apply.
+
+```sh
+trueline outline <paths...>
+trueline read <paths...> [--ranges 10-20]
+trueline search <pattern> <paths...> [-i] [-r] [--multiline] [-C N]
+trueline edit <path> --edits @file|-|<flat flags>
+trueline verify <path> --refs ...
+trueline changes [paths...]   # alias: diff
+```
+
+Every subcommand accepts `--help`/`-h`. Pass `--json` on any subcommand for `{ok, result}` machine-readable output. Exit codes: `0` ok, `1` search no match, `2` tool error, `3` usage error.
+
+Use MCP tools (this skill) for in-agent file work. Use the CLI for anything outside an agent context.
+
 ## Tool cheat sheet
 
 | Tool | Use when | Why |
