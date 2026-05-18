@@ -24,7 +24,7 @@
   "bin": {
     "trueline-mcp": "./bin/trueline-mcp.js",
     "trueline-hook": "./bin/trueline-hook.js",
-    "trueline": "./bin/trueline.js"
+    "trueline": "./bin/trueline"
   },
   "files": [
     "dist/",
@@ -42,13 +42,14 @@
     "dev": "bun run src/server.ts",
     "build": "bun build src/server.ts --target=node --minify --outfile dist/server.js && bun build src/cli.ts --target=node --minify --outfile dist/cli.js",
     "prepublishOnly": "bun run build",
-    "typecheck": "bun x tsc --noEmit",
+    "typecheck": "bun x tsc --noEmit && bun x tsc --noEmit --project tsconfig.test.json",
     "test": "bun test",
     "lint": "bunx biome ci .",
     "lint:fix": "bunx biome check --write .",
     "benchmark": "bun run benchmarks/perf-benchmark.ts"
   },
   "dependencies": {
+    "citty": "^0.2",
     "tree-sitter-wasms": "0.1.13",
     "web-tree-sitter": "0.24.7",
     "zod": "^3.25.0"

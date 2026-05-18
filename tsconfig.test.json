@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist-test",
+    "declaration": false
+  },
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": [
+    "node_modules",
+    "build",
+    "bin",
+    "hooks",
+    "tests/hooks",
+    "tests/logical_bugs.test.ts",
+    "tests/tools/edit_no_op_eol.test.ts",
+    "tests/tools/edit-edge-cases.test.ts",
+    "tests/tools/edit-protocol-edge-cases.test.ts"
+  ]
+}

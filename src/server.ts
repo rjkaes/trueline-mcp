@@ -1,6 +1,4 @@
-import { mkdir, realpath } from "node:fs/promises";
-import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { realpath } from "node:fs/promises";
 import { z } from "zod";
 import pkg from "../package.json";
 import type { ToolResult } from "./tools/types.ts";
@@ -13,6 +11,7 @@ import { handleSearch } from "./tools/search.ts";
 import { handleVerify } from "./tools/verify.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
 import { coerceParams } from "./coerce.ts";
+import { resolveAllowedDirs } from "./allowed-dirs.ts";
 
 // =============================================================================
 // JSON-RPC types
@@ -124,29 +123,6 @@ const INVALID_PARAMS = -32602;
 
 const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
 const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
-
-async function resolveAllowedDirs(): Promise<string[]> {
-  const dirs: string[] = [];
-
-  // ~/.claude/ — only relevant for Claude Code
-  if (process.env.CLAUDE_CODE_ENTRYPOINT) {
-    const claudeDir = join(homedir(), ".claude");
-    await mkdir(claudeDir, { recursive: true }).catch(() => {});
-    const realClaudeDir = await realpath(claudeDir).catch(() => null);
-    if (realClaudeDir) dirs.push(realClaudeDir);
-  }
-
-  // TRUELINE_ALLOWED_DIRS — platform-delimited additional paths
-  const extra = process.env.TRUELINE_ALLOWED_DIRS;
-  if (extra) {
-    for (const raw of extra.split(delimiter).filter(Boolean)) {
-      const resolved = await realpath(raw).catch(() => null);
-      if (resolved) dirs.push(resolved);
-    }
-  }
-
-  return dirs;
-}
 
 const allowedDirs = await resolveAllowedDirs();
 
