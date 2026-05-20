@@ -68,9 +68,9 @@ Nothing changed → edit straight away. Stale → re-read just that range. Never
 `trueline_search` output:
 
 ```
-→ab.10	old line one
-cd.11	old line two
-ref:R1
+→ab10	old line one
+cd11	old line two
+ref: ab10-cd11/efghij
 ```
 
 Replace both:
@@ -78,23 +78,23 @@ Replace both:
 ```
 trueline_edit(
   file_path=…,
-  edits=[{ range: "ab.10-cd.11", ref: "R1", content: "new line one\nnew line two" }]
+  edits=[{ range: "ab10-cd11", ref: "ab10-cd11/efghij", content: "new line one\nnew line two" }]
 )
 ```
 
-- `range` uses `hash.line` identifiers **verbatim** from output.
-- `ref` is short token (`R1`) — copy verbatim, never guess.
+- `range` uses `hashLine` identifiers **verbatim** from output.
+- `ref` is the full range checksum (e.g. `ab10-cd11/efghij`) — copy verbatim, never guess.
 - Wide ref (e.g. lines 1-157) valid for any sub-range inside. Don't re-read narrower.
-- Lines prefixed with `→` are matches; lines without `→` are context. Both carry hash.line identifiers usable in `range`.
+- Lines prefixed with `→` are matches; lines without `→` are context. Both carry `hashLine` identifiers usable in `range`.
 
 ## Load-bearing rules
 
 Non-negotiable. Violations → verification errors or silent data loss.
 
-- **Never fabricate refs.** Copy `R1`/`R2`/… directly from output. Made-up ref fails verification.
-- **Hash prefixes (`ab.10`) required.** Not decoration — verify content at that line.
+- **Never fabricate refs.** Copy the full ref (e.g. `ab10-cd11/efghij`) directly from output. Made-up ref fails verification.
+- **Hash prefixes (`ab10`) required.** Not decoration — verify content at that line.
 - **`action="insert_after"` to add lines.** Without it, range is *replaced* and content lost. To add next to existing lines, pass `action: "insert_after"`.
-- **Don't re-read data you have.** With ref and hash.line from prior search/read, go straight to `trueline_edit`.
+- **Don't re-read data you have.** With ref and `hashLine` from prior search/read, go straight to `trueline_edit`.
 
 ## Multi-file batches
 
