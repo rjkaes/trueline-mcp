@@ -37,7 +37,7 @@ export function isStdinTTY(): boolean {
  */
 export function readStdinSync(): string {
   // Node/Bun: fd 0 is stdin; readFileSync on fd 0 reads until EOF.
-  return readFileSync("/dev/stdin", "utf-8");
+  return readFileSync(0, "utf-8");
 }
 
 // ---------------------------------------------------------------------------
