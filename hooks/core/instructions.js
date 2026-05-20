@@ -84,6 +84,9 @@ export function getInstructions(platform = "claude-code") {
   <workflow>trueline_verify \u2192 trueline_read (re-read only stale ranges) \u2192 trueline_edit</workflow>
   <workflow>trueline_changes \u2192 review structural changes vs git state</workflow>${deferredHint}
 
+  <error_recovery>
+    <rule>If trueline_read fails with "H.reduce is not a function" (Claude Code client bug on MCP responses over ~25KB), fall back to Bash: run "trueline read FILE" or "trueline read FILE:START-END" for a range. The CLI bypasses the MCP transport and prints the same hashLine output and refs to stdout — refs from CLI output are valid in subsequent trueline_edit MCP calls.</rule>
+  </error_recovery>
   <tips>
     <tip>If you already have hashLine identifiers and a ref from a prior trueline_read or trueline_search, go straight to trueline_edit. Do not re-read or re-search for data you already have. A wide ref (e.g. covering lines 1-50) works for editing any sub-range within it.</tip>
     <tip>When you need to search-then-edit across multiple files, ${p.grepAdvice}, then pass all file_paths to a single trueline_search call to get refs for all of them at once.</tip>${atRefTip}
