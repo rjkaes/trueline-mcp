@@ -353,17 +353,17 @@ describe("trueline_edit — UTF-16 LE round-trip", () => {
     expect(refMatch).toBeTruthy();
     const ref = refMatch![1];
 
-    // Extract hash.line for "beta" (line 2)
+    // Extract hashLine for "beta" (line 2)
     const betaLine = readText.split("\n").find((l) => l.includes("beta"));
     expect(betaLine).toBeDefined();
-    const hashDotLine = betaLine!.split("\t")[0]; // e.g., "ab.2"
+    const hashLine = betaLine!.split("\t")[0]; // e.g., "ab2"
 
     // Edit: replace "beta" with "BETA"
     const editResult = await handleEdit({
       file_path: p,
       edits: [
         {
-          range: `${hashDotLine}-${hashDotLine}`,
+          range: `${hashLine}-${hashLine}`,
           content: "BETA",
           ref,
         },
@@ -405,14 +405,14 @@ describe("trueline_edit — UTF-8 BOM round-trip", () => {
     const ref = refMatch![1];
 
     const worldLine = readText.split("\n").find((l) => l.includes("world"));
-    const hashDotLine = worldLine!.split("\t")[0];
+    const hashLine = worldLine!.split("\t")[0];
 
     // Edit: replace "world" with "universe"
     const editResult = await handleEdit({
       file_path: p,
       edits: [
         {
-          range: `${hashDotLine}-${hashDotLine}`,
+          range: `${hashLine}-${hashLine}`,
           content: "universe",
           ref,
         },
@@ -453,13 +453,13 @@ describe("trueline_edit — UTF-16 BE round-trip", () => {
     const ref = refMatch![1];
 
     const twoLine = readText.split("\n").find((l) => l.includes("\ttwo"));
-    const hashDotLine = twoLine!.split("\t")[0];
+    const hashLine = twoLine!.split("\t")[0];
 
     const editResult = await handleEdit({
       file_path: p,
       edits: [
         {
-          range: `${hashDotLine}-${hashDotLine}`,
+          range: `${hashLine}-${hashLine}`,
           content: "TWO",
           ref,
         },

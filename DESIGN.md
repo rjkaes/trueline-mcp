@@ -40,17 +40,17 @@ character.
 For example, reading a three-line file:
 
 ```
-ab.1	#!/usr/bin/env node
-mp.2	import { readFile } from "fs/promises";
-qk.3	console.log("hello");
+ab1	#!/usr/bin/env node
+mp2	import { readFile } from "fs/promises";
+qk3	console.log("hello");
 
-ref: ab.1-qk.3:efghij
+ref: ab1-qk3/efghij
 ```
 
 The **hash** is two characters from a 26-symbol alphabet (`a-z`) derived from the line's content via FNV-1a (a fast, non-cryptographic hash). Two characters give 676 possible values — enough to catch accidental mismatches, not enough to be a security mechanism.
 
 The **ref** is a stateless inline checksum appended to each range of
-lines returned, in the form `ab.startLine-cd.endLine:efghij`. The
+lines returned, in the form `abStartLine-cdEndLine/efghij`. The
 six-letter suffix is a base-26 encoding of the 32-bit FNV-1a checksum
 over those lines. The agent copies the ref verbatim into `trueline_edit`;
 it never needs to construct or interpret the checksum.
@@ -119,8 +119,8 @@ an empty file without special-casing.
 trueline_edit({
   file_path: "src/main.ts",
   edits: [{
-    ref: "ab.1-qk.14:efghij",
-    range: "mp.12-qk.14",
+    ref: "ab1-qk14/efghij",
+    range: "mp12-qk14",
     content: "  const x = 1;\n  const y = 2;",
   }]
 })
@@ -128,16 +128,16 @@ trueline_edit({
 
 Each edit specifies:
 
-- **`range`** — which lines to replace, as `hash.startLine-hash.endLine`.
-  A single-line shorthand `mp.12` is equivalent to `mp.12-mp.12`.
-  Prefix `+` for insert-after: `+ab.5` inserts content after line 5.
+- **`range`** — which lines to replace, as `hashStartLine-hashEndLine`.
+  A single-line shorthand `mp12` is equivalent to `mp12-mp12`.
+  Prefix `+` for insert-after: `+ab5` inserts content after line 5.
   Use `+0` to prepend to the file.
 - **`content`** — the replacement lines as a single newline-separated
   string. The resulting lines can be fewer or more than the range
   (shrinking or growing the file). An empty string deletes the range.
 
 Each edit carries a **`ref`** — an inline checksum string (e.g.
-`"ab.1-cd.50:efghij"`) copied from a prior `trueline_read` or
+`"ab1-cd50/efghij"`) copied from a prior `trueline_read` or
 `trueline_search` output. The server decodes the embedded checksum
 and verifies it against the lines in the range before applying the
 edit. A wide ref covering a larger range is valid for editing any
@@ -424,7 +424,7 @@ prefix, same refs — so the agent can pass results directly to
 ```
 trueline_verify({
   file_path: "src/main.ts",
-  refs: ["ab.1-cd.50:efghij", "mp.80-qk.100:stuvwx"],
+  refs: ["ab1-cd50/efghij", "mp80-qk100/stuvwx"],
 })
 ```
 
@@ -442,7 +442,7 @@ attempting an edit.
 Refs are stateless inline strings embedded in tool output. The format is:
 
 ```
-ab.startLine-cd.endLine:efghij
+abStartLine-cdEndLine/efghij
 ```
 
 - `ab` / `cd` — the 2-letter hash prefix of the first and last line in the range
@@ -459,7 +459,7 @@ ref for a given range. No server-side state is required.
 
 ### Empty file
 
-An empty file has no lines to hash. Its ref is the sentinel `0-0:aaaaaa`,
+An empty file has no lines to hash. Its ref is the sentinel `0-0/aaaaaa`,
 where `aaaaaa` is `checksumToLetters(0)`.
 
 ## Security model
@@ -557,8 +557,8 @@ Because FNV-1a is sequential, the order of lines matters — swapping
 two lines produces a different checksum even if the set of line hashes
 is the same.
 
-The result is formatted as `startLine-endLine:letters`
-(e.g. `1-50:efghij`). The 6 lowercase letters are a base-26 encoding
+The result is formatted as `startLine-endLine/letters`
+(e.g. `1-50/efghij`). The 6 lowercase letters are a base-26 encoding
 of the 32-bit accumulator (26^6 ≈ 308M values), giving much stronger
 collision resistance than the 2-letter per-line tags while staying
 compact to copy.

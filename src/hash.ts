@@ -113,7 +113,7 @@ export function checksumToLetters(h: number): string {
   return result;
 }
 
-/** Format a checksum as `"<start>-<end>:<6letters>"`, optionally with hash letters. */
+/** Format a checksum as `"<start>-<end>/<6letters>"`, optionally with hash letters. */
 export function formatChecksum(
   startLine: number,
   endLine: number,
@@ -123,9 +123,9 @@ export function formatChecksum(
 ): string {
   const ck = checksumToLetters(hash);
   if (startLetters && endLetters) {
-    return `${startLetters}.${startLine}-${endLetters}.${endLine}:${ck}`;
+    return `${startLetters}${startLine}-${endLetters}${endLine}/${ck}`;
   }
-  return `${startLine}-${endLine}:${ck}`;
+  return `${startLine}-${endLine}/${ck}`;
 }
 
 /**

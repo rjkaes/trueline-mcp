@@ -292,7 +292,7 @@ export async function streamingEdit(
     if (expected === BARE_LINE_HASH) {
       return (
         `wrong hash prefix for line ${lineNumber}. ` +
-        `Re-read the file to get current hash.line references before retrying.`
+        `Re-read the file to get current hashLine references before retrying.`
       );
     }
     return (

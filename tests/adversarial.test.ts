@@ -47,7 +47,7 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref,
-          range: `${lineHash(longLine)}.1`,
+          range: `${lineHash(longLine)}1`,
           content: "shortened",
         },
       ],
@@ -97,7 +97,7 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref,
-          range: `${h}.1`,
+          range: `${h}1`,
           content: "changed",
         },
       ],
@@ -119,7 +119,7 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref,
-          range: `${h}.1`,
+          range: `${h}1`,
           content: "fixed",
         },
       ],
@@ -141,7 +141,7 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("3")}.3`,
+          range: `${lineHash("3")}3`,
           content: "THREE",
         },
       ],
@@ -161,12 +161,12 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("2")}.2-${lineHash("3")}.3`,
+          range: `${lineHash("2")}2-${lineHash("3")}3`,
           content: "TWO-THREE",
         },
         {
           ref,
-          range: `+${lineHash("3")}.3`,
+          range: `+${lineHash("3")}3`,
           content: "inserted",
         },
       ],
@@ -185,12 +185,12 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("1")}.1-${lineHash("3")}.3`,
+          range: `${lineHash("1")}1-${lineHash("3")}3`,
           content: "REPLACED",
         },
         {
           ref,
-          range: `+${lineHash("2")}.2`,
+          range: `+${lineHash("2")}2`,
           content: "IA",
         },
       ],
@@ -247,12 +247,12 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref: ref1,
-          range: `${lineHash("3")}.3`,
+          range: `${lineHash("3")}3`,
           content: "THREE-1",
         },
         {
           ref: ref2,
-          range: `${lineHash("4")}.4`,
+          range: `${lineHash("4")}4`,
           content: "FOUR-2",
         },
       ],
@@ -412,7 +412,7 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref,
-          range: `+${lineHash("line2")}.2`,
+          range: `+${lineHash("line2")}2`,
           content: "line3",
         },
       ],
@@ -433,7 +433,7 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("line2")}.2`,
+          range: `${lineHash("line2")}2`,
           content: "replaced",
         },
       ],
@@ -489,8 +489,8 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     // Should show the whole file with hashes (2 letters + . + number)
-    expect(text).toMatch(/[a-z]{2}\.1\t1/);
-    expect(text).toMatch(/[a-z]{2}\.7\t7/);
+    expect(text).toMatch(/[a-z]{2}1\t1/);
+    expect(text).toMatch(/[a-z]{2}7\t7/);
   });
 
   test("splitLines handles \\r at chunk boundary", async () => {
@@ -556,7 +556,7 @@ describe("Adversarial Tests", () => {
 
     const refMatch = text.match(/ref: (\S+)/);
     const readRef = refMatch![1];
-    const lhMatch = text.match(/^([a-z]{2})\.1\t/m);
+    const lhMatch = text.match(/^([a-z]{2})1\t/m);
     const lh = lhMatch![1];
 
     const editResult = await handleEdit({
@@ -565,7 +565,7 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref: readRef,
-          range: `${lh}.1`,
+          range: `${lh}1`,
           content: "aé-modified",
         },
       ],
@@ -631,8 +631,8 @@ describe("Adversarial Tests", () => {
     const result = await handleEdit({
       file_path: path,
       edits: [
-        { ref, range: `+${lineHash("line1")}.1`, content: "ins1" },
-        { ref, range: `+${lineHash("line1")}.1`, content: "ins2" },
+        { ref, range: `+${lineHash("line1")}1`, content: "ins1" },
+        { ref, range: `+${lineHash("line1")}1`, content: "ins2" },
       ],
       projectDir: testDir,
     });
@@ -678,7 +678,7 @@ describe("Adversarial Tests", () => {
       edits: [
         {
           ref,
-          range: `+${lineHash("line2")}.2`,
+          range: `+${lineHash("line2")}2`,
           content: "line3",
         },
       ],

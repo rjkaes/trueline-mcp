@@ -110,7 +110,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       // Past current range — close it, advance
       if (lineNumber > currentRange.end) {
         const ck = checksumToLetters(rangeChecksumHash);
-        const refLine = `\nref: ${rangeFirstLetters}.${rangeFirstLine}-${rangeLastLetters}.${rangeLastLine}:${ck}\n`;
+        const refLine = `\nref: ${rangeFirstLetters}${rangeFirstLine}-${rangeLastLetters}${rangeLastLine}/${ck}\n`;
         const cb = Buffer.from(refLine);
         outputChunks.push(cb);
         outputLen += cb.length;
@@ -135,7 +135,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
         rangeFirstLine = lineNumber;
         rangeFirstLetters = letters;
       }
-      const prefix = Buffer.from(`${letters}.${lineNumber}\t`);
+      const prefix = Buffer.from(`${letters}${lineNumber}\t`);
       const lineLen = prefix.length + lineBytes.length + 1;
 
       // Check output limits before committing this line
@@ -158,7 +158,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   // Empty file
   if (totalLines === 0 && !truncated) {
-    return textResult("(empty file)\n\nref: 0-0:aaaaaa");
+    return textResult("(empty file)\n\nref: 0-0/aaaaaa");
   }
 
   // Check if first range's start is out of range
@@ -169,7 +169,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   // Emit inline ref for the last range (only if we output any lines in it)
   if (rangeFirstLine > 0 && rangeLastLine > 0) {
     const ck = checksumToLetters(rangeChecksumHash);
-    const refLine = `\nref: ${rangeFirstLetters}.${rangeFirstLine}-${rangeLastLetters}.${rangeLastLine}:${ck}`;
+    const refLine = `\nref: ${rangeFirstLetters}${rangeFirstLine}-${rangeLastLetters}${rangeLastLine}/${ck}`;
     const cb = Buffer.from(refLine);
     outputChunks.push(cb);
     outputLen += cb.length;

@@ -25,7 +25,7 @@ function setupFile(name: string, content: string) {
   writeFileSync(f, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0:aaaaaa";
+  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0/aaaaaa";
   return { path: f, lines, ref };
 }
 
@@ -44,7 +44,7 @@ describe("range format parsing", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}2`, content: "BBB" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -57,7 +57,7 @@ describe("range format parsing", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2-${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}2-${h2}2`, content: "BBB" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -80,7 +80,7 @@ describe("range format parsing", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: "aa.abc-bb.2", content: "x" }],
+      edits: [{ ref, range: "aa.abc-bb2", content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -93,7 +93,7 @@ describe("range format parsing", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h3}.3-${h1}.1`, content: "x" }],
+      edits: [{ ref, range: `${h3}3-${h1}1`, content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -104,7 +104,7 @@ describe("range format parsing", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: "aa.0-aa.0", content: "x" }],
+      edits: [{ ref, range: "aa0-aa0", content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -128,7 +128,7 @@ describe("range format parsing", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h}.99-${h}.99`, content: "x" }],
+      edits: [{ ref, range: `${h}99-${h}99`, content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -146,7 +146,7 @@ describe("insert-after (+) semantics", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `+${h2}.2`, content: "ccc" }],
+      edits: [{ ref, range: `+${h2}2`, content: "ccc" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -160,8 +160,8 @@ describe("insert-after (+) semantics", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `+${h1}.1`, content: "first" },
-        { ref, range: `+${h1}.1`, content: "second" },
+        { ref, range: `+${h1}1`, content: "first" },
+        { ref, range: `+${h1}1`, content: "second" },
       ],
     });
 
@@ -177,8 +177,8 @@ describe("insert-after (+) semantics", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `${h2}.2`, content: "BBB" },
-        { ref, range: `+${h2}.2`, content: "inserted" },
+        { ref, range: `${h2}2`, content: "BBB" },
+        { ref, range: `+${h2}2`, content: "inserted" },
       ],
     });
 
@@ -194,7 +194,7 @@ describe("insert-after (+) semantics", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `+${h1}.1`, content: "x\ny\nz" }],
+      edits: [{ ref, range: `+${h1}1`, content: "x\ny\nz" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -204,7 +204,7 @@ describe("insert-after (+) semantics", () => {
   test("insert into empty file via +0:", async () => {
     const f = join(testDir, "empty.txt");
     writeFileSync(f, "");
-    const emptyRef = "0-0:aaaaaa";
+    const emptyRef = "0-0/aaaaaa";
 
     const result = await edit({
       file_path: f,
@@ -231,8 +231,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `${h1}.1`, content: "AAA" },
-        { ref, range: `${h3}.3`, content: "CCC" },
+        { ref, range: `${h1}1`, content: "AAA" },
+        { ref, range: `${h3}3`, content: "CCC" },
       ],
     });
 
@@ -249,8 +249,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `${h3}.3`, content: "CCC" },
-        { ref, range: `${h1}.1`, content: "AAA" },
+        { ref, range: `${h3}3`, content: "CCC" },
+        { ref, range: `${h1}1`, content: "AAA" },
       ],
     });
 
@@ -266,8 +266,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `${h1}.1`, content: "AAA" },
-        { ref, range: `+${h3}.3`, content: "ddd" },
+        { ref, range: `${h1}1`, content: "AAA" },
+        { ref, range: `+${h3}3`, content: "ddd" },
       ],
     });
 
@@ -284,8 +284,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `${h1}.1-${h2}.2`, content: "X" },
-        { ref, range: `${h2}.2-${h3}.3`, content: "Y" },
+        { ref, range: `${h1}1-${h2}2`, content: "X" },
+        { ref, range: `${h2}2-${h3}3`, content: "Y" },
       ],
     });
 
@@ -303,8 +303,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `${h1}.1-${h2}.2`, content: "AA\nBB" },
-        { ref, range: `${h3}.3-${h4}.4`, content: "CC\nDD" },
+        { ref, range: `${h1}1-${h2}2`, content: "AA\nBB" },
+        { ref, range: `${h3}3-${h4}4`, content: "CC\nDD" },
       ],
     });
 
@@ -339,7 +339,7 @@ describe("checksum coverage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref: narrowRef, range: `${h3}.3`, content: "CCC" }],
+      edits: [{ ref: narrowRef, range: `${h3}3`, content: "CCC" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -354,7 +354,7 @@ describe("checksum coverage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref: narrowRef, range: `${h5}.5`, content: "EEE" }],
+      edits: [{ ref: narrowRef, range: `${h5}5`, content: "EEE" }],
     });
 
     expect(result.isError).toBe(true);
@@ -369,7 +369,7 @@ describe("checksum coverage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref: narrowRef, range: `+${h2}.2`, content: "inserted" }],
+      edits: [{ ref: narrowRef, range: `+${h2}2`, content: "inserted" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -378,7 +378,7 @@ describe("checksum coverage", () => {
 
   test("empty-file sentinel rejected for non-empty file", async () => {
     const { path } = setupFile("notempty.txt", "aaa\n");
-    const emptyRef = "0-0:aaaaaa";
+    const emptyRef = "0-0/aaaaaa";
 
     const result = await edit({
       file_path: path,
@@ -400,7 +400,7 @@ describe("content growth and shrinkage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "x1\nx2\nx3\nx4\nx5" }],
+      edits: [{ ref, range: `${h2}2`, content: "x1\nx2\nx3\nx4\nx5" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -414,7 +414,7 @@ describe("content growth and shrinkage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2-${h4}.4`, content: "only" }],
+      edits: [{ ref, range: `${h2}2-${h4}4`, content: "only" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -428,7 +428,7 @@ describe("content growth and shrinkage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2-${h3}.3`, content: "" }],
+      edits: [{ ref, range: `${h2}2-${h3}3`, content: "" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -442,7 +442,7 @@ describe("content growth and shrinkage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h1}.1-${h2}.2`, content: "" }],
+      edits: [{ ref, range: `${h1}1-${h2}2`, content: "" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -455,7 +455,7 @@ describe("content growth and shrinkage", () => {
 
     const r1 = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "" }],
+      edits: [{ ref, range: `${h2}2`, content: "" }],
     });
     expect(r1.isError).toBeUndefined();
 
@@ -467,7 +467,7 @@ describe("content growth and shrinkage", () => {
     const h1 = lineHash("aaa");
     const r2 = await edit({
       file_path: path,
-      edits: [{ ref: newRef, range: `${h1}.1`, content: "AAA" }],
+      edits: [{ ref: newRef, range: `${h1}1`, content: "AAA" }],
     });
     expect(r2.isError).toBeUndefined();
     expect(readFileSync(path, "utf-8")).toBe("AAA\nccc\n");
@@ -485,7 +485,7 @@ describe("unicode and special content", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "🚀 launched" }],
+      edits: [{ ref, range: `${h2}2`, content: "🚀 launched" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -498,7 +498,7 @@ describe("unicode and special content", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "地球" }],
+      edits: [{ ref, range: `${h2}2`, content: "地球" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -513,7 +513,7 @@ describe("unicode and special content", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h1}.1`, content: "new:val|stuff" }],
+      edits: [{ ref, range: `${h1}1`, content: "new:val|stuff" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -528,8 +528,8 @@ describe("unicode and special content", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `${h1}.1`, content: "trimmed" },
-        { ref, range: `${h2}.2`, content: "also trimmed" },
+        { ref, range: `${h1}1`, content: "trimmed" },
+        { ref, range: `${h2}2`, content: "also trimmed" },
       ],
     });
 
@@ -543,7 +543,7 @@ describe("unicode and special content", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "\n" }],
+      edits: [{ ref, range: `${h2}2`, content: "\n" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -557,7 +557,7 @@ describe("unicode and special content", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "short" }],
+      edits: [{ ref, range: `${h2}2`, content: "short" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -576,7 +576,7 @@ describe("line ending edge cases", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}2`, content: "BBB" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -590,7 +590,7 @@ describe("line ending edge cases", () => {
 
     await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}2`, content: "BBB" }],
     });
 
     const written = readFileSync(path, "utf-8");
@@ -603,7 +603,7 @@ describe("line ending edge cases", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h1}.1`, content: "AAA" }],
+      edits: [{ ref, range: `${h1}1`, content: "AAA" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -618,7 +618,7 @@ describe("line ending edge cases", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h1}.1`, content: "AAA" }],
+      edits: [{ ref, range: `${h1}1`, content: "AAA" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -639,7 +639,7 @@ describe("no-op detection", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "bbb" }],
+      edits: [{ ref, range: `${h2}2`, content: "bbb" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -653,7 +653,7 @@ describe("no-op detection", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h1}.1-${h3}.3`, content: "aaa\nbbb\nccc" }],
+      edits: [{ ref, range: `${h1}1-${h3}3`, content: "aaa\nbbb\nccc" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -666,7 +666,7 @@ describe("no-op detection", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `+${h1}.1`, content: "inserted" }],
+      edits: [{ ref, range: `+${h1}1`, content: "inserted" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -685,7 +685,7 @@ describe("returned ref enables chaining", () => {
 
     const r1 = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}2`, content: "BBB" }],
     });
     expect(r1.isError).toBeUndefined();
 
@@ -696,7 +696,7 @@ describe("returned ref enables chaining", () => {
     const hBBB = lineHash("BBB");
     const r2 = await edit({
       file_path: path,
-      edits: [{ ref: newRef, range: `${hBBB}.2`, content: "FINAL" }],
+      edits: [{ ref: newRef, range: `${hBBB}2`, content: "FINAL" }],
     });
 
     expect(r2.isError).toBeUndefined();
@@ -709,14 +709,14 @@ describe("returned ref enables chaining", () => {
 
     await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${h2}2`, content: "BBB" }],
     });
 
     // Try using the old ref — it was invalidated after the edit
     const h3 = lineHash("ccc");
     const r2 = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h3}.3`, content: "CCC" }],
+      edits: [{ ref, range: `${h3}3`, content: "CCC" }],
     });
 
     expect(r2.isError).toBe(true);
@@ -747,7 +747,7 @@ describe("read-then-edit round-trip", () => {
     const hBeta = lineHash("beta");
     const editResult = await edit({
       file_path: f,
-      edits: [{ ref: refMatch![1], range: `${hBeta}.2`, content: "BETA" }],
+      edits: [{ ref: refMatch![1], range: `${hBeta}2`, content: "BETA" }],
     });
 
     expect(editResult.isError).toBeUndefined();
@@ -772,7 +772,7 @@ describe("read-then-edit round-trip", () => {
     const hCcc = lineHash("ccc");
     const editResult = await edit({
       file_path: f,
-      edits: [{ ref: refMatch![1], range: `${hCcc}.3`, content: "CCC" }],
+      edits: [{ ref: refMatch![1], range: `${hCcc}3`, content: "CCC" }],
     });
 
     expect(editResult.isError).toBeUndefined();
@@ -797,7 +797,7 @@ describe("stale checksum recovery hints", () => {
 
     const result = await edit({
       file_path: f,
-      edits: [{ ref, range: `${lineHash("bbb")}.2`, content: "BBB" }],
+      edits: [{ ref, range: `${lineHash("bbb")}2`, content: "BBB" }],
     });
 
     expect(result.isError).toBe(true);
@@ -817,7 +817,7 @@ describe("stale checksum recovery hints", () => {
 
     const result = await edit({
       file_path: f,
-      edits: [{ ref, range: `${lineHash("bbb")}.2`, content: "xxx" }],
+      edits: [{ ref, range: `${lineHash("bbb")}2`, content: "xxx" }],
     });
 
     expect(result.isError).toBe(true);
@@ -836,7 +836,7 @@ describe("boundary hash verification", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `zz.1-${lineHash("bbb")}.2`, content: "x\ny" }],
+      edits: [{ ref, range: `zz1-${lineHash("bbb")}2`, content: "x\ny" }],
     });
 
     expect(result.isError).toBe(true);
@@ -848,7 +848,7 @@ describe("boundary hash verification", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${lineHash("aaa")}.1-zz.2`, content: "x\ny" }],
+      edits: [{ ref, range: `${lineHash("aaa")}1-zz2`, content: "x\ny" }],
     });
 
     expect(result.isError).toBe(true);
@@ -862,7 +862,7 @@ describe("boundary hash verification", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h1}.1-${h4}.4`, content: "only one line" }],
+      edits: [{ ref, range: `${h1}1-${h4}4`, content: "only one line" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -884,7 +884,7 @@ describe("wrong hash prefix recovery", () => {
     expect(text).toContain("wrong hash prefix");
     expect(text).toContain("Re-read the file");
     // Must NOT reveal the correct hash
-    expect(text).not.toContain(`${lineHash("bbb")}.2`);
+    expect(text).not.toContain(`${lineHash("bbb")}2`);
   });
 
   test("bare line number in insert-after range tells LLM to re-read", async () => {
@@ -899,7 +899,7 @@ describe("wrong hash prefix recovery", () => {
     const text = result.content[0].text;
     expect(text).toContain("wrong hash prefix");
     expect(text).toContain("Re-read the file");
-    expect(text).not.toContain(`${lineHash("aaa")}.1`);
+    expect(text).not.toContain(`${lineHash("aaa")}1`);
   });
 
   test("bare line number in multi-line range tells LLM to re-read", async () => {
@@ -914,10 +914,10 @@ describe("wrong hash prefix recovery", () => {
     const text = result.content[0].text;
     expect(text).toContain("wrong hash prefix");
     expect(text).toContain("Re-read the file");
-    expect(text).not.toContain(`${lineHash("aaa")}.1`);
+    expect(text).not.toContain(`${lineHash("aaa")}1`);
   });
 
-  test("invalid hash format (e.g. 78.78) tells LLM to re-read", async () => {
+  test("invalid hash format tells LLM it must be a non-negative integer", async () => {
     const { path, ref } = setupFile("bad-fmt.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
@@ -927,11 +927,7 @@ describe("wrong hash prefix recovery", () => {
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    // "78" is not a valid 2-letter hash, so this hits the bare-line-number path
-    expect(text).toContain("wrong hash prefix");
-    expect(text).toContain("Re-read the file");
-    // Must NOT reveal the correct hash.line
-    expect(text).not.toContain(`${lineHash("bbb")}.2`);
+    expect(text).toContain("must be a non-negative integer");
   });
 });
 // =============================================================================
@@ -945,10 +941,10 @@ describe("security and file validation", () => {
     writeFileSync(outsideFile, "secret\n");
 
     try {
-      const staleRef = "aa.1-aa.1:aaaaaa";
+      const staleRef = "aa1-aa1/aaaaaa";
       const result = await edit({
         file_path: outsideFile,
-        edits: [{ ref: staleRef, range: "aa.1", content: "hacked" }],
+        edits: [{ ref: staleRef, range: "aa1", content: "hacked" }],
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("outside");
@@ -961,10 +957,10 @@ describe("security and file validation", () => {
     const binFile = join(testDir, "binary.dat");
     writeFileSync(binFile, Buffer.from([0x48, 0x65, 0x00, 0x6c, 0x6f]));
 
-    const staleRef = "aa.1-aa.1:aaaaaa";
+    const staleRef = "aa1-aa1/aaaaaa";
     const result = await edit({
       file_path: binFile,
-      edits: [{ ref: staleRef, range: "aa.1", content: "text" }],
+      edits: [{ ref: staleRef, range: "aa1", content: "text" }],
     });
 
     expect(result.isError).toBe(true);
@@ -972,20 +968,20 @@ describe("security and file validation", () => {
   });
 
   test("rejects directory path", async () => {
-    const staleRef = "aa.1-aa.1:aaaaaa";
+    const staleRef = "aa1-aa1/aaaaaa";
     const result = await edit({
       file_path: testDir,
-      edits: [{ ref: staleRef, range: "aa.1", content: "x" }],
+      edits: [{ ref: staleRef, range: "aa1", content: "x" }],
     });
 
     expect(result.isError).toBe(true);
   });
 
   test("rejects nonexistent file", async () => {
-    const staleRef = "aa.1-aa.1:aaaaaa";
+    const staleRef = "aa1-aa1/aaaaaa";
     const result = await edit({
       file_path: join(testDir, "does-not-exist.txt"),
-      edits: [{ ref: staleRef, range: "aa.1", content: "x" }],
+      edits: [{ ref: staleRef, range: "aa1", content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -1004,7 +1000,7 @@ describe("security and file validation", () => {
 
     const result = await edit({
       file_path: linkFile,
-      edits: [{ ref, range: `${h1}.1`, content: "AAA" }],
+      edits: [{ ref, range: `${h1}1`, content: "AAA" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -1019,10 +1015,10 @@ describe("security and file validation", () => {
     symlinkSync(outsideFile, linkFile);
 
     try {
-      const staleRef = "aa.1-aa.1:aaaaaa";
+      const staleRef = "aa1-aa1/aaaaaa";
       const result = await edit({
         file_path: linkFile,
-        edits: [{ ref: staleRef, range: "aa.1", content: "hacked" }],
+        edits: [{ ref: staleRef, range: "aa1", content: "hacked" }],
       });
       expect(result.isError).toBe(true);
     } finally {
@@ -1048,7 +1044,7 @@ describe("security and file validation", () => {
 
     const result = await edit({
       file_path: secretFile,
-      edits: [{ ref, range: `${h}.1`, content: "redacted" }],
+      edits: [{ ref, range: `${h}1`, content: "redacted" }],
     });
 
     expect(result.isError).toBe(true);
@@ -1075,7 +1071,7 @@ describe("large file edits", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref: narrowRef, range: `${h500}.500`, content: "REPLACED 500" }],
+      edits: [{ ref: narrowRef, range: `${h500}500`, content: "REPLACED 500" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -1096,9 +1092,9 @@ describe("large file edits", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `${lineHash("line 1")}.1`, content: "FIRST" },
-        { ref, range: `${lineHash("line 250")}.250`, content: "MIDDLE" },
-        { ref, range: `${lineHash("line 500")}.500`, content: "LAST" },
+        { ref, range: `${lineHash("line 1")}1`, content: "FIRST" },
+        { ref, range: `${lineHash("line 250")}250`, content: "MIDDLE" },
+        { ref, range: `${lineHash("line 500")}500`, content: "LAST" },
       ],
     });
 
@@ -1121,7 +1117,7 @@ describe("ref validation", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref: "NONEXISTENT", range: `${h}.1`, content: "x" }],
+      edits: [{ ref: "NONEXISTENT", range: `${h}1`, content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -1134,7 +1130,7 @@ describe("ref validation", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ ref: "not-a-ref", range: `${h}.1`, content: "x" }],
+      edits: [{ ref: "not-a-ref", range: `${h}1`, content: "x" }],
     });
 
     expect(result.isError).toBe(true);

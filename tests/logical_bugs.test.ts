@@ -38,12 +38,12 @@ describe("logical bugs and edge cases", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("line1")}.1`,
+          range: `${lineHash("line1")}1`,
           content: "LINE1",
         },
         {
           ref,
-          range: `${lineHash("line3")}.3`,
+          range: `${lineHash("line3")}3`,
           content: "line3",
         },
       ],
@@ -93,7 +93,7 @@ describe("logical bugs and edge cases", () => {
     const f = join(testDir, "empty-multi.txt");
     writeFileSync(f, "");
 
-    const ref = "0-0:aaaaaa";
+    const ref = "0-0/aaaaaa";
 
     await handleEdit({
       file_path: f,
@@ -125,7 +125,7 @@ describe("logical bugs and edge cases", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     expect(text).toContain("(truncated at 2000 line limit");
-    const lineCount = (text.match(/^[a-z]{2}\.\d+\t/gm) || []).length;
+    const lineCount = (text.match(/^[a-z]{2}\d+\t/gm) || []).length;
     expect(lineCount).toBe(2000);
   });
 
@@ -145,7 +145,7 @@ describe("logical bugs and edge cases", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("line4")}.4`,
+          range: `${lineHash("line4")}4`,
           content: "LINE4",
         },
       ],

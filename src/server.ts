@@ -248,7 +248,7 @@ const editJsonSchema = {
           range: {
             type: "string",
             description:
-              'Lines to replace in hash.line format copied from output: "ab.10-cd.20" (range), "ab.10" (single line), "+ab.10" (insert after). The 2-letter hash before each line number is required.',
+              'Lines to replace in hashLine format copied from output: "ab10-cd20" (range), "ab10" (single line), "+ab10" (insert after). The 2-letter hash before each line number is required.',
           },
           content: {
             type: "string",
@@ -276,7 +276,7 @@ const editJsonSchema = {
       type: "integer",
       minimum: 0,
       description:
-        "Lines of hash.line context to return around each edit site. 0 or omitted = no context. Use when you plan to make follow-up edits to the same file.",
+        "Lines of hashLine context to return around each edit site. 0 or omitted = no context. Use when you plan to make follow-up edits to the same file.",
     },
   },
   required: ["file_path", "edits"],
@@ -396,7 +396,7 @@ registerTool(
     'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", ref: "ab.10-cd.20:efghij", content: "new text"}]}. ' +
     "Copy the ref from trueline_read/trueline_search output. The 2-letter hash prefix on each line number is required in ranges. " +
     'Use action: "insert_after" to insert content after a line instead of replacing it. ' +
-    "Set context_lines to get hash.line context around edit sites for chaining edits without re-searching.",
+    "Set context_lines to get hashLine context around edit sites for chaining edits without re-searching.",
   editJsonSchema,
   safeTool(async (rawParams) => {
     const coerced = coerceParams(rawParams) as Record<string, unknown>;

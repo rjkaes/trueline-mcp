@@ -32,7 +32,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `${h2}.2-${h3}.3`,
+          range: `${h2}2-${h3}3`,
           content: "replaced 2\nreplaced 3",
         },
       ],
@@ -54,7 +54,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `+${h1}.1`,
+          range: `+${h1}1`,
           content: "inserted",
         },
       ],
@@ -76,7 +76,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `${h1}.1`,
+          range: `${h1}1`,
           action: "insert_after",
           content: "inserted",
         },
@@ -99,7 +99,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `+${h1}.1`,
+          range: `+${h1}1`,
           action: "replace",
           content: "replaced 1",
         },
@@ -123,7 +123,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `${h1}.1-${h2}.2`,
+          range: `${h1}1-${h2}2`,
           action: "insert_after",
           content: "inserted",
         },
@@ -142,7 +142,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref: staleRef,
-          range: "aa.1-aa.1",
+          range: "aa1-aa1",
           content: "nope",
         },
       ],
@@ -162,7 +162,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: "zz.1-zz.1",
+          range: "zz1-zz1",
           content: "nope",
         },
       ],
@@ -183,7 +183,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: crlfFile,
-      edits: [{ ref, range: `${h2}.2-${h2}.2`, content: "replaced" }],
+      edits: [{ ref, range: `${h2}2-${h2}2`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -204,7 +204,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: mixedFile,
-      edits: [{ ref, range: `${h2}.2-${h2}.2`, content: "replaced" }],
+      edits: [{ ref, range: `${h2}2-${h2}2`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -224,7 +224,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: mixedFile,
-      edits: [{ ref, range: `${h2}.2-${h2}.2`, content: "replaced" }],
+      edits: [{ ref, range: `${h2}2-${h2}2`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -240,7 +240,7 @@ describe("handleEdit", () => {
 
     await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2-${h2}.2`, content: "replaced" }],
+      edits: [{ ref, range: `${h2}2-${h2}2`, content: "replaced" }],
       projectDir: testDir,
     });
     const written = readFileSync(testFile, "utf-8");
@@ -248,10 +248,10 @@ describe("handleEdit", () => {
   });
 
   test("rejects directory path", async () => {
-    const staleRef = "aa.1-aa.1:aaaaaa";
+    const staleRef = "aa1-aa1/aaaaaa";
     const result = await handleEdit({
       file_path: testDir,
-      edits: [{ ref: staleRef, range: "aa.1-aa.1", content: "x" }],
+      edits: [{ ref: staleRef, range: "aa1-aa1", content: "x" }],
       projectDir: testDir,
     });
     expect(result.isError).toBe(true);
@@ -261,10 +261,10 @@ describe("handleEdit", () => {
   test("rejects binary files", async () => {
     const binFile = join(testDir, "binary.bin");
     writeFileSync(binFile, Buffer.from([0x00, 0x01, 0x02, 0x03]));
-    const staleRef = "aa.1-aa.1:aaaaaa";
+    const staleRef = "aa1-aa1/aaaaaa";
     const result = await handleEdit({
       file_path: binFile,
-      edits: [{ ref: staleRef, range: "aa.1-aa.1", content: "x" }],
+      edits: [{ ref: staleRef, range: "aa1-aa1", content: "x" }],
       projectDir: testDir,
     });
     expect(result.isError).toBe(true);
@@ -272,10 +272,10 @@ describe("handleEdit", () => {
   });
 
   test("rejects nonexistent projectDir", async () => {
-    const staleRef = "aa.1-aa.1:aaaaaa";
+    const staleRef = "aa1-aa1/aaaaaa";
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref: staleRef, range: "aa.1-aa.1", content: "x" }],
+      edits: [{ ref: staleRef, range: "aa1-aa1", content: "x" }],
       projectDir: "/nonexistent/does/not/exist",
     });
     expect(result.isError).toBe(true);
@@ -292,8 +292,8 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: testFile,
       edits: [
-        { ref, range: `${h1}.1-${h2}.2`, content: "A" },
-        { ref, range: `${h2}.2-${h2}.2`, content: "B" },
+        { ref, range: `${h1}1-${h2}2`, content: "A" },
+        { ref, range: `${h2}2-${h2}2`, content: "B" },
       ],
       projectDir: testDir,
     });
@@ -311,7 +311,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref: partialRef,
-          range: `${h4}.4-${h4}.4`,
+          range: `${h4}4-${h4}4`,
           content: "replaced",
         },
       ],
@@ -332,7 +332,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: noTrailingFile,
-      edits: [{ ref, range: `${h1}.1-${h1}.1`, content: "replaced" }],
+      edits: [{ ref, range: `${h1}1-${h1}1`, content: "replaced" }],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -344,7 +344,7 @@ describe("handleEdit", () => {
     const emptyFile = join(testDir, "empty.ts");
     writeFileSync(emptyFile, "");
 
-    const emptyRef = "0-0:aaaaaa";
+    const emptyRef = "0-0/aaaaaa";
 
     const result = await handleEdit({
       file_path: emptyFile,
@@ -376,7 +376,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "bbb", // same content
         },
       ],
@@ -405,7 +405,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "BBB",
         },
       ],
@@ -433,7 +433,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "xxx",
         },
       ],
@@ -464,7 +464,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: envFile,
-      edits: [{ ref, range: `${h}.1-${h}.1`, content: "hacked" }],
+      edits: [{ ref, range: `${h}1-${h}1`, content: "hacked" }],
       projectDir: testDir,
     });
 
@@ -489,7 +489,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `${h1}.1-${h1}.1`,
+          range: `${h1}1-${h1}1`,
           content: "résumé",
         },
       ],
@@ -513,7 +513,7 @@ describe("handleEdit", () => {
       const result = await handleEdit({
         file_path: testFile,
         dry_run: true,
-        edits: [{ ref, range: `${h2}.2-${h2}.2`, content: "CHANGED" }],
+        edits: [{ ref, range: `${h2}2-${h2}2`, content: "CHANGED" }],
         projectDir: testDir,
       });
 
@@ -537,7 +537,7 @@ describe("handleEdit", () => {
       const result = await handleEdit({
         file_path: testFile,
         dry_run: true,
-        edits: [{ ref, range: `${h2}.2-${h2}.2`, content: "line 2" }],
+        edits: [{ ref, range: `${h2}2-${h2}2`, content: "line 2" }],
         projectDir: testDir,
       });
 
@@ -549,7 +549,7 @@ describe("handleEdit", () => {
       const result = await handleEdit({
         file_path: testFile,
         dry_run: true,
-        edits: [{ ref: staleRef, range: "zz.1-zz.1", content: "nope" }],
+        edits: [{ ref: staleRef, range: "zz1-zz1", content: "nope" }],
         projectDir: testDir,
       });
 
@@ -569,7 +569,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2-${h3}.3`, content: "replaced 2\nreplaced 3" }],
+      edits: [{ ref, range: `${h2}2-${h3}3`, content: "replaced 2\nreplaced 3" }],
       projectDir: testDir,
     });
 
@@ -585,7 +585,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2`, content: "", action: "insert_after" }],
+      edits: [{ ref, range: `${h2}2`, content: "", action: "insert_after" }],
       projectDir: testDir,
     });
 
@@ -593,27 +593,27 @@ describe("handleEdit", () => {
     expect(result.content[0].text).toContain("insert_after with empty content");
   });
 
-  test("warns when content contains hash.line identifiers", async () => {
+  test("warns when content contains hashLine identifiers", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
     const ref = issueTestRef(testFile, lines, 1, 4);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2`, content: "zm.82" }],
+      edits: [{ ref, range: `${h2}2`, content: "zm82" }],
       projectDir: testDir,
     });
 
     // Edit succeeds but includes a warning
     expect(result.isError).toBeUndefined();
     expect(result.content[0].text).toContain("WARNING");
-    expect(result.content[0].text).toContain("hash.line identifiers");
+    expect(result.content[0].text).toContain("hashLine identifiers");
     // Content was actually written (not blocked)
     const written = readFileSync(testFile, "utf-8");
-    expect(written).toContain("zm.82");
+    expect(written).toContain("zm82");
   });
 
-  test("warns on multi-line content with embedded hash.line identifiers", async () => {
+  test("warns on multi-line content with embedded hashLine identifiers", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
     const ref = issueTestRef(testFile, lines, 1, 4);
     const h2 = lineHash("line 2");
@@ -621,48 +621,48 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2-${h3}.3`, content: "good line\nbc.80\nanother good line" }],
+      edits: [{ ref, range: `${h2}2-${h3}3`, content: "good line\nbc80\nanother good line" }],
       projectDir: testDir,
     });
 
-    // Edit succeeds but includes a warning about bc.80
+    // Edit succeeds but includes a warning about bc80
     expect(result.isError).toBeUndefined();
     expect(result.content[0].text).toContain("WARNING");
-    expect(result.content[0].text).toContain("bc.80");
+    expect(result.content[0].text).toContain("bc80");
   });
 
-  test("allows content that resembles hash.line but has additional text", async () => {
+  test("allows content that resembles hashLine but has additional text", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
     const ref = issueTestRef(testFile, lines, 1, 4);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2`, content: "ab.12 is a valid version string" }],
+      edits: [{ ref, range: `${h2}2`, content: "ab12 is a valid version string" }],
       projectDir: testDir,
     });
 
     expect(result.isError).toBeUndefined();
     const written = readFileSync(testFile, "utf-8");
-    expect(written).toContain("ab.12 is a valid version string");
+    expect(written).toContain("ab12 is a valid version string");
   });
 
-  test("context_lines returns hash.line context around edit", async () => {
+  test("context_lines returns hashLine context around edit", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
     const ref = issueTestRef(testFile, lines, 1, 4);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2`, content: "replaced 2" }],
+      edits: [{ ref, range: `${h2}2`, content: "replaced 2" }],
       context_lines: 2,
       projectDir: testDir,
     });
 
     const text = getText(result);
     expect(text).toContain("context near line 2:");
-    // Should have hash.line formatted lines
-    expect(text).toMatch(/^[a-z]{2}\.\d+\t/m);
+    // Should have hashLine formatted lines
+    expect(text).toMatch(/^[a-z]{2}\d+\t/m);
   });
 
   test("context_lines collapses large insertions", async () => {
@@ -673,7 +673,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2`, content: inserted, action: "insert_after" }],
+      edits: [{ ref, range: `${h2}2`, content: inserted, action: "insert_after" }],
       context_lines: 3,
       projectDir: testDir,
     });
@@ -691,7 +691,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2`, content: "replaced 2" }],
+      edits: [{ ref, range: `${h2}2`, content: "replaced 2" }],
       context_lines: 0,
       projectDir: testDir,
     });
@@ -709,8 +709,8 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: testFile,
       edits: [
-        { ref, range: `${h1}.1`, content: "replaced 1" },
-        { ref, range: `${h4}.4`, content: "replaced 4" },
+        { ref, range: `${h1}1`, content: "replaced 1" },
+        { ref, range: `${h4}4`, content: "replaced 4" },
       ],
       context_lines: 1,
       projectDir: testDir,
@@ -729,7 +729,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h1}.1`, content: "replaced 1" }],
+      edits: [{ ref, range: `${h1}1`, content: "replaced 1" }],
       context_lines: 5, // more than lines above/below
       projectDir: testDir,
     });
@@ -749,8 +749,8 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: testFile,
       edits: [
-        { ref, range: `${h2}.2`, content: "replaced 2" },
-        { ref, range: `${h5}.5`, content: "replaced 5" },
+        { ref, range: `${h2}2`, content: "replaced 2" },
+        { ref, range: `${h5}5`, content: "replaced 5" },
       ],
       // context_lines intentionally omitted
       projectDir: testDir,
@@ -759,7 +759,7 @@ describe("handleEdit", () => {
     const text = getText(result);
     // Auto context_lines=2 should produce context blocks
     expect(text).toContain("context near");
-    expect(text).toMatch(/^[a-z]{2}\.\d+\t/m);
+    expect(text).toMatch(/^[a-z]{2}\d+\t/m);
   });
 
   test("auto context_lines does not activate for single edit", async () => {
@@ -769,7 +769,7 @@ describe("handleEdit", () => {
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}.2`, content: "replaced 2" }],
+      edits: [{ ref, range: `${h2}2`, content: "replaced 2" }],
       // context_lines intentionally omitted
       projectDir: testDir,
     });
@@ -788,8 +788,8 @@ describe("handleEdit", () => {
     const result = await handleEdit({
       file_path: testFile,
       edits: [
-        { ref, range: `${h2}.2`, content: "replaced 2" },
-        { ref, range: `${h5}.5`, content: "replaced 5" },
+        { ref, range: `${h2}2`, content: "replaced 2" },
+        { ref, range: `${h5}5`, content: "replaced 5" },
       ],
       context_lines: 0,
       projectDir: testDir,
@@ -809,7 +809,7 @@ describe("handleEdit", () => {
       edits: [
         {
           ref,
-          range: `${h2}.2`,
+          range: `${h2}2`,
           content: "replaced 2",
         },
       ],

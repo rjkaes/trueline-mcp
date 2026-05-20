@@ -109,11 +109,11 @@ describe("coerceParams", () => {
     test("edits keep their own refs", () => {
       const input = {
         file_path: "foo.ts",
-        edits: [{ range: "ab.10-cd.12", content: "text", ref: "R1" }],
+        edits: [{ range: "ab10-cd12", content: "text", ref: "R1" }],
       };
       expect(coerceParams(input)).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab.10-cd.12", content: "text", ref: "R1" }],
+        edits: [{ range: "ab10-cd12", content: "text", ref: "R1" }],
       });
     });
   });
@@ -268,7 +268,7 @@ describe("coerceParams", () => {
 
   describe("edits bare object → array (#10)", () => {
     test("wraps single edit object in array", () => {
-      const edit = { range: "ab.10-cd.12", content: "new", ref: "R1" };
+      const edit = { range: "ab10-cd12", content: "new", ref: "R1" };
       expect(coerceParams({ file_path: "foo.ts", edits: edit })).toEqual({
         file_paths: ["foo.ts"],
         edits: [edit],
@@ -276,7 +276,7 @@ describe("coerceParams", () => {
     });
 
     test("leaves edit array unchanged", () => {
-      const edit = { range: "ab.10-cd.12", content: "new", ref: "R1" };
+      const edit = { range: "ab10-cd12", content: "new", ref: "R1" };
       expect(coerceParams({ file_path: "foo.ts", edits: [edit] })).toEqual({
         file_paths: ["foo.ts"],
         edits: [edit],
@@ -323,11 +323,11 @@ describe("coerceParams", () => {
       expect(
         coerceParams({
           file_path: "foo.ts",
-          edits: [{ range: "ab.10-cd.12", ref: "R1", content: ["line1", "line2", "line3"] }],
+          edits: [{ range: "ab10-cd12", ref: "R1", content: ["line1", "line2", "line3"] }],
         }),
       ).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab.10-cd.12", ref: "R1", content: "line1\nline2\nline3" }],
+        edits: [{ range: "ab10-cd12", ref: "R1", content: "line1\nline2\nline3" }],
       });
     });
 
@@ -335,11 +335,11 @@ describe("coerceParams", () => {
       expect(
         coerceParams({
           file_path: "foo.ts",
-          edits: [{ range: "ab.10", ref: "R1", content: "single line" }],
+          edits: [{ range: "ab10", ref: "R1", content: "single line" }],
         }),
       ).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab.10", ref: "R1", content: "single line" }],
+        edits: [{ range: "ab10", ref: "R1", content: "single line" }],
       });
     });
 
@@ -347,11 +347,11 @@ describe("coerceParams", () => {
       expect(
         coerceParams({
           file_path: "foo.ts",
-          edits: [{ range: "ab.10", ref: "R1", content: [42, true, "text"] }],
+          edits: [{ range: "ab10", ref: "R1", content: [42, true, "text"] }],
         }),
       ).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab.10", ref: "R1", content: "42\ntrue\ntext" }],
+        edits: [{ range: "ab10", ref: "R1", content: "42\ntrue\ntext" }],
       });
     });
   });
@@ -458,20 +458,20 @@ describe("coerceParams", () => {
     test("strips whitespace from edit range", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10 - cd.20", ref: "R1", content: "x" }],
+          edits: [{ range: "ab10 - cd20", ref: "R1", content: "x" }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10-cd.20", ref: "R1", content: "x" }],
+        edits: [{ range: "ab10-cd20", ref: "R1", content: "x" }],
       });
     });
 
     test("strips whitespace from edit ref", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10-cd.20", ref: "  R1  ", content: "x" }],
+          edits: [{ range: "ab10-cd20", ref: "  R1  ", content: "x" }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10-cd.20", ref: "R1", content: "x" }],
+        edits: [{ range: "ab10-cd20", ref: "R1", content: "x" }],
       });
     });
   });
@@ -484,30 +484,30 @@ describe("coerceParams", () => {
     test("coerces null content to empty string", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10-cd.20", ref: "R1", content: null }],
+          edits: [{ range: "ab10-cd20", ref: "R1", content: null }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10-cd.20", ref: "R1", content: "" }],
+        edits: [{ range: "ab10-cd20", ref: "R1", content: "" }],
       });
     });
 
     test("coerces undefined content to empty string", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10-cd.20", ref: "R1", content: undefined }],
+          edits: [{ range: "ab10-cd20", ref: "R1", content: undefined }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10-cd.20", ref: "R1", content: "" }],
+        edits: [{ range: "ab10-cd20", ref: "R1", content: "" }],
       });
     });
 
     test("does not coerce empty string content", () => {
       expect(
         coerceParams({
-          edits: [{ range: "ab.10", ref: "R1", content: "" }],
+          edits: [{ range: "ab10", ref: "R1", content: "" }],
         }),
       ).toEqual({
-        edits: [{ range: "ab.10", ref: "R1", content: "" }],
+        edits: [{ range: "ab10", ref: "R1", content: "" }],
       });
     });
   });
@@ -545,7 +545,7 @@ describe("coerceParams", () => {
       // Weird but not the confused-tool-shape case — Zod will strip old_string
       expect(() =>
         coerceParams({
-          edits: [{ range: "ab.10", ref: "R1", content: "x", old_string: "foo" }],
+          edits: [{ range: "ab10", ref: "R1", content: "x", old_string: "foo" }],
         }),
       ).not.toThrow();
     });

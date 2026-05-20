@@ -22,7 +22,7 @@ export default defineCommand({
     },
     range: {
       type: "string",
-      description: "Range in hash.line format (single-edit shorthand)",
+      description: "Range in hashLine format (single-edit shorthand)",
     },
     content: {
       type: "string",
@@ -39,7 +39,7 @@ export default defineCommand({
     },
     "context-lines": {
       type: "string",
-      description: "Lines of hash.line context to return around each edit site",
+      description: "Lines of hashLine context to return around each edit site",
     },
     encoding: {
       type: "string",

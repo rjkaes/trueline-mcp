@@ -27,9 +27,9 @@ function readRef(range: string): { ref: string; hashRange: string } {
   const refMatch = stdout.match(/ref:\s*(\S+)/);
   if (!refMatch) throw new Error(`No ref found in read output: ${stdout}`);
   const fullRef = refMatch[1];
-  // hashRange is the part before `:` in ref, e.g. "ab.1-cd.1"
-  const colonIdx = fullRef.lastIndexOf(":");
-  const hashRange = fullRef.slice(0, colonIdx);
+  // hashRange is the part before `/` in ref, e.g. "ab1-cd1"
+  const slashIdx = fullRef.lastIndexOf("/");
+  const hashRange = fullRef.slice(0, slashIdx);
   return { ref: fullRef, hashRange };
 }
 
@@ -91,9 +91,9 @@ describe("edit subcommand", () => {
       "--edits",
       "[]",
       "--ref",
-      "ab.1",
+      "ab1",
       "--range",
-      "ab.1",
+      "ab1",
       "--content",
       "x",
     );

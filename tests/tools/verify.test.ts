@@ -20,7 +20,7 @@ beforeEach(() => {});
 
 /** Extract inline refs from a trueline_read result. */
 function extractInlineRefs(text: string): string[] {
-  const matches = text.matchAll(/ref: ((?:[a-z]{2}\.)?\d+-(?:[a-z]{2}\.)?\d+:[a-z]{6})/g);
+  const matches = text.matchAll(/ref: ((?:[a-z]{2})?\d+-(?:[a-z]{2})?\d+\/[a-z]{6})/g);
   return [...matches].map((m) => m[1]);
 }
 
@@ -122,11 +122,11 @@ describe("trueline_verify", () => {
     expect(getText(result)).toBe("all refs valid");
   });
 
-  test("empty file sentinel 0-0:aaaaaa is valid for empty file", async () => {
+  test("empty file sentinel 0-0/aaaaaa is valid for empty file", async () => {
     const file = join(testDir, "empty2.txt");
     writeFileSync(file, "");
 
-    const result = await handleVerify({ file_path: file, refs: ["0-0:aaaaaa"], projectDir: testDir });
+    const result = await handleVerify({ file_path: file, refs: ["0-0/aaaaaa"], projectDir: testDir });
     expect(getText(result)).toBe("all refs valid");
   });
 

@@ -73,100 +73,100 @@ describe("parseRanges", () => {
 
 describe("parseRange", () => {
   test("parses dash-separated range", () => {
-    const result = parseRange("kq.16-yx.17");
+    const result = parseRange("kq16-yx17");
     expect(result.start).toEqual({ line: 16, hash: "kq" });
     expect(result.end).toEqual({ line: 17, hash: "yx" });
     expect(result.insertAfter).toBe(false);
   });
 
   test("parses single line reference", () => {
-    const result = parseRange("ab.5");
+    const result = parseRange("ab5");
     expect(result.start).toEqual({ line: 5, hash: "ab" });
     expect(result.end).toEqual({ line: 5, hash: "ab" });
   });
 
   test("parses insert-after prefix", () => {
-    const result = parseRange("+cd.10");
+    const result = parseRange("+cd10");
     expect(result.insertAfter).toBe(true);
     expect(result.start).toEqual({ line: 10, hash: "cd" });
   });
 
   test("rejects insert-after with range", () => {
-    expect(() => parseRange("+cd.10-ef.20")).toThrow(/insert-after/);
+    expect(() => parseRange("+cd10-ef20")).toThrow(/insert-after/);
   });
 });
 
 describe("parseChecksum", () => {
   test("decimal format (existing behavior)", () => {
-    const result = parseChecksum("9-10:abcdef");
+    const result = parseChecksum("9-10/abcdef");
     expect(result).toEqual({ startLine: 9, endLine: 10, hash: "abcdef" });
   });
 
-  test("hash.line format", () => {
-    const result = parseChecksum("aj.9-na.10:abcdef");
+  test("hashLine format", () => {
+    const result = parseChecksum("aj9-na10/abcdef");
     expect(result.startLine).toBe(9);
     expect(result.endLine).toBe(10);
     expect(result.hash).toBe("abcdef");
   });
 
-  test("single hash.line (no dash, start = end)", () => {
-    const result = parseChecksum("aj.9:abcdef");
+  test("single hashLine (no dash, start = end)", () => {
+    const result = parseChecksum("aj9/abcdef");
     expect(result.startLine).toBe(9);
     expect(result.endLine).toBe(9);
     expect(result.hash).toBe("abcdef");
   });
 
   test("single decimal (no dash, start = end)", () => {
-    const result = parseChecksum("9:abcdef");
+    const result = parseChecksum("9/abcdef");
     expect(result.startLine).toBe(9);
     expect(result.endLine).toBe(9);
     expect(result.hash).toBe("abcdef");
   });
 
   test("strips 'checksum: ' label prefix", () => {
-    const result = parseChecksum("checksum: 9-10:abcdef");
+    const result = parseChecksum("checksum: 9-10/abcdef");
     expect(result.startLine).toBe(9);
     expect(result.endLine).toBe(10);
     expect(result.hash).toBe("abcdef");
   });
 
   test("strips 'checksum:' label prefix without space", () => {
-    const result = parseChecksum("checksum:9-10:abcdef");
+    const result = parseChecksum("checksum:9-10/abcdef");
     expect(result.startLine).toBe(9);
     expect(result.endLine).toBe(10);
     expect(result.hash).toBe("abcdef");
   });
 
-  test("strips label with hash.line format", () => {
-    const result = parseChecksum("checksum: aj.9-na.10:abcdef");
+  test("strips label with hashLine format", () => {
+    const result = parseChecksum("checksum: aj9-na10/abcdef");
     expect(result.startLine).toBe(9);
     expect(result.endLine).toBe(10);
     expect(result.hash).toBe("abcdef");
   });
 
   test("trims whitespace", () => {
-    const result = parseChecksum("  9-10:abcdef  ");
+    const result = parseChecksum("  9-10/abcdef  ");
     expect(result.startLine).toBe(9);
     expect(result.endLine).toBe(10);
     expect(result.hash).toBe("abcdef");
   });
 
   test("mixed format: hash prefix on start only", () => {
-    const result = parseChecksum("aj.9-10:abcdef");
+    const result = parseChecksum("aj9-10/abcdef");
     expect(result.startLine).toBe(9);
     expect(result.endLine).toBe(10);
     expect(result.hash).toBe("abcdef");
   });
 
   test("mixed format: hash prefix on end only", () => {
-    const result = parseChecksum("9-na.10:abcdef");
+    const result = parseChecksum("9-na10/abcdef");
     expect(result.startLine).toBe(9);
     expect(result.endLine).toBe(10);
     expect(result.hash).toBe("abcdef");
   });
 
-  test("preserves empty-file sentinel 0-0:aaaaaa", () => {
-    const result = parseChecksum("0-0:aaaaaa");
+  test("preserves empty-file sentinel 0-0/aaaaaa", () => {
+    const result = parseChecksum("0-0/aaaaaa");
     expect(result).toEqual({ startLine: 0, endLine: 0, hash: "aaaaaa" });
   });
 

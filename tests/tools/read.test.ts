@@ -43,9 +43,9 @@ describe("handleRead", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter(Boolean);
     // Should have 3 content lines + blank + checksum line
-    expect(lines[0]).toMatch(/^[a-z]{2}\.1\tconst a = 1;$/);
-    expect(lines[1]).toMatch(/^[a-z]{2}\.2\tconst b = 2;$/);
-    expect(lines[2]).toMatch(/^[a-z]{2}\.3\tconst c = 3;$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}1\tconst a = 1;$/);
+    expect(lines[1]).toMatch(/^[a-z]{2}2\tconst b = 2;$/);
+    expect(lines[2]).toMatch(/^[a-z]{2}3\tconst c = 3;$/);
   });
 
   test("returns ref in result", async () => {
@@ -68,7 +68,7 @@ describe("handleRead", () => {
     const contentLines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     // Expanded by 1 on each side: line 2 → lines 1-3 (whole file)
     expect(contentLines).toHaveLength(3);
-    expect(contentLines[1]).toMatch(/^[a-z]{2}\.2\tconst b = 2;$/);
+    expect(contentLines[1]).toMatch(/^[a-z]{2}2\tconst b = 2;$/);
   });
 
   test("denies reading .env file", async () => {
@@ -102,18 +102,18 @@ describe("handleRead", () => {
     const text = result.content[0].text;
 
     // Should have two ref lines
-    const refMatches = text.match(/^ref: [a-z]{2}\.\d+-[a-z]{2}\.\d+:[a-z]{6}$/gm);
+    const refMatches = text.match(/^ref: [a-z]{2}\d+-[a-z]{2}\d+\/[a-z]{6}$/gm);
     expect(refMatches).toHaveLength(2);
 
     // Should contain lines 3-5 and 15-17 but not lines 6-14
     // Expanded: 3-5 → 2-6, 15-17 → 14-18
-    expect(text).toMatch(/^[a-z]{2}\.2\t/m);
-    expect(text).toMatch(/^[a-z]{2}\.6\t/m);
-    expect(text).toMatch(/^[a-z]{2}\.14\t/m);
-    expect(text).toMatch(/^[a-z]{2}\.18\t/m);
+    expect(text).toMatch(/^[a-z]{2}2\t/m);
+    expect(text).toMatch(/^[a-z]{2}6\t/m);
+    expect(text).toMatch(/^[a-z]{2}14\t/m);
+    expect(text).toMatch(/^[a-z]{2}18\t/m);
     // Lines 7-13 should NOT be present (gap between expanded ranges)
-    expect(text).not.toMatch(/^[a-z]{2}\.7\t/m);
-    expect(text).not.toMatch(/^[a-z]{2}\.13\t/m);
+    expect(text).not.toMatch(/^[a-z]{2}7\t/m);
+    expect(text).not.toMatch(/^[a-z]{2}13\t/m);
   });
 
   test("reads whole file when ranges omitted", async () => {
@@ -124,8 +124,8 @@ describe("handleRead", () => {
       projectDir: testDir,
     });
     const text = result.content[0].text;
-    expect(text).toMatch(/^[a-z]{2}\.1\t/m);
-    expect(text).toMatch(/^[a-z]{2}\.3\t/m);
+    expect(text).toMatch(/^[a-z]{2}1\t/m);
+    expect(text).toMatch(/^[a-z]{2}3\t/m);
     const refMatches = text.match(/^ref:/gm);
     expect(refMatches).toHaveLength(1);
   });
@@ -140,8 +140,8 @@ describe("handleRead", () => {
     });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    expect(text).toMatch(/^[a-z]{2}\.1\t/m);
-    expect(text).toMatch(/^[a-z]{2}\.4\t/m);
+    expect(text).toMatch(/^[a-z]{2}1\t/m);
+    expect(text).toMatch(/^[a-z]{2}4\t/m);
     expect(text).toMatch(/ref: \S+/);
   });
 
@@ -162,7 +162,7 @@ describe("handleRead", () => {
     // The decoded content should show "café"
     expect(text).toContain("café");
     // And the hash should be present
-    expect(text).toMatch(/^[a-z]{2}\.1\tcafé$/m);
+    expect(text).toMatch(/^[a-z]{2}1\tcafé$/m);
   });
 
   test("truncates output at 2000 lines", async () => {
@@ -204,8 +204,8 @@ describe("handleRead", () => {
       projectDir: testDir,
     });
     const text = result.content[0].text;
-    // Format should be hash.lineNumber\tcontent
-    expect(text.split("\n")[0]).toMatch(/^[a-z]{2}\.1\t/);
+    // Format should be hashLineNumber\tcontent
+    expect(text.split("\n")[0]).toMatch(/^[a-z]{2}1\t/);
   });
 
   test("multi-file read returns all files with headers", async () => {
@@ -237,7 +237,7 @@ describe("handleRead", () => {
     // the multi wrapper returns the same structure as a direct read.
     expect(single.isError).toBeUndefined();
     const text = single.content[0].text;
-    expect(text).toMatch(/^[a-z]{2}\.1\tconst a = 1;$/m);
+    expect(text).toMatch(/^[a-z]{2}1\tconst a = 1;$/m);
     expect(text).toMatch(/ref: \S+/);
   });
 

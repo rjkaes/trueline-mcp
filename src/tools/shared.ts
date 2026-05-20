@@ -267,19 +267,19 @@ export function validateEdits(edits: EditInput[], _resolvedPath?: string): Valid
       }
     }
 
-    // Detect hash.line identifiers leaked into content.  LLMs sometimes confuse
-    // the addressing syntax ("zm.82") shown in trueline_read output with actual
+    // Detect hashLine identifiers leaked into content.  LLMs sometimes confuse
+    // the addressing syntax ("zm82") shown in trueline_read output with actual
     // file content, writing it into the replacement text and corrupting the file.
-    // A line that is *only* a hash.line token is almost certainly a mistake.
+    // A line that is *only* a hashLine token is almost certainly a mistake.
     // Warn rather than reject: the pattern can match legitimate content (e.g.
-    // "vs.20" as a version string), so we surface it as a post-edit warning.
+    // "vs20" as a version string), so we surface it as a post-edit warning.
     if (edit.content !== "") {
-      const HASH_LINE_RE = /^[a-z]{2}\.\d+$/;
+      const HASH_LINE_RE = /^[a-z]{2}\d+$/;
       const contentLines = edit.content.split("\n");
       const suspect = contentLines.filter((l) => HASH_LINE_RE.test(l.trim()));
       if (suspect.length > 0) {
         warnings.push(
-          `WARNING: content contains what looks like hash.line identifiers from trueline_read output: ` +
+          `WARNING: content contains what looks like hashLine identifiers from trueline_read output: ` +
             `${suspect.map((s) => `"${s.trim()}"`).join(", ")}. ` +
             `These are addressing tags, not file content. ` +
             `If this was unintentional, undo the edit and retry with only the actual text.`,

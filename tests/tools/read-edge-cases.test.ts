@@ -41,7 +41,7 @@ describe("empty and minimal files", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^[a-z]{2}\.1\thello$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}1\thello$/);
   });
 
   test("single line without trailing newline", async () => {
@@ -53,7 +53,7 @@ describe("empty and minimal files", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^[a-z]{2}\.1\thello$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}1\thello$/);
   });
 
   test("file with only a newline is one empty-string line", async () => {
@@ -66,7 +66,7 @@ describe("empty and minimal files", () => {
     const lines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
     // The line content is empty — so it should be "1:XX|" with nothing after the pipe
-    expect(lines[0]).toMatch(/^[a-z]{2}\.1\t$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}1\t$/);
   });
 
   test("file with multiple blank lines", async () => {
@@ -95,9 +95,9 @@ describe("line endings", () => {
     const text = result.content[0].text;
     const lines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toMatch(/^[a-z]{2}\.1\taaa$/);
-    expect(lines[1]).toMatch(/^[a-z]{2}\.2\tbbb$/);
-    expect(lines[2]).toMatch(/^[a-z]{2}\.3\tccc$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}1\taaa$/);
+    expect(lines[1]).toMatch(/^[a-z]{2}2\tbbb$/);
+    expect(lines[2]).toMatch(/^[a-z]{2}3\tccc$/);
   });
 
   test("CRLF line endings", async () => {
@@ -133,7 +133,7 @@ describe("line endings", () => {
     expect(result.isError).toBeUndefined();
     const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^[a-z]{2}\.1\taaa$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}1\taaa$/);
   });
 });
 
@@ -284,7 +284,7 @@ describe("range parameters", () => {
     const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     // Expanded: line 2 → lines 1-3 (whole file)
     expect(lines).toHaveLength(3);
-    expect(lines[1]).toMatch(/^[a-z]{2}\.2\tbbb$/);
+    expect(lines[1]).toMatch(/^[a-z]{2}2\tbbb$/);
   });
 
   test("reading a middle range produces correct ref", async () => {
@@ -352,8 +352,8 @@ describe("ref consistency", () => {
     const r1 = await handleRead({ file_path: f, projectDir: testDir });
     const r2 = await handleRead({ file_path: f, projectDir: testDir });
     // Extract the hash portion of the first content line
-    const hash1 = r1.content[0].text.split("\n")[0].match(/^([a-z]{2})\.\d+/)?.[1];
-    const hash2 = r2.content[0].text.split("\n")[0].match(/^([a-z]{2})\.\d+/)?.[1];
+    const hash1 = r1.content[0].text.split("\n")[0].match(/^([a-z]{2})\d+/)?.[1];
+    const hash2 = r2.content[0].text.split("\n")[0].match(/^([a-z]{2})\d+/)?.[1];
     expect(hash1).toBe(hash2);
   });
 });
@@ -383,8 +383,8 @@ describe("long lines", () => {
     const contentLines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(contentLines).toHaveLength(1000);
     // Verify line numbering at boundaries
-    expect(contentLines[0]).toMatch(/^[a-z]{2}\.1\t/);
-    expect(contentLines[999]).toMatch(/^[a-z]{2}\.1000\t/);
+    expect(contentLines[0]).toMatch(/^[a-z]{2}1\t/);
+    expect(contentLines[999]).toMatch(/^[a-z]{2}1000\t/);
   });
 });
 

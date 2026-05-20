@@ -126,8 +126,8 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
 
   const newRef =
     result.newLineCount > 0
-      ? `${result.newStartLetters}.1-${result.newEndLetters}.${result.newLineCount}:${result.newHash}`
-      : "0-0:aaaaaa";
+      ? `${result.newStartLetters}1-${result.newEndLetters}${result.newLineCount}/${result.newHash}`
+      : "0-0/aaaaaa";
 
   const summary = editSummary(built.ops);
   const warn = built.warnings.length > 0 ? `\n\n${built.warnings.join("\n")}` : "";
@@ -199,7 +199,7 @@ function editSummary(ops: StreamEditOp[]): string {
 
 /** Format a hash.line reference for a content string at a given line number. */
 function hl(content: string, lineNumber: number): string {
-  return `${hashToLetters(fnv1aHash(content))}.${lineNumber}`;
+  return `${hashToLetters(fnv1aHash(content))}${lineNumber}`;
 }
 
 /** Truncated preview of deleted content for the edit summary. */
@@ -295,27 +295,27 @@ async function readEditContext(
     // Lines before the edit
     for (let ln = range.from; ln < site.newStart; ln++) {
       const entry = collected.get(ln);
-      if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+      if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
     }
 
     if (collapse) {
       // First contextLines of new content
       for (let ln = site.newStart; ln < site.newStart + contextLines && ln <= site.newEnd; ln++) {
         const entry = collected.get(ln);
-        if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+        if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
       }
       const skipped = site.lineCount - 2 * contextLines;
       lines.push(`  \u2500\u2500 ${skipped} lines \u2500\u2500`);
       // Last contextLines of new content
       for (let ln = site.newEnd - contextLines + 1; ln <= site.newEnd; ln++) {
         const entry = collected.get(ln);
-        if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+        if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
       }
     } else {
       // All new content lines
       for (let ln = site.newStart; ln <= site.newEnd; ln++) {
         const entry = collected.get(ln);
-        if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+        if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
       }
     }
 
@@ -323,7 +323,7 @@ async function readEditContext(
     const afterStart = site.lineCount > 0 ? site.newEnd + 1 : site.newStart;
     for (let ln = afterStart; ln <= range.to; ln++) {
       const entry = collected.get(ln);
-      if (entry) lines.push(`${entry.letters}.${ln}\t${entry.content}`);
+      if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
     }
 
     blocks.push(lines.join("\n"));

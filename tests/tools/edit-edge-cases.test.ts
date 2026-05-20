@@ -23,7 +23,7 @@ function setupFile(name: string, content: string) {
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   // Remove trailing empty element if content ends with newline
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0:aaaaaa";
+  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0/aaaaaa";
   return { path: f, lines, ref };
 }
 
@@ -40,7 +40,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("only")}.1`,
+          range: `${lineHash("only")}1`,
           content: "replaced",
         },
       ],
@@ -59,7 +59,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("only")}.1`,
+          range: `${lineHash("only")}1`,
           content: "replaced",
         },
       ],
@@ -79,7 +79,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "x1\nx2\nx3",
         },
       ],
@@ -98,7 +98,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2-${lineHash("ccc")}.3`,
+          range: `${lineHash("bbb")}2-${lineHash("ccc")}3`,
           content: "merged",
         },
       ],
@@ -117,7 +117,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "",
         },
       ],
@@ -176,7 +176,7 @@ describe("empty file operations", () => {
 
   test("empty-file checksum against non-empty file fails", async () => {
     const { path } = setupFile("not-empty.txt", "content\n");
-    const emptyRef = "0-0:aaaaaa";
+    const emptyRef = "0-0/aaaaaa";
 
     const result = await handleEdit({
       file_path: path,
@@ -207,7 +207,7 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           ref,
-          range: `+${lineHash("bbb")}.2`,
+          range: `+${lineHash("bbb")}2`,
           content: "appended",
         },
       ],
@@ -226,7 +226,7 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           ref,
-          range: `+${lineHash("aaa")}.1`,
+          range: `+${lineHash("aaa")}1`,
           content: "inserted",
         },
       ],
@@ -265,12 +265,12 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           ref,
-          range: `+${lineHash("aaa")}.1`,
+          range: `+${lineHash("aaa")}1`,
           content: "after-1",
         },
         {
           ref,
-          range: `+${lineHash("ccc")}.3`,
+          range: `+${lineHash("ccc")}3`,
           content: "after-3",
         },
       ],
@@ -289,12 +289,12 @@ describe("insert-after (+ prefix)", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "BBB",
         },
         {
           ref,
-          range: `+${lineHash("bbb")}.2`,
+          range: `+${lineHash("bbb")}2`,
           content: "inserted",
         },
       ],
@@ -319,7 +319,7 @@ describe("multi-line replacements", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("aaa")}.1-${lineHash("ccc")}.3`,
+          range: `${lineHash("aaa")}1-${lineHash("ccc")}3`,
           content: "entirely\nnew",
         },
       ],
@@ -338,12 +338,12 @@ describe("multi-line replacements", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("aaa")}.1`,
+          range: `${lineHash("aaa")}1`,
           content: "AAA",
         },
         {
           ref,
-          range: `${lineHash("ccc")}.3`,
+          range: `${lineHash("ccc")}3`,
           content: "CCC",
         },
       ],
@@ -362,7 +362,7 @@ describe("multi-line replacements", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("aaa")}.1-${lineHash("ccc")}.3`,
+          range: `${lineHash("aaa")}1-${lineHash("ccc")}3`,
           content: "",
         },
       ],
@@ -389,7 +389,7 @@ describe("no-op detection", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "bbb",
         },
       ],
@@ -409,7 +409,7 @@ describe("no-op detection", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("aaa")}.1-${lineHash("ccc")}.3`,
+          range: `${lineHash("aaa")}1-${lineHash("ccc")}3`,
           content: "aaa\nbbb\nccc",
         },
       ],
@@ -435,7 +435,7 @@ describe("checksum validation", () => {
       edits: [
         {
           ref: narrowRef,
-          range: `${lineHash("ccc")}.3`,
+          range: `${lineHash("ccc")}3`,
           content: "CCC",
         },
       ],
@@ -455,7 +455,7 @@ describe("checksum validation", () => {
       edits: [
         {
           ref: narrowRef,
-          range: `${lineHash("ddd")}.4`,
+          range: `${lineHash("ddd")}4`,
           content: "DDD",
         },
       ],
@@ -474,12 +474,12 @@ describe("checksum validation", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("aaa")}.1`,
+          range: `${lineHash("aaa")}1`,
           content: "AAA",
         },
         {
           ref,
-          range: `${lineHash("ddd")}.4`,
+          range: `${lineHash("ddd")}4`,
           content: "DDD",
         },
       ],
@@ -494,15 +494,15 @@ describe("checksum validation", () => {
     const { path, lines } = setupFile("short.txt", "aaa\nbbb\n");
     // Fabricate a ref claiming to cover lines 1-10 with the correct hash for lines 1-2
     const cs = rangeChecksum(lines, 1, 2);
-    const hashHex = cs.slice(cs.indexOf(":") + 1);
-    const fakeRef = `${lineHash(lines[0])}.1-${lineHash(lines[0])}.10:${hashHex}`;
+    const hashHex = cs.slice(cs.indexOf("/") + 1);
+    const fakeRef = `${lineHash(lines[0])}1-${lineHash(lines[0])}10/${hashHex}`;
 
     const result = await handleEdit({
       file_path: path,
       edits: [
         {
           ref: fakeRef,
-          range: `${lineHash("aaa")}.1`,
+          range: `${lineHash("aaa")}1`,
           content: "AAA",
         },
       ],
@@ -531,7 +531,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "BBB",
         },
       ],
@@ -556,7 +556,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("aaa")}.1-${lineHash("bbb")}.2`,
+          range: `${lineHash("aaa")}1-${lineHash("bbb")}2`,
           content: "XXX\nYYY\nZZZ",
         },
       ],
@@ -580,7 +580,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           ref,
-          range: `+${lineHash("bbb")}.2`,
+          range: `+${lineHash("bbb")}2`,
           content: "appended",
         },
       ],
@@ -608,7 +608,7 @@ describe("unicode in edits", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("hello")}.1`,
+          range: `${lineHash("hello")}1`,
           content: "🎉 héllo 𝕳",
         },
       ],
@@ -627,7 +627,7 @@ describe("unicode in edits", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("中文")}.2`,
+          range: `${lineHash("中文")}2`,
           content: "中文（修正済み）",
         },
       ],
@@ -659,7 +659,7 @@ describe("read-then-edit round-trip", () => {
     const ref = refMatch![1];
 
     // Extract line hash for line 2
-    const lineMatch = text.match(/^([a-z]{2})\.2\t/m);
+    const lineMatch = text.match(/^([a-z]{2})2\t/m);
     expect(lineMatch).toBeTruthy();
     const lh = lineMatch![1];
 
@@ -669,7 +669,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           ref,
-          range: `${lh}.2`,
+          range: `${lh}2`,
           content: "BETA",
         },
       ],
@@ -696,7 +696,7 @@ describe("read-then-edit round-trip", () => {
 
     const refMatch = text.match(/ref: (\S+)/);
     const ref = refMatch![1];
-    const lineMatch = text.match(/^([a-z]{2})\.3\t/m);
+    const lineMatch = text.match(/^([a-z]{2})3\t/m);
     const lh = lineMatch![1];
 
     const editResult = await handleEdit({
@@ -704,7 +704,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           ref,
-          range: `${lh}.3`,
+          range: `${lh}3`,
           content: "CCC",
         },
       ],
@@ -726,7 +726,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "BBB",
         },
       ],
@@ -739,7 +739,7 @@ describe("read-then-edit round-trip", () => {
     expect(refMatch).toBeTruthy();
     const _newRef = refMatch![1];
     const lineMatch2 = (await handleRead({ file_path: f, projectDir: testDir })).content[0].text.match(
-      /^([a-z]{2})\.3\t/m,
+      /^([a-z]{2})3\t/m,
     );
     const lh = lineMatch2![1];
 
@@ -752,7 +752,7 @@ describe("read-then-edit round-trip", () => {
       edits: [
         {
           ref: readRef,
-          range: `${lh}.3`,
+          range: `${lh}3`,
           content: "CCC",
         },
       ],
@@ -775,8 +775,8 @@ describe("overlap detection", () => {
     const result = await handleEdit({
       file_path: path,
       edits: [
-        { ref, range: `${lineHash("bbb")}.2`, content: "X" },
-        { ref, range: `${lineHash("bbb")}.2`, content: "Y" },
+        { ref, range: `${lineHash("bbb")}2`, content: "X" },
+        { ref, range: `${lineHash("bbb")}2`, content: "Y" },
       ],
       projectDir: testDir,
     });
@@ -791,8 +791,8 @@ describe("overlap detection", () => {
     const result = await handleEdit({
       file_path: path,
       edits: [
-        { ref, range: `${lineHash("aaa")}.1-${lineHash("bbb")}.2`, content: "AB" },
-        { ref, range: `${lineHash("ccc")}.3-${lineHash("ddd")}.4`, content: "CD" },
+        { ref, range: `${lineHash("aaa")}1-${lineHash("bbb")}2`, content: "AB" },
+        { ref, range: `${lineHash("ccc")}3-${lineHash("ddd")}4`, content: "CD" },
       ],
       projectDir: testDir,
     });
@@ -809,12 +809,12 @@ describe("overlap detection", () => {
       edits: [
         {
           ref,
-          range: `+${lineHash("aaa")}.1`,
+          range: `+${lineHash("aaa")}1`,
           content: "ins1",
         },
         {
           ref,
-          range: `+${lineHash("aaa")}.1`,
+          range: `+${lineHash("aaa")}1`,
           content: "ins2",
         },
       ],
@@ -841,7 +841,7 @@ describe("hash verification", () => {
       edits: [
         {
           ref,
-          range: `zz.1-${lineHash("ccc")}.3`,
+          range: `zz1-${lineHash("ccc")}3`,
 
           content: "new",
         },
@@ -861,7 +861,7 @@ describe("hash verification", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("aaa")}.1-zz.3`,
+          range: `${lineHash("aaa")}1-zz3`,
           content: "new",
         },
       ],
@@ -880,7 +880,7 @@ describe("hash verification", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("aaa")}.1-${lineHash("ccc")}.3`,
+          range: `${lineHash("aaa")}1-${lineHash("ccc")}3`,
           content: "only",
         },
       ],
@@ -908,7 +908,7 @@ describe("stale file detection", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "BBB",
         },
       ],
@@ -934,7 +934,7 @@ describe("special content", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("a|b|c")}.1`,
+          range: `${lineHash("a|b|c")}1`,
           content: "x|y|z",
         },
       ],
@@ -953,7 +953,7 @@ describe("special content", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("key: value")}.1`,
+          range: `${lineHash("key: value")}1`,
           content: "key: new_value",
         },
       ],
@@ -972,7 +972,7 @@ describe("special content", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("  indented  ")}.1`,
+          range: `${lineHash("  indented  ")}1`,
           content: "    more indented    ",
         },
       ],
@@ -991,7 +991,7 @@ describe("special content", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("bbb")}.2`,
+          range: `${lineHash("bbb")}2`,
           content: "\n\n",
         },
       ],
@@ -1023,7 +1023,7 @@ describe("file metadata", () => {
       edits: [
         {
           ref,
-          range: `${lineHash("aaa")}.1`,
+          range: `${lineHash("aaa")}1`,
           content: "AAA",
         },
       ],

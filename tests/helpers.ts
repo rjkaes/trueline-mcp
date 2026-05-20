@@ -78,20 +78,20 @@ export function rawLineHash(buf: Buffer): string {
 }
 
 /**
- * Build a `hash.line` reference for use in edit ranges.
+ * Build a `hashLine` reference for use in edit ranges.
  *
- * Mirrors the output format of trueline_read: `ab.12` where `ab` is the
+ * Mirrors the output format of trueline_read: `ab12` where `ab` is the
  * 2-letter content hash and `12` is the line number.
  */
-export function hashDotLine(line: string, lineNumber: number): string {
-  return `${lineHash(line)}.${lineNumber}`;
+export function hashLine(line: string, lineNumber: number): string {
+  return `${lineHash(line)}${lineNumber}`;
 }
 
 /**
- * Regex that matches the new `hash.line\tcontent` output format from
+ * Regex that matches the new `hashLine\tcontent` output format from
  * trueline_read / trueline_search.
  */
-export const LINE_PATTERN = /^[a-z]{2}\.\d+\t/;
+export const LINE_PATTERN = /^[a-z]{2}\d+\t/;
 
 /**
  * Extract the text string from an MCP tool result.
@@ -125,7 +125,7 @@ export function issueTestRef(_filePath: string, lines: string[], startLine: numb
     hash = foldHash(hash, h);
   }
   const ck = checksumToLetters(hash);
-  return `${firstLetters}.${startLine}-${lastLetters}.${endLine}:${ck}`;
+  return `${firstLetters}${startLine}-${lastLetters}${endLine}/${ck}`;
 }
 
 /**
@@ -142,5 +142,5 @@ export function issueTestRefRaw(_filePath: string, bufs: Buffer[], startLine: nu
     hash = foldHash(hash, h);
   }
   const ck = checksumToLetters(hash);
-  return `${firstLetters}.${startLine}-${lastLetters}.${endLine}:${ck}`;
+  return `${firstLetters}${startLine}-${lastLetters}${endLine}/${ck}`;
 }

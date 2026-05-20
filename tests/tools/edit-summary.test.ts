@@ -20,7 +20,7 @@ function setupFile(name: string, content: string) {
   writeFileSync(f, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0:aaaaaa";
+  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0/aaaaaa";
   return { path: f, lines, ref };
 }
 
@@ -37,7 +37,7 @@ describe("edit summary", () => {
     const { path, ref } = setupFile("a.txt", "aaa\nbbb\nccc\n");
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${lineHash("bbb")}.2`, content: "xxx\nyyy\nzzz" }],
+      edits: [{ ref, range: `${lineHash("bbb")}2`, content: "xxx\nyyy\nzzz" }],
     });
 
     const text = result.content[0].text;
@@ -51,7 +51,7 @@ describe("edit summary", () => {
     const h4 = lineHash("ddd");
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h2}.2-${h4}.4`, content: "xxx" }],
+      edits: [{ ref, range: `${h2}2-${h4}4`, content: "xxx" }],
     });
 
     const text = result.content[0].text;
@@ -63,7 +63,7 @@ describe("edit summary", () => {
     const { path, ref } = setupFile("c.txt", "aaa\nbbb\n");
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${lineHash("aaa")}.1`, content: "xxx" }],
+      edits: [{ ref, range: `${lineHash("aaa")}1`, content: "xxx" }],
     });
 
     const text = result.content[0].text;
@@ -77,7 +77,7 @@ describe("edit summary", () => {
     const h2 = lineHash("bbb");
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${h1}.1-${h2}.2`, content: "" }],
+      edits: [{ ref, range: `${h1}1-${h2}2`, content: "" }],
     });
 
     const text = result.content[0].text;
@@ -89,7 +89,7 @@ describe("edit summary", () => {
     const { path, ref } = setupFile("e.txt", "aaa\nbbb\nccc\n");
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${lineHash("bbb")}.2`, content: "" }],
+      edits: [{ ref, range: `${lineHash("bbb")}2`, content: "" }],
     });
 
     const text = result.content[0].text;
@@ -101,12 +101,12 @@ describe("edit summary", () => {
     const { path, ref } = setupFile("f.txt", "aaa\nbbb\n");
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `+${lineHash("aaa")}.1`, content: "xxx\nyyy\nzzz" }],
+      edits: [{ ref, range: `+${lineHash("aaa")}1`, content: "xxx\nyyy\nzzz" }],
     });
 
     const text = result.content[0].text;
     expect(text).toContain("inserted 3 after line 1 \u2192");
-    expect(text).toMatch(/[a-z]{2}\.[0-9]/);
+    expect(text).toMatch(/[a-z]{2}[0-9]/);
   });
 
   test("prepend (insert at start of file) shows location", async () => {
@@ -118,14 +118,14 @@ describe("edit summary", () => {
 
     const text = result.content[0].text;
     expect(text).toContain("inserted 2 at start of file \u2192");
-    expect(text).toMatch(/[a-z]{2}\.[0-9]/);
+    expect(text).toMatch(/[a-z]{2}[0-9]/);
   });
 
   test("no-op edit includes summary", async () => {
     const { path, ref } = setupFile("h.txt", "aaa\nbbb\n");
     const result = await edit({
       file_path: path,
-      edits: [{ ref, range: `${lineHash("aaa")}.1`, content: "aaa" }],
+      edits: [{ ref, range: `${lineHash("aaa")}1`, content: "aaa" }],
     });
 
     const text = result.content[0].text;
@@ -141,8 +141,8 @@ describe("edit summary", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { ref, range: `${h1}.1`, content: "xxx" },
-        { ref, range: `+${h3}.3`, content: "yyy" },
+        { ref, range: `${h1}1`, content: "xxx" },
+        { ref, range: `+${h3}3`, content: "yyy" },
       ],
     });
 

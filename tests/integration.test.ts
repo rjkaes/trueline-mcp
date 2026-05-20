@@ -34,7 +34,7 @@ describe("read → diff → edit roundtrip", () => {
     const ref = refMatch![1];
 
     // Extract line 2 hash from read result
-    const line2Match = readText.match(/^([a-z]{2})\.2\t/m);
+    const line2Match = readText.match(/^([a-z]{2})2\t/m);
     expect(line2Match).not.toBeNull();
     const line2Hash = line2Match![1];
 
@@ -45,7 +45,7 @@ describe("read → diff → edit roundtrip", () => {
       edits: [
         {
           ref,
-          range: `${line2Hash}.2-${line2Hash}.2`,
+          range: `${line2Hash}2-${line2Hash}2`,
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: "  return `Hello, ${name}!`;",
         },
@@ -67,7 +67,7 @@ describe("read → diff → edit roundtrip", () => {
       edits: [
         {
           ref,
-          range: `${line2Hash}.2-${line2Hash}.2`,
+          range: `${line2Hash}2-${line2Hash}2`,
           // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: "  return `Hello, ${name}!`;",
         },

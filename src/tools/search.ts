@@ -235,12 +235,12 @@ function formatResults(
 
         const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
         if (line.isMatch && marker !== "") matchesEmitted++;
-        parts.push(`${letters}.${line.lineNumber}\t${line.text}${marker}`);
+        parts.push(`${letters}${line.lineNumber}\t${line.text}${marker}`);
       }
 
       const ck = checksumToLetters(checksumHash);
       parts.push("");
-      parts.push(`ref: ${firstLetters}.${match.firstLine}-${lastLetters}.${match.lastLine}:${ck}`);
+      parts.push(`ref: ${firstLetters}${match.firstLine}-${lastLetters}${match.lastLine}/${ck}`);
     }
   }
 

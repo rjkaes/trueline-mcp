@@ -23,15 +23,8 @@ interface LineRef {
  * Throws on invalid format.
  */
 function parseHashLine(ref: string): LineRef {
-  const dotIdx = ref.indexOf(".");
-  if (dotIdx === -1) {
-    // No dot — must be bare "0" for insert-at-start
-    if (!DECIMAL_INT.test(ref)) {
-      throw new Error(
-        `Invalid hash.line reference "${ref}" — expected format "hash.line" (e.g. "ab.12"). ` +
-          "Copy the 2-letter prefix and line number from trueline_read/trueline_search output.",
-      );
-    }
+  if (DECIMAL_INT.test(ref)) {
+    // Bare number
     const line = Number(ref);
     if (line !== 0) {
       return { line, hash: BARE_LINE_HASH };
@@ -39,8 +32,8 @@ function parseHashLine(ref: string): LineRef {
     return { line: 0, hash: "" };
   }
 
-  const hash = ref.slice(0, dotIdx);
-  const lineStr = ref.slice(dotIdx + 1);
+  const hash = ref.slice(0, 2);
+  const lineStr = ref.slice(2);
 
   if (!DECIMAL_INT.test(lineStr)) {
     throw new Error(`Invalid line number in "${ref}" — must be a non-negative integer`);
@@ -49,16 +42,11 @@ function parseHashLine(ref: string): LineRef {
   const line = Number(lineStr);
 
   if (line === 0) {
-    throw new Error(`Invalid hash.line reference "${ref}" — line 0 must use bare "0" with no hash`);
+    throw new Error(`Invalid hashLine reference "${ref}" — line 0 must use bare "0" with no hash`);
   }
   if (!/^[a-z]{2}$/.test(hash)) {
-    if (hash.length > 0) {
-      // Wrong format but valid line number — use sentinel so streamingEdit
-      // can report the correct hash.line instead of a generic format error.
-      return { line, hash: BARE_LINE_HASH };
-    }
     throw new Error(
-      `Invalid hash.line reference "${ref}" — expected format "hash.line" (e.g. "ab.${line}"). ` +
+      `Invalid hashLine reference "${ref}" — expected format "hashLine" (e.g. "ab${line}"). ` +
         "Copy the 2-letter prefix and line number from trueline_read/trueline_search output.",
     );
   }
@@ -128,11 +116,11 @@ export interface ChecksumRef {
 /**
  * Parse a checksum string from trueline_read or trueline_search.
  *
- * Accepts both the decimal format ("9-10:abcdef") and the hash.line
- * format ("aj.9-na.10:abcdef") as well as mixed and single-line forms.
+ * Accepts both the decimal format ("9-10/abcdef") and the hashLine
+ * format ("aj9-na10/abcdef") as well as mixed and single-line forms.
  * Strips a "checksum: " or "ref: " label prefix and trims whitespace.
  *
- * The special sentinel "0-0:aaaaaa" represents an empty file.
+ * The special sentinel "0-0/aaaaaa" represents an empty file.
  * Throws on invalid format.
  */
 export function parseChecksum(checksum: string): ChecksumRef {
@@ -144,17 +132,16 @@ export function parseChecksum(checksum: string): ChecksumRef {
     raw = raw.slice("ref:".length).trimStart();
   }
 
-  // Step 2: Split on the last ":" to separate the range part from the hex hash.
-  // We use lastIndexOf so that dots/letters in hash.line refs don't interfere.
-  const colonIdx = raw.lastIndexOf(":");
-  if (colonIdx === -1) {
+  // Step 2: Split on the last "/" to separate the range part from the hex hash.
+  const slashIdx = raw.lastIndexOf("/");
+  if (slashIdx === -1) {
     throw new Error(
-      `Invalid checksum "${checksum}" — expected format "startLine-endLine:letters", e.g. "aj.9-na.10:abcdef"`,
+      `Invalid checksum "${checksum}" — expected format "startLine-endLine/letters", e.g. "aj9-na10/abcdef"`,
     );
   }
 
-  const rangePart = raw.slice(0, colonIdx);
-  const hash = raw.slice(colonIdx + 1).toLowerCase();
+  const rangePart = raw.slice(0, slashIdx);
+  const hash = raw.slice(slashIdx + 1).toLowerCase();
 
   if (!/^[a-z]{6}$/.test(hash)) {
     throw new Error(`Invalid checksum "${checksum}" — hash must be 6 lowercase letters, got "${hash}"`);
@@ -221,7 +208,7 @@ function findRangeDash(rangePart: string): number {
 }
 
 /**
- * Parse a single side of a checksum range — either "aj.9" or "9" format.
+ * Parse a single side of a checksum range — either "aj9" or "9" format.
  * Returns the line number and optional 2-letter hash prefix.
  */
 function extractLineNumber(
@@ -229,11 +216,10 @@ function extractLineNumber(
   originalInput: string,
   which: "start" | "end",
 ): { line: number; hashPrefix?: string } {
-  const dotIdx = ref.indexOf(".");
-  if (dotIdx !== -1) {
-    // hash.line format: "aj.9"
-    const hashPrefix = ref.slice(0, dotIdx).toLowerCase();
-    const lineStr = ref.slice(dotIdx + 1);
+  if (!DECIMAL_INT.test(ref)) {
+    // hashLine format: "aj9"
+    const hashPrefix = ref.slice(0, 2).toLowerCase();
+    const lineStr = ref.slice(2);
     if (!/^[a-z]{2}$/.test(hashPrefix)) {
       throw new Error(
         `Invalid checksum "${originalInput}" — ${which} hash prefix must be 2 lowercase letters, got "${hashPrefix}"`,
@@ -248,11 +234,6 @@ function extractLineNumber(
   }
 
   // Decimal format: "9"
-  if (!DECIMAL_INT.test(ref)) {
-    throw new Error(
-      `Invalid checksum "${originalInput}" — ${which} line must be a decimal integer (expected format "aj.9-na.10:hex" or "9-10:hex")`,
-    );
-  }
   return { line: Number(ref) };
 }
 

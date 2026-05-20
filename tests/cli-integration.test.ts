@@ -135,9 +135,9 @@ describe("CLI integration", () => {
       "--edits",
       "@nonexistent",
       "--ref",
-      "ab.1",
+      "ab1",
       "--range",
-      "ab.1",
+      "ab1",
       "--content",
       "x",
     );
