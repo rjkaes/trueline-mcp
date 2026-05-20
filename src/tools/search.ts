@@ -219,11 +219,6 @@ function formatResults(
       parts.push(`--- ${displayPath(result.filePath, projectDir)} ---`);
     }
 
-    // Compute zero-padding width for this file: pad all line numbers to the
-    // same width as the largest line number in the emitted output.
-    const fileMaxLine = result.matches.reduce((m, w) => Math.max(m, w.lastLine), 0);
-    const lineNumWidth = fileMaxLine > 0 ? String(fileMaxLine).length : 1;
-
     for (let i = 0; i < result.matches.length; i++) {
       const match = result.matches[i];
       let checksumHash = FNV_OFFSET_BASIS;
@@ -238,10 +233,9 @@ function formatResults(
         if (!firstLetters) firstLetters = letters;
         lastLetters = letters;
 
-        const paddedNum = String(line.lineNumber).padStart(lineNumWidth, "0");
         const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
         if (line.isMatch && marker !== "") matchesEmitted++;
-        parts.push(`${letters}.${paddedNum}\t${line.text}${marker}`);
+        parts.push(`${letters}.${line.lineNumber}\t${line.text}${marker}`);
       }
 
       const ck = checksumToLetters(checksumHash);
