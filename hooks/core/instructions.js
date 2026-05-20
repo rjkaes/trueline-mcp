@@ -71,11 +71,11 @@ export function getInstructions(platform = "claude-code") {
     <path name="exploratory">When you need context first: trueline_outline \u2192 trueline_read (targeted ranges) to understand, then trueline_search or trueline_read \u2192 trueline_edit.</path>
     <path name="small-edit">For files under ~200 lines or trivial one-line changes: ${p.readTool} and ${p.editTool} are fine. The MCP round-trip overhead outweighs hash verification savings on small files.</path>
     <example name="search-then-edit">
-      trueline_search output shows: ab.10 old line one / cd.11 old line two / ref: ab.10-cd.11:efghij
-      \u2192 trueline_edit: range="ab.10-cd.11", ref="ab.10-cd.11:efghij", content="new line one\\nnew line two"
-      Key: range uses the hash.line identifiers (ab.10, cd.11) from the output. ref is the inline checksum \u2014 copy it verbatim.
+      trueline_search output shows: →ab10 old line one / cd11 old line two / ref: ab10-cd11/efghij
+      → trueline_edit: range="ab10-cd11", ref="ab10-cd11/efghij", content="new line one\\nnew line two"
+      Key: range uses the hashLine identifiers (ab10, cd11) from the output. ref is the inline checksum — copy it verbatim. Lines prefixed with → are matches; lines without → are context.
     </example>
-    <rule>NEVER fabricate refs. Always copy the exact ref (e.g. "ab.1-cd.50:efghij") from trueline_read or trueline_search output. A ref from a wide read (e.g. covering lines 1-157) is valid for editing any sub-range within it.</rule>
+    <rule>NEVER fabricate refs. Always copy the exact ref (e.g. "ab1-cd50/efghij") from trueline_read or trueline_search output. A ref from a wide read (e.g. covering lines 1-157) is valid for editing any sub-range within it.</rule>
     <rule>To insert new content, use action="insert_after". Without it, the range lines are REPLACED (content is lost). If you want to add lines without removing existing ones, you must use action="insert_after".</rule>
   </editing>
   <workflow>trueline_outline \u2192 understand structure (any file, any size)</workflow>
@@ -85,7 +85,7 @@ export function getInstructions(platform = "claude-code") {
   <workflow>trueline_changes \u2192 review structural changes vs git state</workflow>${deferredHint}
 
   <tips>
-    <tip>If you already have hash.line identifiers and a ref from a prior trueline_read or trueline_search, go straight to trueline_edit. Do not re-read or re-search for data you already have. A wide ref (e.g. covering lines 1-50) works for editing any sub-range within it.</tip>
+    <tip>If you already have hashLine identifiers and a ref from a prior trueline_read or trueline_search, go straight to trueline_edit. Do not re-read or re-search for data you already have. A wide ref (e.g. covering lines 1-50) works for editing any sub-range within it.</tip>
     <tip>When you need to search-then-edit across multiple files, ${p.grepAdvice}, then pass all file_paths to a single trueline_search call to get refs for all of them at once.</tip>${atRefTip}
   </tips>
 </trueline_mcp_instructions>`;
