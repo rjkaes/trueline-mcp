@@ -68,8 +68,8 @@ Nothing changed → edit straight away. Stale → re-read just that range. Never
 `trueline_search` output:
 
 ```
-ab.10    old line one
-cd.11    old line two
+→ab.10	old line one
+cd.11	old line two
 ref:R1
 ```
 
@@ -85,6 +85,7 @@ trueline_edit(
 - `range` uses `hash.line` identifiers **verbatim** from output.
 - `ref` is short token (`R1`) — copy verbatim, never guess.
 - Wide ref (e.g. lines 1-157) valid for any sub-range inside. Don't re-read narrower.
+- Lines prefixed with `→` are matches; lines without `→` are context. Both carry hash.line identifiers usable in `range`.
 
 ## Load-bearing rules
 

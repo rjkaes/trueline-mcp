@@ -54,7 +54,7 @@ describe("multiline search", () => {
     const text = getText(result);
     expect(text).toContain("function processData(");
     expect(text).toContain("): Result {");
-    expect(text).toContain("\u2190 match");
+    expect(text).toContain("→");
     expect(text).toMatch(/ref: \S+/);
   });
 
@@ -123,7 +123,7 @@ describe("multiline search", () => {
     });
     expect(result.isError).toBeUndefined();
     const text = getText(result);
-    expect(text).toContain("--- multiline.ts ---");
-    expect(text).toContain("--- other.ts ---");
+    expect(text).toContain("multiline.ts:");
+    expect(text).toContain("other.ts:");
   });
 });

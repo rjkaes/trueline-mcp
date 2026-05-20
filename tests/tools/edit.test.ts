@@ -817,7 +817,7 @@ describe("handleEdit", () => {
     });
 
     const text = getText(result);
-    expect(text).toContain("Edit applied");
+    expect(text).toContain("ms)");
 
     const { existsSync, readFileSync: readFs } = await import("node:fs");
     const cwdHash = createHash("sha256").update(`${testDir}\0${testFile}`).digest("hex").slice(0, 12);

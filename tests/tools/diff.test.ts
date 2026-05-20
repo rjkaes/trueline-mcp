@@ -41,7 +41,7 @@ describe("semantic trueline_changes", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("Added");
+    expect(text).toContain("+:");
     expect(text).toContain("bar");
   });
 
@@ -59,7 +59,7 @@ describe("semantic trueline_changes", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("Removed");
+    expect(text).toContain("-:");
     expect(text).toContain("bar");
   });
 
@@ -95,7 +95,7 @@ describe("semantic trueline_changes", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("Renamed");
+    expect(text).toContain("~:");
     expect(text).toContain("oldName");
     expect(text).toContain("newName");
   });
@@ -111,7 +111,7 @@ describe("semantic trueline_changes", () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain("Added");
+    expect(text).toContain("+:");
     expect(text).toContain("fresh");
   });
 

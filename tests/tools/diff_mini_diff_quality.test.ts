@@ -9,6 +9,6 @@ test("computeMiniDiff should produce concise diff for single line addition", () 
 
   // FAIL: Currently returns null because it thinks 7 lines changed (3 removed, 4 added)
   expect(diff).not.toBeNull();
-  expect(diff).toContain("+ line X");
+  expect(diff).toContain("+line X");
   expect(diff).not.toContain("- line A");
 });

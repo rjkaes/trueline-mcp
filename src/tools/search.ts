@@ -206,7 +206,7 @@ function formatResults(
   for (const result of results) {
     if (result.error) {
       if (multiFile) {
-        parts.push(`--- ${displayPath(result.filePath, projectDir)} ---`);
+        parts.push(`${displayPath(result.filePath, projectDir)}:`);
         parts.push(`error: ${result.error}`);
         parts.push("");
       }
@@ -216,7 +216,7 @@ function formatResults(
 
     if (multiFile) {
       if (parts.length > 0) parts.push("");
-      parts.push(`--- ${displayPath(result.filePath, projectDir)} ---`);
+      parts.push(`${displayPath(result.filePath, projectDir)}:`);
     }
 
     for (let i = 0; i < result.matches.length; i++) {
@@ -233,9 +233,10 @@ function formatResults(
         if (!firstLetters) firstLetters = letters;
         lastLetters = letters;
 
-        const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
-        if (line.isMatch && marker !== "") matchesEmitted++;
-        parts.push(`${letters}${line.lineNumber}\t${line.text}${marker}`);
+        const isMarked = line.isMatch && matchesEmitted < maxMatches;
+        if (isMarked) matchesEmitted++;
+        const prefix = isMarked ? "→" : "";
+        parts.push(`${prefix}${letters}${line.lineNumber}\t${line.text}`);
       }
 
       const ck = checksumToLetters(checksumHash);

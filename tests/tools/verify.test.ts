@@ -47,7 +47,7 @@ describe("trueline_verify", () => {
 
     const result = await handleVerify({ file_path: file, refs, projectDir: testDir });
     const text = getText(result);
-    expect(text).toContain("stale:");
+    expect(text).toContain("- ");
     expect(text).toContain("checksum mismatch");
   });
 
@@ -73,8 +73,8 @@ describe("trueline_verify", () => {
 
     const result = await handleVerify({ file_path: file, refs, projectDir: testDir });
     const text = getText(result);
-    expect(text).toContain("valid:");
-    expect(text).toContain("stale:");
+    expect(text).toContain("+ ");
+    expect(text).toContain("- ");
   });
 
   test("invalid ref format returns error", async () => {
@@ -109,7 +109,7 @@ describe("trueline_verify", () => {
 
     const result = await handleVerify({ file_path: file, refs: [ref], projectDir: testDir });
     const text = getText(result);
-    expect(text).toContain("stale:");
+    expect(text).toContain("- ");
   });
 
   test("empty file ref is valid", async () => {
@@ -141,7 +141,7 @@ describe("trueline_verify", () => {
 
     const result = await handleVerify({ file_path: file, refs, projectDir: testDir });
     const text = getText(result);
-    expect(text).toContain("stale:");
+    expect(text).toContain("- ");
   });
 
   test("multiple refs in one call — all valid", async () => {

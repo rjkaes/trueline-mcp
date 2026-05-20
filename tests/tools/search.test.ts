@@ -242,8 +242,8 @@ describe("multi-file search", () => {
     });
     expect(result.isError).toBeUndefined();
     const text = getText(result);
-    expect(text).toContain("--- sample.ts ---");
-    expect(text).toContain("--- other.ts ---");
+    expect(text).toContain("sample.ts:");
+    expect(text).toContain("other.ts:");
     expect(text).toContain('"hello"');
     expect(text).toContain("greeting");
     const refs = text.match(/ref: [a-z]{2}\d+-[a-z]{2}\d+\/[a-z]{6}/g);
@@ -258,7 +258,7 @@ describe("multi-file search", () => {
       projectDir: testDir,
     });
     const text = getText(result);
-    const matchMarkers = text.match(/\u2190 match/g);
+    const matchMarkers = text.match(/→/g);
     expect(matchMarkers?.length).toBe(1);
     expect(text).toContain("showing 1 of");
   });

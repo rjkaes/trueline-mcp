@@ -92,10 +92,10 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
     // Empty-file sentinel
     if (acc.startLine === 0 && acc.endLine === 0) {
       if (totalLines === 0 && acc.expected === "aaaaaa") {
-        results.push(`valid: ${acc.rawRef}`);
+        results.push(`+ ${acc.rawRef}`);
       } else {
         allValid = false;
-        results.push(`stale: ${acc.rawRef} (file now has ${totalLines} lines)`);
+        results.push(`- ${acc.rawRef} (file now has ${totalLines} lines)`);
       }
       continue;
     }
@@ -103,16 +103,16 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
     // Range extends past EOF
     if (acc.startLine > totalLines || acc.endLine > totalLines) {
       allValid = false;
-      results.push(`stale: ${acc.rawRef} (range past EOF, file has ${totalLines} lines)`);
+      results.push(`- ${acc.rawRef} (range past EOF, file has ${totalLines} lines)`);
       continue;
     }
 
     const actual = checksumToLetters(acc.hash);
     if (actual === acc.expected) {
-      results.push(`valid: ${acc.rawRef}`);
+      results.push(`+ ${acc.rawRef}`);
     } else {
       allValid = false;
-      results.push(`stale: ${acc.rawRef} (checksum mismatch)`);
+      results.push(`- ${acc.rawRef} (checksum mismatch)`);
     }
   }
 

@@ -139,14 +139,10 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   }
 
   if (!result.changed) {
-    return textResult(
-      `Edit produced no changes — file not written.\n\n${summary}\nref: ${newRef}${warn}${contextBlock}`,
-    );
+    return textResult(`(no changes)\n${summary}\nref: ${newRef}${warn}${contextBlock}`);
   }
 
-  return textResult(
-    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref: ${newRef}${warn}${contextBlock}`,
-  );
+  return textResult(`(${(performance.now() - t0).toFixed(0)}ms)\n${summary}\nref: ${newRef}${warn}${contextBlock}`);
 }
 
 // ==============================================================================
@@ -160,7 +156,7 @@ function editSummary(ops: StreamEditOp[]): string {
       const lines = op.content.length;
 
       if (op.insertAfter) {
-        const location = op.startLine === 0 ? "at start of file" : `after line ${op.startLine}`;
+        const location = op.startLine === 0 ? "@start" : `@${op.startLine}`;
         if (lines === 0) {
           // Shouldn't reach here (validateEdits rejects empty insert_after),
           // but guard against crash in case it does.
@@ -173,7 +169,7 @@ function editSummary(ops: StreamEditOp[]): string {
             ? hl(op.content[0], newStart)
             : `${hl(op.content[0], newStart)}–${hl(op.content[lines - 1], newEnd)}`;
         shift += lines;
-        return `inserted ${lines} ${location} → ${rangeHint}`;
+        return `+${lines} ${location} → ${rangeHint}`;
       }
 
       const span = op.endLine - op.startLine + 1;
@@ -182,7 +178,7 @@ function editSummary(ops: StreamEditOp[]): string {
       if (lines === 0) {
         shift -= span;
         const preview = op.deletedContent ? `: ${truncatePreview(op.deletedContent)}` : "";
-        return `deleted ${rangeStr} (${span})${preview}`;
+        return `-${rangeStr} (${span})${preview}`;
       }
 
       const newStart = op.startLine + shift;
@@ -192,7 +188,7 @@ function editSummary(ops: StreamEditOp[]): string {
           ? hl(op.content[0], newStart)
           : `${hl(op.content[0], newStart)}–${hl(op.content[lines - 1], newEnd)}`;
       shift += lines - span;
-      return `replaced ${rangeStr} → ${hint} (${span}→${lines})`;
+      return `~${rangeStr} → ${hint} (${span}→${lines})`;
     })
     .join("\n");
 }

@@ -142,29 +142,29 @@ function formatDiffSection(relPath: string, diff: SymbolDiff, ref: string): stri
   parts.push(`## ${relPath} (vs ${ref})`);
 
   if (diff.added.length > 0) {
-    parts.push("\n**Added:**");
+    parts.push("\n+:");
     for (const s of diff.added) parts.push(`- \`${s.signature}\``);
   }
 
   if (diff.removed.length > 0) {
-    parts.push("\n**Removed:**");
+    parts.push("\n-:");
     for (const s of diff.removed) parts.push(`- \`${s.signature}\``);
   }
 
   if (diff.renamed.length > 0) {
-    parts.push("\n**Renamed:**");
+    parts.push("\n~:");
     for (const r of diff.renamed) parts.push(`- \`${r.oldName}\` \u2192 \`${r.newName}\``);
   }
 
   if (diff.signatureChanged.length > 0) {
-    parts.push("\n**Signature changed:**");
+    parts.push("\nsig:");
     for (const s of diff.signatureChanged) {
       parts.push(`- \`${s.name}\`: \`${s.oldSig}\` \u2192 \`${s.newSig}\``);
     }
   }
 
   if (diff.logicChanged.length > 0) {
-    parts.push("\n**Logic modified:**");
+    parts.push("\nbody:");
     for (const s of diff.logicChanged) {
       const miniDiff = computeMiniDiff(s.oldBody, s.newBody);
       if (miniDiff) {
@@ -251,7 +251,7 @@ export function computeMiniDiff(oldBody?: string, newBody?: string): string | nu
   added.reverse();
 
   const lines: string[] = [];
-  for (const r of removed) lines.push(`  - ${r.trim()}`);
-  for (const a of added) lines.push(`  + ${a.trim()}`);
+  for (const r of removed) lines.push(`-${r.trim()}`);
+  for (const a of added) lines.push(`+${a.trim()}`);
   return lines.join("\n");
 }
