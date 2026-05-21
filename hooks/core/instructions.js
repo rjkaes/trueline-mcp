@@ -83,11 +83,11 @@ export function getInstructions(platform = "claude-code") {
 
 **Example (search-then-edit)**
 \`\`\`
-trueline_search -> "->ab10 old line" / ref: ab10-cd11/efghij
-trueline_edit: range="ab10-cd11", ref="ab10-cd11/efghij", content="new line"
+trueline_search -> "->ab10 old line one / cd11 old line two / ref: ab10-cd11/efghij"
+trueline_edit: range="ab10-cd11", ref="ab10-cd11/efghij", content="new line one\nnew line two"
 \`\`\`
 
 **Multi-file**: ${p.grepAdvice}, then pass all file_paths to one trueline_search call
 
-**Error recovery**: If trueline_read fails with "H.reduce is not a function", run \`trueline read FILE\` in Bash — refs from CLI output are valid in trueline_edit MCP calls${atRefTip}${deferredHint}`;
+**Error recovery**: If trueline_read fails with "H.reduce is not a function", run \`trueline read FILE\` or \`trueline read FILE:START-END\` in Bash — refs from CLI output are valid in trueline_edit MCP calls${atRefTip}${deferredHint}`;
 }

@@ -42,7 +42,7 @@ Pick one matching what you know.
 ### 1. Surgical (default) — know the target
 
 ```
-trueline_search(file_paths, pattern) → trueline_edit
+trueline_search(file_paths, pattern) -> trueline_edit
 ```
 
 No read step. `trueline_search` returns lines with hash prefixes plus ref. Feed straight into `trueline_edit`. Fastest. Use for renames, string swaps, bugfixes on named function.
@@ -50,7 +50,7 @@ No read step. `trueline_search` returns lines with hash prefixes plus ref. Feed 
 ### 2. Exploratory — need context first
 
 ```
-trueline_outline → trueline_read (targeted ranges) → trueline_edit
+trueline_outline -> trueline_read (targeted ranges) -> trueline_edit
 ```
 
 Outline gives structure. Read only ranges you need. `trueline_read` accepts `path:startLine-endLine` inline for multiple slices in one call.
@@ -58,17 +58,17 @@ Outline gives structure. Read only ranges you need. `trueline_read` accepts `pat
 ### 3. Re-entering — refs held across turns
 
 ```
-trueline_verify(refs) → re-read only stale ranges → trueline_edit
+trueline_verify(refs) -> re-read only stale ranges -> trueline_edit
 ```
 
-Nothing changed → edit straight away. Stale → re-read just that range. Never re-read whole file on spec.
+Nothing changed -> edit straight away. Stale -> re-read just that range. Never re-read whole file on spec.
 
-## Worked example: search → edit
+## Worked example: search -> edit
 
 `trueline_search` output:
 
 ```
-→ab10	old line one
+->ab10	old line one
 cd11	old line two
 ref: ab10-cd11/efghij
 ```
@@ -85,11 +85,11 @@ trueline_edit(
 - `range` uses `hashLine` identifiers **verbatim** from output.
 - `ref` is the full range checksum (e.g. `ab10-cd11/efghij`) — copy verbatim, never guess.
 - Wide ref (e.g. lines 1-157) valid for any sub-range inside. Don't re-read narrower.
-- Lines prefixed with `→` are matches; lines without `→` are context. Both carry `hashLine` identifiers usable in `range`.
+- Lines prefixed with `->` are matches; lines without `->` are context. Both carry `hashLine` identifiers usable in `range`.
 
 ## Load-bearing rules
 
-Non-negotiable. Violations → verification errors or silent data loss.
+Non-negotiable. Violations -> verification errors or silent data loss.
 
 - **Never fabricate refs.** Copy the full ref (e.g. `ab10-cd11/efghij`) directly from output. Made-up ref fails verification.
 - **Hash prefixes (`ab10`) required.** Not decoration — verify content at that line.
@@ -113,6 +113,6 @@ Loads all six schemas together. One call, not six.
 ## Quick reference
 
 - Exploration default: `trueline_outline`.
-- Edit default: `trueline_search` → `trueline_edit`.
+- Edit default: `trueline_search` -> `trueline_edit`.
 - Review changes: `trueline_changes`.
 - Refs between turns: `trueline_verify`.

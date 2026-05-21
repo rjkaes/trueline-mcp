@@ -577,3 +577,13 @@ verified after the full stream completes — it catches changes to lines
 the agent isn't editing but that were included in the `trueline_read`
 window. The mtime guard narrows the TOCTOU window for external
 writers.
+
+## Hash prefix collision trade-off
+
+The 2-letter hash prefix alphabet is restricted to 100 curated BPE single-token English bigrams (see `src/hash.ts`). This trades a larger prefix space for fewer tokens per line in tool output:
+
+- Old: 676 combinations (26x26), per-line prefix collision ~0.15% across nearby lines.
+- New: 100 combinations, per-line prefix collision ~1.0% across nearby lines.
+- Savings: ~1 token per line in `trueline_read` and `trueline_search` output on most BPE tokenizers.
+
+Collision risk is mitigated by the line-number component (refs are `prefix.line`, not just `prefix`) and by checksum verification at edit time. The prefix is an attention test for the LLM, not the integrity check.
