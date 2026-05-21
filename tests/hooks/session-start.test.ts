@@ -2,10 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { getInstructions, getSessionStartInstructions } from "../../hooks/session-start.js";
 
 describe("getInstructions", () => {
-  test("wraps output in trueline_mcp_instructions tag", () => {
+  test("starts with trueline heading", () => {
     const out = getInstructions();
-    expect(out).toContain("<trueline_mcp_instructions>");
-    expect(out).toContain("</trueline_mcp_instructions>");
+    expect(out).toContain("### trueline MCP");
   });
 
   test("documents all six trueline tools", () => {
@@ -18,24 +17,22 @@ describe("getInstructions", () => {
     expect(out).toContain("trueline_verify");
   });
 
-  test("has exploration rules for outline and diff", () => {
+  test("has exploration rules for outline and changes", () => {
     const out = getInstructions();
-    expect(out).toContain("<exploration>");
-    expect(out).toContain("trueline_outline instead of");
+    expect(out).toContain("trueline_outline");
     expect(out).toContain("trueline_changes");
   });
 
-  test("has editing paths: surgical, exploratory, small-edit", () => {
+  test("has editing paths: surgical, exploratory, small-edit guidance", () => {
     const out = getInstructions();
-    expect(out).toContain("<editing>");
-    expect(out).toContain("surgical");
-    expect(out).toContain("exploratory");
-    expect(out).toContain("small-edit");
+    expect(out).toContain("trueline_search");
+    expect(out).toContain("trueline_read");
+    expect(out).toContain("trueline_edit");
   });
 
-  test("includes a workflow element", () => {
+  test("includes workflow guidance", () => {
     const out = getInstructions();
-    expect(out).toContain("<workflow>");
+    expect(out).toContain("trueline_search -> trueline_edit");
   });
 
   test("does not claim tools are blocked", () => {
@@ -50,17 +47,15 @@ describe("getInstructions", () => {
     expect(out).toContain("ref");
   });
 
-  test("does not include redundant <tools> section", () => {
+  test("does not include redundant tools section", () => {
     const out = getInstructions();
     expect(out).not.toContain("<tools>");
     expect(out).not.toContain("</tools>");
   });
 
-  test("keeps exactly one example (search-then-edit)", () => {
+  test("includes search-then-edit example", () => {
     const out = getInstructions();
-    expect(out).toContain('example name="search-then-edit"');
-    expect(out).not.toContain('example name="insert-after"');
-    expect(out).not.toContain('example name="chained-edit"');
+    expect(out).toContain("search-then-edit");
   });
 
   test("getSessionStartInstructions is a backwards-compatible alias", () => {

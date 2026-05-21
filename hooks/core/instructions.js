@@ -2,8 +2,8 @@
 // Platform-Parameterized Instruction Generation
 // ==============================================================================
 //
-// Generates the <trueline_mcp_instructions> block with platform-specific
-// tool routing guidance based on file size.
+// Generates the trueline MCP instructions block (dense markdown) injected at
+// SessionStart/SubagentStart. Targets ~250 tokens vs the old XML block (~900).
 
 const PLATFORM_TOOLS = {
   "claude-code": {
@@ -52,44 +52,42 @@ const PLATFORM_TOOLS = {
 export function getInstructions(platform = "claude-code") {
   const p = PLATFORM_TOOLS[platform] ?? PLATFORM_TOOLS["claude-code"];
 
-  const atRefTip = p.atRefAdvice ? `\n    <tip>${p.atRefAdvice}</tip>` : "";
+  const atRefTip = p.atRefAdvice ? `\n- ${p.atRefAdvice}` : "";
 
   // Platforms with deferred/lazy tool loading benefit from a batch-load hint.
   const deferredHint =
     platform === "claude-code" || platform === "vscode-copilot"
-      ? `\n  <deferred_loading>When trueline tools are deferred, load all in one ToolSearch call: +trueline read edit</deferred_loading>`
+      ? `\n- Deferred tools: load all in one ToolSearch call: \`+trueline read edit\``
       : "";
 
-  return `<trueline_mcp_instructions>
-  <exploration>
-    <rule>To understand a file's structure, use trueline_outline instead of ${p.readTool}. Outline returns ~10-20 lines for a typical file vs hundreds from a full read. This applies to all files, not just large ones.</rule>
-    <rule>To review changes, use trueline_changes. It provides a semantic summary of structural changes (added/removed/renamed symbols, signature changes) that no built-in tool can produce.</rule>
-    <rule>Only use ${p.readTool} for files you need to see in full (short configs, READMEs, files under ~50 lines).</rule>
-  </exploration>
-  <editing>
-    <path name="surgical" default="true">When you know the target (a function name, variable, string): use trueline_search to find lines with verification hashes, then trueline_edit. This is the fastest path and guarantees edits land on the right content.</path>
-    <path name="exploratory">When you need context first: trueline_outline \u2192 trueline_read (targeted ranges) to understand, then trueline_search or trueline_read \u2192 trueline_edit.</path>
-    <path name="small-edit">For files under ~200 lines or trivial one-line changes: ${p.readTool} and ${p.editTool} are fine. The MCP round-trip overhead outweighs hash verification savings on small files.</path>
-    <example name="search-then-edit">
-      trueline_search output shows: →ab10 old line one / cd11 old line two / ref: ab10-cd11/efghij
-      → trueline_edit: range="ab10-cd11", ref="ab10-cd11/efghij", content="new line one\\nnew line two"
-      Key: range uses the hashLine identifiers (ab10, cd11) from the output. ref is the inline checksum — copy it verbatim. Lines prefixed with → are matches; lines without → are context.
-    </example>
-    <rule>NEVER fabricate refs. Always copy the exact ref (e.g. "ab1-cd50/efghij") from trueline_read or trueline_search output. A ref from a wide read (e.g. covering lines 1-157) is valid for editing any sub-range within it.</rule>
-    <rule>To insert new content, use action="insert_after". Without it, the range lines are REPLACED (content is lost). If you want to add lines without removing existing ones, you must use action="insert_after".</rule>
-  </editing>
-  <workflow>trueline_outline \u2192 understand structure (any file, any size)</workflow>
-  <workflow>trueline_search \u2192 trueline_edit (fastest edit path, no read needed)</workflow>
-  <workflow>trueline_outline \u2192 trueline_read (targeted ranges) \u2192 trueline_edit</workflow>
-  <workflow>trueline_verify \u2192 trueline_read (re-read only stale ranges) \u2192 trueline_edit</workflow>
-  <workflow>trueline_changes \u2192 review structural changes vs git state</workflow>${deferredHint}
+  return `### trueline MCP
 
-  <error_recovery>
-    <rule>If trueline_read fails with "H.reduce is not a function" (Claude Code client bug on MCP responses over ~25KB), fall back to Bash: run "trueline read FILE" or "trueline read FILE:START-END" for a range. The CLI bypasses the MCP transport and prints the same hashLine output and refs to stdout — refs from CLI output are valid in subsequent trueline_edit MCP calls.</rule>
-  </error_recovery>
-  <tips>
-    <tip>If you already have hashLine identifiers and a ref from a prior trueline_read or trueline_search, go straight to trueline_edit. Do not re-read or re-search for data you already have. A wide ref (e.g. covering lines 1-50) works for editing any sub-range within it.</tip>
-    <tip>When you need to search-then-edit across multiple files, ${p.grepAdvice}, then pass all file_paths to a single trueline_search call to get refs for all of them at once.</tip>${atRefTip}
-  </tips>
-</trueline_mcp_instructions>`;
+**Explore**
+- Structure: trueline_outline before reading any file (returns ~10-20 lines vs hundreds)
+- Changes: trueline_changes for semantic structural diff vs git
+- ${p.readTool}: only for files <50 lines or when full content needed for editing
+- Targeted read: trueline_read with \`path:start-end\` range syntax
+
+**Edit (fastest path: trueline_search -> trueline_edit, no read needed)**
+- Know the target? trueline_search to get refs -> trueline_edit immediately
+- Need context? trueline_outline -> trueline_read (targeted ranges) -> trueline_edit
+- Small files (<200 lines) or trivial changes: ${p.readTool} + ${p.editTool} fine
+- trueline_verify before re-reading — only re-read stale ranges
+
+**Refs**
+- Refs are verbatim from trueline_read/trueline_search output — never fabricate
+- A wide ref (e.g. lines 1-157) is valid for editing any sub-range within it
+- Range format: \`ab10-cd11\` (2-letter hash prefix + line number, both ends required)
+- Insert without replacing: \`action: "insert_after"\` — default replaces and deletes
+- \`context_lines\` param returns hashLine context around edits for chaining
+
+**Example (search-then-edit)**
+\`\`\`
+trueline_search -> "->ab10 old line" / ref: ab10-cd11/efghij
+trueline_edit: range="ab10-cd11", ref="ab10-cd11/efghij", content="new line"
+\`\`\`
+
+**Multi-file**: ${p.grepAdvice}, then pass all file_paths to one trueline_search call
+
+**Error recovery**: If trueline_read fails with "H.reduce is not a function", run \`trueline read FILE\` in Bash — refs from CLI output are valid in trueline_edit MCP calls${atRefTip}${deferredHint}`;
 }

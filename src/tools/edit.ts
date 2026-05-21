@@ -167,13 +167,13 @@ function editSummary(ops: StreamEditOp[]): string {
         const rangeHint =
           lines === 1
             ? hl(op.content[0], newStart)
-            : `${hl(op.content[0], newStart)}–${hl(op.content[lines - 1], newEnd)}`;
+            : `${hl(op.content[0], newStart)}-${hl(op.content[lines - 1], newEnd)}`;
         shift += lines;
-        return `+${lines} ${location} → ${rangeHint}`;
+        return `+${lines} ${location} -> ${rangeHint}`;
       }
 
       const span = op.endLine - op.startLine + 1;
-      const rangeStr = op.startLine === op.endLine ? `${op.startLine}` : `${op.startLine}–${op.endLine}`;
+      const rangeStr = op.startLine === op.endLine ? `${op.startLine}` : `${op.startLine}-${op.endLine}`;
 
       if (lines === 0) {
         shift -= span;
@@ -186,9 +186,9 @@ function editSummary(ops: StreamEditOp[]): string {
       const hint =
         lines === 1
           ? hl(op.content[0], newStart)
-          : `${hl(op.content[0], newStart)}–${hl(op.content[lines - 1], newEnd)}`;
+          : `${hl(op.content[0], newStart)}-${hl(op.content[lines - 1], newEnd)}`;
       shift += lines - span;
-      return `~${rangeStr} → ${hint} (${span}→${lines})`;
+      return `~${rangeStr} -> ${hint} (${span}->${lines})`;
     })
     .join("\n");
 }

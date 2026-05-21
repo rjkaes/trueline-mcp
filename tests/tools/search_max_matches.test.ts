@@ -32,7 +32,7 @@ describe("trueline_search max_matches strictness", () => {
     const text = getText(result);
 
     // FAIL: Currently shows all 3 matches with markers
-    const matches = text.match(/→/g);
+    const matches = text.match(/->/g);
     expect(matches?.length).toBe(1);
 
     // FAIL: Currently says "showing 1 of 3 matches" which is WRONG

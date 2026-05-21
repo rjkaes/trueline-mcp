@@ -100,6 +100,111 @@ export function foldHash(accumulator: number, h: number): number {
   return accumulator;
 }
 
+// Curated BPE single-token bigrams (English-frequent pairs) — reduces per-line token cost
+const HASH_PREFIXES: readonly string[] = [
+  "th",
+  "he",
+  "in",
+  "er",
+  "an",
+  "re",
+  "on",
+  "at",
+  "en",
+  "nd",
+  "ti",
+  "es",
+  "or",
+  "te",
+  "of",
+  "ed",
+  "is",
+  "it",
+  "al",
+  "ar",
+  "st",
+  "to",
+  "nt",
+  "ng",
+  "se",
+  "ha",
+  "as",
+  "ou",
+  "io",
+  "le",
+  "ve",
+  "co",
+  "me",
+  "de",
+  "hi",
+  "ri",
+  "ro",
+  "ic",
+  "ne",
+  "ea",
+  "ra",
+  "ce",
+  "li",
+  "ch",
+  "ll",
+  "be",
+  "ma",
+  "si",
+  "om",
+  "ur",
+  "ca",
+  "el",
+  "ta",
+  "so",
+  "la",
+  "vo",
+  "di",
+  "ge",
+  "lo",
+  "us",
+  "no",
+  "un",
+  "ho",
+  "tr",
+  "ns",
+  "ow",
+  "pr",
+  "ly",
+  "bu",
+  "am",
+  "wi",
+  "ss",
+  "fo",
+  "po",
+  "pe",
+  "mi",
+  "fe",
+  "na",
+  "bl",
+  "sp",
+  "fi",
+  "fr",
+  "sh",
+  "wa",
+  "pl",
+  "pa",
+  "ac",
+  "ot",
+  "gi",
+  "do",
+  "ab",
+  "vi",
+  "mo",
+  "mu",
+  "wh",
+  "pi",
+  "pu",
+  "op",
+  "ex",
+  "cl",
+] as const;
+
+/** 26-char base for checksum encoding. */
 const BASE26 = "abcdefghijklmnopqrstuvwxyz";
 
 /** Encode a 32-bit checksum as 6 lowercase letters via base-26. 26^6 = 308M values. */
@@ -129,29 +234,12 @@ export function formatChecksum(
 }
 
 /**
- * 26-char alphabet: lowercase a-z only.
- * Fewer combinations (676) than the prior base32 alphabet (1024),
- * but LLMs transcribe pure-letter hashes more reliably.
- */
-const HASH_CHARS = "abcdefghijklmnopqrstuvwxyz";
-
-/**
- * Pre-computed lookup table of all 676 two-character hash tags.
- * Avoids per-call string concatenation in the hot loop.
- */
-const LETTER_TABLE: string[] = /* @__PURE__ */ (() => {
-  const t = new Array<string>(676);
-  for (let i = 0; i < 26; i++) for (let j = 0; j < 26; j++) t[i * 26 + j] = HASH_CHARS[i] + HASH_CHARS[j];
-  return t;
-})();
-
-/**
- * Map an FNV-1a hash to a two-character tag (676 possible values).
+ * Map an FNV-1a hash to a two-character tag drawn from curated BPE bigrams.
+ * 100 pairs in HASH_PREFIXES — better token economy than full a-z alphabet.
  */
 export function hashToLetters(h: number): string {
   // XOR-fold upper and lower 16 bits to decorrelate the two characters.
-  // Without this, FNV-1a's adjacent-byte correlation causes h%26 and
-  // (h>>>8)%26 to cluster, using only ~50% of the 676-tag space.
+  // Without this, FNV-1a's adjacent-byte correlation causes clustering.
   const folded = ((h >>> 16) ^ (h & 0xffff)) >>> 0;
-  return LETTER_TABLE[(folded % 26) * 26 + (((folded >>> 8) >>> 0) % 26)];
+  return HASH_PREFIXES[folded % HASH_PREFIXES.length];
 }

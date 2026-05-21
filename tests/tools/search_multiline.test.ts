@@ -54,7 +54,7 @@ describe("multiline search", () => {
     const text = getText(result);
     expect(text).toContain("function processData(");
     expect(text).toContain("): Result {");
-    expect(text).toContain("→");
+    expect(text).toContain("->");
     expect(text).toMatch(/ref: \S+/);
   });
 

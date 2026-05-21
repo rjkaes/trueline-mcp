@@ -235,7 +235,7 @@ function formatResults(
 
         const isMarked = line.isMatch && matchesEmitted < maxMatches;
         if (isMarked) matchesEmitted++;
-        const prefix = isMarked ? "→" : "";
+        const prefix = isMarked ? "->" : "";
         parts.push(`${prefix}${letters}${line.lineNumber}\t${line.text}`);
       }
 

@@ -503,7 +503,7 @@ export async function streamingEdit(
     // Check if checksum range exceeds file length
     if (ref.endLine > totalLines) {
       return await fail(
-        `Edit range ${ref.startLine}–${ref.endLine} exceeds file length (${totalLines} lines). ` +
+        `Edit range ${ref.startLine}-${ref.endLine} exceeds file length (${totalLines} lines). ` +
           `The file may have been truncated since your last read. Re-read with trueline_read.`,
       );
     }

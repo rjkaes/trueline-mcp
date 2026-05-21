@@ -1,40 +1,35 @@
 import { describe, expect, test } from "bun:test";
-import { DOMParser } from "@xmldom/xmldom";
 import { getInstructions } from "../../hooks/core/instructions.js";
 
 // ==============================================================================
-// XML Well-Formedness Tests
+// Instructions content tests
 // ==============================================================================
 //
-// Validates that getInstructions() produces well-formed XML for every platform.
-// This catches issues like missing closing tags (e.g. the </rules> bug in ede434b).
+// Validates that getInstructions() produces correct markdown for every platform.
 
 const PLATFORMS = ["claude-code", "gemini-cli", "vscode-copilot", "opencode", "codex"] as const;
 
-function parseXml(xml: string): { errors: string[] } {
-  const errors: string[] = [];
-  const parser = new DOMParser({
-    errorHandler: {
-      error: (msg: string) => errors.push(msg),
-      fatalError: (msg: string) => errors.push(msg),
-    },
-  });
-  parser.parseFromString(xml, "text/xml");
-  return { errors };
-}
-
-describe("instructions XML well-formedness", () => {
+describe("instructions markdown content", () => {
   for (const platform of PLATFORMS) {
-    test(`${platform}: parses as valid XML`, () => {
-      const xml = getInstructions(platform);
-      const { errors } = parseXml(xml);
-      expect(errors).toEqual([]);
+    test(`${platform}: contains trueline heading`, () => {
+      const out = getInstructions(platform);
+      expect(out).toContain("### trueline MCP");
+    });
+
+    test(`${platform}: documents all six trueline tools`, () => {
+      const out = getInstructions(platform);
+      expect(out).toContain("trueline_read");
+      expect(out).toContain("trueline_edit");
+      expect(out).toContain("trueline_changes");
+      expect(out).toContain("trueline_outline");
+      expect(out).toContain("trueline_search");
+      expect(out).toContain("trueline_verify");
     });
   }
 
-  test("unknown platform falls back without XML errors", () => {
-    const xml = getInstructions("unknown-platform");
-    const { errors } = parseXml(xml);
-    expect(errors).toEqual([]);
+  test("unknown platform falls back without error", () => {
+    const out = getInstructions("unknown-platform");
+    expect(out).toContain("### trueline MCP");
+    expect(out).toContain("trueline_edit");
   });
 });

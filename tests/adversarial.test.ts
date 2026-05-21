@@ -470,8 +470,8 @@ describe("Adversarial Tests", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     // Should show all 2000 matches since 5000 is allowed
-    expect(text).toMatch(/→\w+\d+\tmatch/);
-    const matchCount = (text.match(/→/g) || []).length;
+    expect(text).toMatch(/->\w+\d+\tmatch/);
+    const matchCount = (text.match(/->/g) || []).length;
     expect(matchCount).toBe(2000);
   });
 
@@ -535,7 +535,7 @@ describe("Adversarial Tests", () => {
 
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    expect(text).toMatch(/→\w+\d+\tmatch/);
+    expect(text).toMatch(/->\w+\d+\tmatch/);
     expect(text).toContain("a".repeat(100)); // Should see part of the long line
   });
 
@@ -605,8 +605,8 @@ describe("Adversarial Tests", () => {
 
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    expect(text).toMatch(/→\w+\d+\tline1/);
-    expect(text).toMatch(/→\w+\d+\tline2/);
+    expect(text).toMatch(/->\w+\d+\tline1/);
+    expect(text).toMatch(/->\w+\d+\tline2/);
   });
 
   test("handleSearch literal search with regex characters", async () => {
@@ -622,8 +622,8 @@ describe("Adversarial Tests", () => {
 
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    expect(text).toMatch(/→\w+\d+\ta\.b/);
-    expect(text).not.toMatch(/→\w+\d+\taxb/);
+    expect(text).toMatch(/->\w+\d+\ta\.b/);
+    expect(text).not.toMatch(/->\w+\d+\taxb/);
   });
 
   test("multiple insert-after at the same line", async () => {
@@ -667,7 +667,7 @@ describe("Adversarial Tests", () => {
 
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    expect(text).toMatch(/→\w+\d+\ta\tb/);
+    expect(text).toMatch(/->\w+\d+\ta\tb/);
   });
 
   test("insert-after at last line of file WITH trailing newline", async () => {

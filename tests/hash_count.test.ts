@@ -1,16 +1,15 @@
 import { test, expect, describe } from "bun:test";
 import { hashToLetters, fnv1aHash } from "../src/hash.ts";
 
-test("hashToLetters produces exactly 676 unique values (26^2)", () => {
+test("hashToLetters produces exactly 100 unique values (curated BPE bigrams)", () => {
   const seen = new Set<string>();
-  // Iterate through enough inputs to cover all possible bit combinations used
-  // in hashToLetters after XOR-folding.
+  // Iterate through enough inputs to cover all possible modular outputs.
   for (let i = 0; i < 65536; i++) {
     seen.add(hashToLetters(i));
   }
 
-  // This passes now, confirming it matches the updated DESIGN.md.
-  expect(seen.size).toBe(676);
+  // 100 curated bigrams in HASH_PREFIXES.
+  expect(seen.size).toBe(100);
 });
 
 describe("hashToLetters XOR-fold distribution", () => {
@@ -24,8 +23,8 @@ describe("hashToLetters XOR-fold distribution", () => {
     for (let i = 0; i < 10000; i++) {
       seen.add(hashToLetters(fnv1aHash(`  const variable_${i} = getValue(${i});`)));
     }
-    // XOR-fold achieves 676/676; without it only ~338/676.
-    expect(seen.size).toBeGreaterThan(600);
+    // 100 curated bigrams; XOR-fold achieves full coverage.
+    expect(seen.size).toBeGreaterThan(90);
   });
 
   test("max collision count stays reasonable", () => {
@@ -35,7 +34,7 @@ describe("hashToLetters XOR-fold distribution", () => {
       counts.set(tag, (counts.get(tag) || 0) + 1);
     }
     const max = Math.max(...counts.values());
-    // With XOR-fold max is ~30; without it max is ~49.
-    expect(max).toBeLessThan(40);
+    // 100 buckets, 10000 inputs: expected ~100 per bucket; allow 2x headroom.
+    expect(max).toBeLessThan(200);
   });
 });

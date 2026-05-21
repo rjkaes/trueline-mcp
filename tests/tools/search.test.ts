@@ -258,7 +258,7 @@ describe("multi-file search", () => {
       projectDir: testDir,
     });
     const text = getText(result);
-    const matchMarkers = text.match(/→/g);
+    const matchMarkers = text.match(/->/g);
     expect(matchMarkers?.length).toBe(1);
     expect(text).toContain("showing 1 of");
   });
