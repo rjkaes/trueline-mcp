@@ -47,7 +47,7 @@ qk3	console.log("hello");
 ref: ab1-qk3/efghij
 ```
 
-The **hash** is two characters from a 26-symbol alphabet (`a-z`) derived from the line's content via FNV-1a (a fast, non-cryptographic hash). Two characters give 676 possible values — enough to catch accidental mismatches, not enough to be a security mechanism.
+The **hash** is a two-character tag drawn from a curated vocabulary of 623 bigrams — every legal `[a-z][a-z]` pair that encodes as a single token in OpenAI's `cl100k_base` BPE tokenizer. Each tag costs one token, regardless of which bigram is selected, so per-line hash overhead is fixed. The tag is derived from the line's content via FNV-1a (a fast, non-cryptographic hash) and is a typo detector, not a security mechanism.
 
 The **ref** is a stateless inline checksum appended to each range of
 lines returned, in the form `abStartLine-cdEndLine/efghij`. The
@@ -521,25 +521,29 @@ round-trip.
 
 ### Two-character tag: `hashToLetters`
 
-The 32-bit per-line hash is projected into two characters from a
-26-symbol alphabet (`a-z`, 676 combinations) for the
-`xy.N\tcontent` display format.
+The 32-bit per-line hash is projected into a two-character tag drawn
+from `HASH_PREFIXES`, a curated 623-entry vocabulary of bigrams. Every
+entry is a legal `[a-z][a-z]` pair that encodes as a single token in
+OpenAI's `cl100k_base` BPE tokenizer, so each tag costs exactly one
+token regardless of which bigram is selected.
 
-The raw hash is XOR-folded from 32 bits to 16 bits first, then the
-two characters are extracted:
+The raw hash is XOR-folded from 32 bits to 16 bits, then reduced
+modulo the vocabulary size:
 
 ```
 folded = (hash >>> 16) XOR (hash & 0xFFFF)
-c1 = HASH_CHARS[folded % 26]          // low bits
-c2 = HASH_CHARS[(folded >>> 8) % 26]  // high bits
+tag    = HASH_PREFIXES[folded % HASH_PREFIXES.length]   // 623 entries
 ```
 
-Without the XOR-fold, FNV-1a's adjacent-byte correlation causes the
-two mod-26 extractions to cluster, using only ~50% of the 676-tag
-space. XOR-folding decorrelates them, achieving full coverage.
+XOR-folding decorrelates FNV-1a's adjacent-byte bias before the modulo,
+spreading hashes evenly across the 623 bigrams instead of clustering.
 
-This is a lossy mapping to 676 possible values -- a typo detector, not
-a security boundary.
+This is a lossy mapping to 623 possible values — a typo detector, not
+a security boundary. The vocabulary was chosen for token economy:
+full-alphabet `a-z` tags would have given 676 combinations but cost
+~2 tokens each in `cl100k_base`; the BPE-curated vocabulary trades a
+sliver of tag space (623 vs 676) for a 2x reduction in per-line tag
+cost across an entire read.
 
 ### Range checksum: `foldHash`
 

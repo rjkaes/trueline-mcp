@@ -100,110 +100,6 @@ export function foldHash(accumulator: number, h: number): number {
   return accumulator;
 }
 
-// Curated BPE single-token bigrams (English-frequent pairs) — reduces per-line token cost
-const HASH_PREFIXES: readonly string[] = [
-  "th",
-  "he",
-  "in",
-  "er",
-  "an",
-  "re",
-  "on",
-  "at",
-  "en",
-  "nd",
-  "ti",
-  "es",
-  "or",
-  "te",
-  "of",
-  "ed",
-  "is",
-  "it",
-  "al",
-  "ar",
-  "st",
-  "to",
-  "nt",
-  "ng",
-  "se",
-  "ha",
-  "as",
-  "ou",
-  "io",
-  "le",
-  "ve",
-  "co",
-  "me",
-  "de",
-  "hi",
-  "ri",
-  "ro",
-  "ic",
-  "ne",
-  "ea",
-  "ra",
-  "ce",
-  "li",
-  "ch",
-  "ll",
-  "be",
-  "ma",
-  "si",
-  "om",
-  "ur",
-  "ca",
-  "el",
-  "ta",
-  "so",
-  "la",
-  "vo",
-  "di",
-  "ge",
-  "lo",
-  "us",
-  "no",
-  "un",
-  "ho",
-  "tr",
-  "ns",
-  "ow",
-  "pr",
-  "ly",
-  "bu",
-  "am",
-  "wi",
-  "ss",
-  "fo",
-  "po",
-  "pe",
-  "mi",
-  "fe",
-  "na",
-  "bl",
-  "sp",
-  "fi",
-  "fr",
-  "sh",
-  "wa",
-  "pl",
-  "pa",
-  "ac",
-  "ot",
-  "gi",
-  "do",
-  "ab",
-  "vi",
-  "mo",
-  "mu",
-  "wh",
-  "pi",
-  "pu",
-  "op",
-  "ex",
-  "cl",
-] as const;
-
 /** 26-char base for checksum encoding. */
 const BASE26 = "abcdefghijklmnopqrstuvwxyz";
 
@@ -233,9 +129,35 @@ export function formatChecksum(
   return `${startLine}-${endLine}/${ck}`;
 }
 
+// 623 pairs, 1246 chars
+const HASH_PREFIXES: readonly string[] = (
+  "ineronreatstenorleitanaralouisesedicetroaselctndidamomimilurseex" +
+  "adchutifemolthigivceodagayotusunulueowewabumpetrckheloapublyavir" +
+  "ntpthtoskequizdeopupriplldocogffokclipibacakveppddrrccieprlludte" +
+  "awobiasoaxgeftliepboecphugsstpegneioeffoovghrywegrcashixrangtoms" +
+  "mlconcysduofypwoeyekwwbsrctdmpwhbrazbeahqlfltnwnikymfrajpsbyufma" +
+  "ucpxfeyntyuirgsgdbbleeainospuxxtoylnohmdswrlscmypimtjstatsafooeh" +
+  "meruksaudfdozeebmbukijsldapyvoycrtgonaaosvpgsmdrfajeiimmnyfsylpc" +
+  "txuyhrxyxxhazylauazacdnskagyoebacplsyyfgltcsskgnhscrevoxgtpmuzaa" +
+  "dsporsttjapuktxfcigsaehibbglhonpcmtksimowdrdvapakioigafdihcbvgjo" +
+  "vmkgvcnndkdcnijiyakyxbdtrfxcmigibifxfczixewphydijugurmdlfnbcwsnu" +
+  "tfbdyesawtkoozgbxasnujxdvtcfdplukrvifiwaeztidyzztcrvklrbfbfpyreq" +
+  "lfbncytlvsxiztlguvkubgmgeauhrxdxzobtmccvbfsdlpvytmczdmcnszggvlsr" +
+  "muvppdqatwnlpfhdkmyoiyytvdwipbnhhusbsflcdnlmbphlnbmxyztbxswriuvr" +
+  "lrknkkoawmnrnmbupneieucuwbznhhfwgcpkmrwxfmlbhpojkbgvmnlvbxgptvrp" +
+  "wysysjqrqtuonxiqzhwchnxlmktueozbzucxmvgmqswlsucgqqmqhwfvmfvnsqgd" +
+  "kwbmdwvhuupvfydhkhzwfhkclxzmnfrwpwfuqpvvhmvwzcdgejrnxpbjaqnviwhz" +
+  "dvtzkddzhcyijjjbbwyubkrhydqizkxozstgfklkjkuwvbxnwfjdkvjljqmwhfgf" +
+  "vfwgvujpgzrkvxqnvkkpsxzdyghbnkqbwknzxryxbhmhrzrqljgwbvxmnjlwjthx" +
+  "jrqcgxnwcwjclhfqpqwujmpzhgzxwjzlqwzfqvbzykvjyhjhqdqmdjmjqecjkfhq" +
+  "hvybywhkdqqxpjqhkjxzzpjncqlzjf" +
+  ""
+).match(/../g)!;
+
 /**
- * Map an FNV-1a hash to a two-character tag drawn from curated BPE bigrams.
- * 100 pairs in HASH_PREFIXES — better token economy than full a-z alphabet.
+ * Map an FNV-1a hash to a two-character tag drawn from single-BPE-token
+ * bigrams. 623 pairs — every legal `[a-z][a-z]` single-token bigram in
+ * cl100k_base — for maximum token economy per tag.
  */
 export function hashToLetters(h: number): string {
   // XOR-fold upper and lower 16 bits to decorrelate the two characters.

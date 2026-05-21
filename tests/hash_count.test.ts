@@ -1,15 +1,15 @@
 import { test, expect, describe } from "bun:test";
 import { hashToLetters, fnv1aHash } from "../src/hash.ts";
 
-test("hashToLetters produces exactly 100 unique values (curated BPE bigrams)", () => {
+test("hashToLetters produces exactly 623 unique values (BPE single-token bigrams)", () => {
   const seen = new Set<string>();
   // Iterate through enough inputs to cover all possible modular outputs.
   for (let i = 0; i < 65536; i++) {
     seen.add(hashToLetters(i));
   }
 
-  // 100 curated bigrams in HASH_PREFIXES.
-  expect(seen.size).toBe(100);
+  // 623 BPE single-token bigrams in HASH_PREFIXES.
+  expect(seen.size).toBe(623);
 });
 
 describe("hashToLetters XOR-fold distribution", () => {
@@ -23,8 +23,8 @@ describe("hashToLetters XOR-fold distribution", () => {
     for (let i = 0; i < 10000; i++) {
       seen.add(hashToLetters(fnv1aHash(`  const variable_${i} = getValue(${i});`)));
     }
-    // 100 curated bigrams; XOR-fold achieves full coverage.
-    expect(seen.size).toBeGreaterThan(90);
+    // 623 BPE single-token bigrams; XOR-fold achieves broad coverage.
+    expect(seen.size).toBeGreaterThan(560);
   });
 
   test("max collision count stays reasonable", () => {
@@ -34,7 +34,7 @@ describe("hashToLetters XOR-fold distribution", () => {
       counts.set(tag, (counts.get(tag) || 0) + 1);
     }
     const max = Math.max(...counts.values());
-    // 100 buckets, 10000 inputs: expected ~100 per bucket; allow 2x headroom.
-    expect(max).toBeLessThan(200);
+    // 623 buckets, 10000 inputs: expected ~16 per bucket; allow ~3x headroom.
+    expect(max).toBeLessThan(50);
   });
 });
