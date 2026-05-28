@@ -5,7 +5,7 @@
  * Much smaller than reading the full file — useful for navigation and
  * understanding file structure before reading specific ranges.
  */
-import { readFile } from "node:fs/promises";
+import { constants, open } from "node:fs/promises";
 import { extname } from "node:path";
 import { extractOutline, formatOutline } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
@@ -115,7 +115,11 @@ async function outlineOneFile(
 
   let source: string;
   try {
-    const buf = await readFile(resolvedPath);
+    // O_NOFOLLOW: fail if the leaf path is a symlink, guarding against
+    // TOCTOU races between validatePath() and this open.
+    const noFollow = constants.O_NOFOLLOW ?? 0;
+    const fh = await open(resolvedPath, constants.O_RDONLY | noFollow);
+    const buf = await fh.readFile().finally(() => fh.close());
     if (buf.includes(0)) {
       return errorResult(`"${file_path}" appears to be a binary file`);
     }

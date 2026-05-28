@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile } from "node:fs/promises";
+import { constants, open } from "node:fs/promises";
 import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
@@ -42,7 +42,11 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     // Read disk content
     let diskContent: string;
     try {
-      const buf = await readFile(resolvedPath);
+      // O_NOFOLLOW: fail if the leaf path is a symlink, guarding against
+      // TOCTOU races between validatePath() and this open.
+      const noFollow = constants.O_NOFOLLOW ?? 0;
+      const fh = await open(resolvedPath, constants.O_RDONLY | noFollow);
+      const buf = await fh.readFile().finally(() => fh.close());
       if (buf.includes(0)) {
         return errorResult(`"${filePath}" appears to be a binary file`);
       }

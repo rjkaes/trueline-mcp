@@ -160,6 +160,32 @@ bun test             # run tests
 bun run build        # build binary for the current platform
 ```
 
+
+## Security model
+
+trueline-mcp assumes a single-user filesystem trust model: the invoking user
+is trusted, and any process running as that user can already read and write
+the same files trueline can.
+
+`validatePath()` blocks path traversal and symlink escape at check time by
+resolving with `realpath()` and verifying containment within the project
+directory, `TRUELINE_ALLOWED_DIRS`, and (under Claude Code) `~/.claude/`.
+
+Concurrent symlink races (TOCTOU) — where another process under the same
+UID swaps a directory component between the check and a later open — are not
+in scope. Closing them would require fd-based I/O throughout the codebase,
+which conflicts with the streaming and atomic-rename design. That tradeoff is
+stated here rather than left implicit.
+
+As defense-in-depth, read-side opens of user-supplied paths pass `O_NOFOLLOW`
+on POSIX. A leaf-component symlink swap between `validatePath` and the open
+fails the open rather than silently following. Writes and rename targets are
+unchanged — the edit path's temp-file and rename pattern was already
+symlink-safe.
+
+If you run trueline in a shared-account or multi-tenant environment, harden
+the OS layer (chroot, mount namespaces) rather than relying on trueline's
+path checks alone.
 ## Inspiration
 
 Inspired by [The Harness Problem](https://blog.can.ac/2026/02/12/the-harness-problem/)

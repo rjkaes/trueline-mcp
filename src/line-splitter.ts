@@ -13,7 +13,7 @@
 // each caller to implement it separately.
 // ==============================================================================
 
-import { open } from "node:fs/promises";
+import { constants, open } from "node:fs/promises";
 
 // ==============================================================================
 // Public types and constants
@@ -150,7 +150,10 @@ const READ_BUF_SIZE = 65536;
  */
 export async function* splitLines(filePath: string, opts?: { detectBinary?: boolean }): AsyncGenerator<RawLine> {
   async function* fileChunks(): AsyncGenerator<Buffer> {
-    const fd = await open(filePath, "r");
+    // O_NOFOLLOW: fail if the leaf path is a symlink, guarding against
+    // TOCTOU races between validatePath() and this open.
+    const noFollow = constants.O_NOFOLLOW ?? 0;
+    const fd = await open(filePath, constants.O_RDONLY | noFollow);
     const readBuf = Buffer.allocUnsafe(READ_BUF_SIZE);
     try {
       let bytesRead: number;
