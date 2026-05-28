@@ -457,8 +457,7 @@ export async function streamingEdit(
     if (err instanceof Error && err.message.includes("binary")) {
       return await fail(err.message);
     }
-    await cleanupTmp();
-    throw err;
+    return await fail(`stream read failed: ${(err as Error).message}`);
   }
 
   // ---- Post-stream: flush last line ----
@@ -473,8 +472,7 @@ export async function streamingEdit(
       }
     }
   } catch (err) {
-    await cleanupTmp();
-    throw err;
+    return await fail(`flush last line failed: ${(err as Error).message}`);
   }
 
   // Flush remaining buffered bytes and close the file descriptor.
@@ -492,8 +490,9 @@ export async function streamingEdit(
     }
     await fd.close();
   } catch (err) {
-    await cleanupTmp();
-    throw err;
+    // EIO and ENOSPC reach here — the temp file was not fully written;
+    // returning a structured error is safer than propagating an exception.
+    return await fail(`flush/close failed: ${(err as Error).message}`);
   }
 
   // ---- Verify checksums ----
@@ -592,8 +591,7 @@ export async function streamingEdit(
       // proceed with rename so the edit still lands. Any other error
       // (EPERM, EIO, etc.) is unexpected and should not be silently ignored.
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        await cleanupTmp();
-        throw err;
+        return await fail(`stat failed: ${(err as NodeJS.ErrnoException).message}`);
       }
     }
 
@@ -690,8 +688,8 @@ export async function streamingEdit(
         await chmod(resolvedPath, originalMode);
       }
     } catch (err) {
-      await cleanupTmp();
-      throw err;
+      // rename or chmod threw — formatRenameError already embedded full path/errno/AV hint.
+      return await fail((err as Error).message);
     }
   }
 
