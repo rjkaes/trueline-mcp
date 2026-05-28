@@ -84,11 +84,19 @@ function registerTool(
 // Single-file tools (edit, search) need to unwrap back to file_path (string).
 function unwrapFilePath(coerced: Record<string, unknown>): void {
   if (!coerced.file_path && Array.isArray(coerced.file_paths)) {
-    coerced.file_path = (coerced.file_paths as string[])[0];
+    const paths = coerced.file_paths as string[];
+    if (paths.length > 1) {
+      throw new Error(`This tool accepts a single file path; received ${paths.length}. Pass one path as file_path.`);
+    }
+    coerced.file_path = paths[0];
     delete coerced.file_paths;
   }
   if (Array.isArray(coerced.file_path)) {
-    coerced.file_path = (coerced.file_path as string[])[0];
+    const paths = coerced.file_path as string[];
+    if (paths.length > 1) {
+      throw new Error(`This tool accepts a single file path; received ${paths.length}. Pass one path as file_path.`);
+    }
+    coerced.file_path = paths[0];
   }
 }
 function safeTool(
