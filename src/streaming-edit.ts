@@ -692,10 +692,18 @@ export async function streamingEdit(
       // read-only; a subsequent rename failure left cleanupTmp unable to unlink
       // the temp (EACCES), stranding it on disk.
       if (originalMode !== undefined && !skipChmod) {
-        await chmod(resolvedPath, originalMode);
+        // Rename already committed the new content. A chmod failure must not
+        // mask that success — surface it as a warning instead of failing.
+        try {
+          await chmod(resolvedPath, originalMode);
+        } catch (chmodErr) {
+          process.stderr.write(
+            `[trueline-mcp] warning: failed to restore mode on ${resolvedPath}: ${(chmodErr as Error).message}\n`,
+          );
+        }
       }
     } catch (err) {
-      // rename or chmod threw — formatRenameError already embedded full path/errno/AV hint.
+      // rename threw — formatRenameError already embedded full path/errno/AV hint.
       return await fail((err as Error).message);
     }
   }
