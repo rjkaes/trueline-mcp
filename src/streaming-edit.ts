@@ -482,8 +482,13 @@ export async function streamingEdit(
     await flushWriteBuf();
     try {
       await fd.sync();
-    } catch {
-      /* best-effort: some filesystems reject fsync */
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      // Swallow only filesystem-incompatibility codes (e.g. FAT, NFS, /proc);
+      // data-integrity failures like EIO and ENOSPC must propagate so the outer
+      // catch can clean up the temp file and surface the error to the caller.
+      const ignorable = new Set(["EINVAL", "ENOTSUP", "ENOSYS", "ENOTTY"]);
+      if (!code || !ignorable.has(code)) throw err;
     }
     await fd.close();
   } catch (err) {
@@ -597,9 +602,6 @@ export async function streamingEdit(
       // bits are silently ignored. Calling chmod when the file is already writable
       // is a no-op that can still trip ACL filters or AV hooks, so skip it.
       const skipChmod = process.platform === "win32" && originalMode !== undefined && (originalMode & 0o200) !== 0; // original was writable — chmod would be a no-op
-      if (originalMode !== undefined && !skipChmod) {
-        await chmod(tmpPath, originalMode);
-      }
 
       // On Windows, AV/Defender/indexers can briefly hold a handle on the temp
       // file or destination without FILE_SHARE_DELETE, causing rename() to fail
@@ -637,6 +639,31 @@ export async function streamingEdit(
         const delays = [10, 30, 100, 300, 1000];
         let lastErr: unknown;
         for (let attempt = 0; attempt <= delays.length; attempt++) {
+          // Before each retry (not the first attempt — that's covered by the
+          // pre-rename mtime check above), re-stat the destination to detect
+          // external writes during the backoff sleep. A changed mtime means
+          // another process modified the file; overwriting it silently would
+          // corrupt their changes. ENOENT is tolerated: destination was deleted
+          // between attempts, and rename() will recreate it.
+          if (attempt > 0) {
+            try {
+              const currentStat = await stat(resolvedPath);
+              if (currentStat.mtimeMs !== mtimeMs) {
+                const staleErr = new Error(
+                  "File was modified by another process during retry backoff. Your ref is stale.",
+                ) as NodeJS.ErrnoException;
+                staleErr.code = "ESTALE_DURING_RETRY";
+                throw formatRenameError(staleErr, tmpPath, resolvedPath, attempt);
+              }
+            } catch (err) {
+              const code = (err as NodeJS.ErrnoException).code;
+              if (code === "ENOENT") {
+                // Destination was deleted between attempts — fine, rename will create it
+              } else {
+                throw err;
+              }
+            }
+          }
           try {
             await rename(tmpPath, resolvedPath);
             return;
@@ -655,6 +682,13 @@ export async function streamingEdit(
         throw formatRenameError(lastErr, tmpPath, resolvedPath, delays.length);
       }
       await renameWithRetry();
+      // chmod the destination after a successful rename, not the temp file before.
+      // Doing it beforehand made the temp read-only on win32 when the source was
+      // read-only; a subsequent rename failure left cleanupTmp unable to unlink
+      // the temp (EACCES), stranding it on disk.
+      if (originalMode !== undefined && !skipChmod) {
+        await chmod(resolvedPath, originalMode);
+      }
     } catch (err) {
       await cleanupTmp();
       throw err;
