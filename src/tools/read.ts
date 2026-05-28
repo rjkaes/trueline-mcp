@@ -19,7 +19,7 @@ import { errorResult, type ToolResult, textResult } from "./types.ts";
 /** Expand each range by 1 line on each side for boundary context, then re-merge. */
 function expandRanges(ranges: ReadRange[]): ReadRange[] {
   const expanded = ranges.map((r) => ({
-    start: r.start > 1 && r.end !== Infinity ? r.start - 1 : r.start,
+    start: r.start > 1 ? r.start - 1 : r.start,
     end: r.end !== Infinity ? r.end + 1 : r.end,
   }));
   for (let i = 1; i < expanded.length; i++) {
