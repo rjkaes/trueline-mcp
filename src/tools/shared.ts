@@ -5,6 +5,20 @@ import { type ChecksumRef, parseRange, parseInlineRef } from "../parse.ts";
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
 
+// Memoize realpath() of base directories. projectDir and allowedDirs are
+// stable across the server lifetime, so re-resolving them on every
+// validatePath call wastes syscalls. The target file path is NOT cached —
+// callers can create or delete files between validations.
+const baseDirRealpathCache = new Map<string, Promise<string>>();
+function cachedBaseRealpath(p: string): Promise<string> {
+  let pending = baseDirRealpathCache.get(p);
+  if (!pending) {
+    pending = realpath(p);
+    baseDirRealpathCache.set(p, pending);
+    pending.catch(() => baseDirRealpathCache.delete(p));
+  }
+  return pending;
+}
 // ==============================================================================
 // Shared input type used by both edit and diff tools
 // ==============================================================================
@@ -78,7 +92,7 @@ export async function validatePath(
   // short 8.3 names on Windows (e.g. RUNNER~1) match the realpath of the file.
   let realBase: string;
   try {
-    realBase = await realpath(projectDir ? projectDir : process.cwd());
+    realBase = await cachedBaseRealpath(projectDir ? projectDir : process.cwd());
   } catch {
     return {
       ok: false,
@@ -90,7 +104,7 @@ export async function validatePath(
   const resolvedAllowed = await Promise.all(
     allowedDirs.map(async (d) => {
       try {
-        return await realpath(d);
+        return await cachedBaseRealpath(d);
       } catch {
         return d;
       }
