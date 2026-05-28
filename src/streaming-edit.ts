@@ -634,7 +634,14 @@ export async function streamingEdit(
       }
 
       async function renameWithRetry(): Promise<void> {
-        const delays = [10, 30, 100, 300, 1000];
+        // Read the delay sequence from TRUELINE_RENAME_DELAYS_MS at call time so
+        // tests can opt into zero-delay retries by setting the env var dynamically
+        // (module-scope evaluation would miss changes made after import). An unset,
+        // empty, or malformed value falls back to the production default silently.
+        const rawDelays = process.env.TRUELINE_RENAME_DELAYS_MS;
+        const parsed = rawDelays?.trim() ? rawDelays.split(",").map((s) => parseInt(s.trim(), 10)) : null;
+        const delays: number[] =
+          parsed !== null && parsed.every((n) => !Number.isNaN(n) && n >= 0) ? parsed : [10, 30, 100, 300, 1000];
         let lastErr: unknown;
         for (let attempt = 0; attempt <= delays.length; attempt++) {
           // Before each retry (not the first attempt — that's covered by the

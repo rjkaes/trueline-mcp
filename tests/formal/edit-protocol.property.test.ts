@@ -9,6 +9,11 @@ import { streamingEdit } from "../../src/streaming-edit.ts";
 import type { StreamEditOp } from "../../src/streaming-edit.ts";
 import { parseChecksum } from "../../src/parse.ts";
 
+// Zero-delay retries: the renameWithRetry backoff in streaming-edit.ts reads
+// this env var at call time, so setting it here (after imports are resolved)
+// is sufficient. 500 iterations * up to 1.44 s default backoff would exceed
+// the 30 s test budget on Windows runners where Defender briefly holds handles.
+process.env.TRUELINE_RENAME_DELAYS_MS = "0,0,0,0,0";
 const NUM_RUNS = 500;
 
 // Each property callback creates and cleans up its own temp dir to avoid
