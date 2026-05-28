@@ -480,6 +480,11 @@ export async function streamingEdit(
   // Flush remaining buffered bytes and close the file descriptor.
   try {
     await flushWriteBuf();
+    try {
+      await fd.sync();
+    } catch {
+      /* best-effort: some filesystems reject fsync */
+    }
     await fd.close();
   } catch (err) {
     await cleanupTmp();
@@ -588,10 +593,68 @@ export async function streamingEdit(
     }
 
     try {
-      if (originalMode !== undefined) {
+      // On win32, Node's chmod only toggles the read-only bit (0o200); all other
+      // bits are silently ignored. Calling chmod when the file is already writable
+      // is a no-op that can still trip ACL filters or AV hooks, so skip it.
+      const skipChmod = process.platform === "win32" && originalMode !== undefined && (originalMode & 0o200) !== 0; // original was writable — chmod would be a no-op
+      if (originalMode !== undefined && !skipChmod) {
         await chmod(tmpPath, originalMode);
       }
-      await rename(tmpPath, resolvedPath);
+
+      // On Windows, AV/Defender/indexers can briefly hold a handle on the temp
+      // file or destination without FILE_SHARE_DELETE, causing rename() to fail
+      // with EPERM/EACCES/EBUSY. Retry with exponential back-off before giving up.
+      // Produce a human-readable error for rename failures, preserving the
+      // original as .cause so debug tooling still has the full stack.
+      function formatRenameError(err: unknown, tmp: string, dest: string, attempts: number): Error {
+        const errno = err as NodeJS.ErrnoException;
+        const code = errno.code ?? "UNKNOWN";
+        let hint: string;
+        if (code === "EPERM" || code === "EACCES") {
+          hint =
+            process.platform === "win32"
+              ? "likely antivirus, file indexer, or editor holding a handle without FILE_SHARE_DELETE; the file may also be read-only or on a permission-restricted volume"
+              : errno.message;
+        } else if (code === "EBUSY") {
+          hint =
+            process.platform === "win32"
+              ? "the destination is currently locked by another process (often an editor or watcher)"
+              : errno.message;
+        } else {
+          hint = errno.message;
+        }
+        const retryNote =
+          process.platform === "win32" && attempts > 0 ? `; retried ${attempts} times with backoff before failing` : "";
+        const wrapped = new Error(
+          `${code}: rename '${tmp}' -> '${dest}': ${hint}${retryNote}`,
+        ) as NodeJS.ErrnoException;
+        wrapped.code = code;
+        (wrapped as Error & { cause: unknown }).cause = err;
+        return wrapped;
+      }
+
+      async function renameWithRetry(): Promise<void> {
+        const delays = [10, 30, 100, 300, 1000];
+        let lastErr: unknown;
+        for (let attempt = 0; attempt <= delays.length; attempt++) {
+          try {
+            await rename(tmpPath, resolvedPath);
+            return;
+          } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (process.platform !== "win32" || !code || !(code === "EPERM" || code === "EACCES" || code === "EBUSY")) {
+              throw formatRenameError(err, tmpPath, resolvedPath, 0); // non-retryable: wrong platform, or non-transient error code
+            }
+            lastErr = err;
+            if (attempt < delays.length) {
+              await new Promise<void>((r) => setTimeout(r, delays[attempt]));
+            }
+          }
+        }
+        // delays.length retries attempted (delays.length + 1 total attempts)
+        throw formatRenameError(lastErr, tmpPath, resolvedPath, delays.length);
+      }
+      await renameWithRetry();
     } catch (err) {
       await cleanupTmp();
       throw err;
