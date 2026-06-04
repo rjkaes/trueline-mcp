@@ -22,6 +22,8 @@ trueline changes [paths...]   # alias: diff
 
 Every subcommand accepts `--help`/`-h`. Pass `--json` on any subcommand for `{ok, result}` machine-readable output. Exit codes: `0` ok, `1` search no match, `2` tool error, `3` usage error.
 
+**Never pipe `trueline read`/`trueline search` through `head`, `tail`, `sed`, `grep`, or any filter that drops lines.** The ref checksum (e.g. `ref: ab10-cd11/efghij`) is printed at the *end* of the output. Truncating it loses the ref, which makes `trueline_edit` unusable — there is nothing valid to pass as `ref`. Read the full output; scope it with `--ranges` (CLI) or `path:start-end` (MCP) instead of piping.
+
 Use MCP tools (this skill) for in-agent file work. Use the CLI for anything outside an agent context.
 
 ## Tool cheat sheet
