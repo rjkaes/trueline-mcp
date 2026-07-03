@@ -71,7 +71,7 @@ export function getInstructions(platform = "claude-code") {
 **Edit (fastest path: trueline_search -> trueline_edit, no read needed)**
 - Know the target? trueline_search to get refs -> trueline_edit immediately
 - Need context? trueline_outline -> trueline_read (targeted ranges) -> trueline_edit
-- Small files (<200 lines) or trivial changes: ${p.readTool} + ${p.editTool} fine
+- Small files or trivial changes: trueline_read -> trueline_edit (skip search; the read returns refs)
 - trueline_verify before re-reading — only re-read stale ranges
 
 **Refs**

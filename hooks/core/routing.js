@@ -277,8 +277,9 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
   return {
     action: "block",
     reason:
-      "<trueline_redirect>Use trueline_search to find the target content, then trueline_edit to apply " +
-      "hash-verified changes. trueline_edit confirms content hasn't changed since you last read it, " +
-      "preventing stale-content mismatches that built-in Edit can't detect.</trueline_redirect>",
+      "<trueline_redirect>Reuse the replacement text you just wrote verbatim; don't regenerate it. " +
+      "Get a ref with one trueline_search on a snippet of the original content, then trueline_edit " +
+      "with that ref and your replacement. trueline_edit confirms content hasn't changed since you " +
+      "last read it, preventing stale-content mismatches that built-in Edit can't detect.</trueline_redirect>",
   };
 }
