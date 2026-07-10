@@ -97,6 +97,7 @@ Non-negotiable. Violations -> verification errors or silent data loss.
 - **Hash prefixes (`ab10`) required.** Not decoration — verify content at that line.
 - **`action="insert_after"` to add lines.** Without it, range is *replaced* and content lost. To add next to existing lines, pass `action: "insert_after"`.
 - **Don't re-read data you have.** With ref and `hashLine` from prior search/read, go straight to `trueline_edit`.
+- **`trueline_edit` needs an absolute `file_path`.** Relative paths are rejected by the MCP tool — they'd resolve against the session project root, not your worktree.
 
 ## Multi-file batches
 

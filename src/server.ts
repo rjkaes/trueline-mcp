@@ -241,7 +241,10 @@ const editJsonSchema = {
   properties: {
     file_path: {
       type: "string",
-      description: "Path to the file to edit.",
+      description:
+        "Absolute path to the file to edit (e.g. /Users/you/project/src/foo.ts). " +
+        "Relative paths are rejected: they resolve against the session project root, not your working directory " +
+        "(e.g. a git worktree), and would silently target the wrong file.",
     },
     edits: {
       type: "array",
@@ -410,7 +413,7 @@ registerTool(
     const coerced = coerceParams(rawParams) as Record<string, unknown>;
     unwrapFilePath(coerced);
     const params = editSchema.parse(coerced);
-    return handleEdit({ ...params, projectDir, allowedDirs });
+    return handleEdit({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
 );
 

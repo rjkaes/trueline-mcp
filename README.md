@@ -83,6 +83,11 @@ outputting all 30 of those lines again.
 
 Multiple edits can be batched in a single call and applied atomically.
 
+The MCP `trueline_edit` tool requires an absolute `file_path`; relative paths
+are rejected to avoid silently editing the wrong file when the agent is
+working in a git worktree. The CLI (`trueline edit`) still accepts relative
+paths, since its working directory is unambiguous.
+
 ### Review: semantic diffs
 
 `trueline_changes` provides an AST-based summary of structural changes

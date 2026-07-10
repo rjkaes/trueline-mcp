@@ -73,6 +73,7 @@ export function getInstructions(platform = "claude-code") {
 - Need context? trueline_outline -> trueline_read (targeted ranges) -> trueline_edit
 - Small files or trivial changes: trueline_read -> trueline_edit (skip search; the read returns refs)
 - trueline_verify before re-reading — only re-read stale ranges
+- trueline_edit requires an absolute file_path (relative resolves against a stale project root in worktrees)
 
 **Refs**
 - Refs are verbatim from trueline_read/trueline_search output — never fabricate

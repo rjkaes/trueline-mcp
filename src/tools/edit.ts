@@ -12,7 +12,7 @@
 
 import { open, writeFile } from "node:fs/promises";
 import { unlink } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { DiffCollector } from "../diff-collector.ts";
@@ -31,11 +31,21 @@ interface EditParams {
   context_lines?: number;
   projectDir?: string;
   allowedDirs?: string[];
+  requireAbsolutePath?: boolean;
 }
 
 export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const t0 = performance.now();
   const { file_path, edits, dry_run, context_lines, projectDir, allowedDirs } = params;
+
+  if (params.requireAbsolutePath && !isAbsolute(file_path)) {
+    return errorResult(
+      `file_path must be an absolute path, got "${file_path}". ` +
+        `Relative paths resolve against the session project root, which can differ from your working directory ` +
+        `(e.g. a git worktree under .claude/worktrees/), silently sending the edit to the wrong file. ` +
+        `Pass the absolute path to the file you want to edit.`,
+    );
+  }
 
   // dry_run uses Read deny patterns: it's a read-only preview, same as the old trueline_changes
   const toolName = dry_run ? "Read" : "Edit";
