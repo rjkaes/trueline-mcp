@@ -6,7 +6,7 @@
  * checksums, and refs ready for immediate editing.
  */
 import { checksumToLetters, hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
-import { displayPath, expandGlobs, validatePath } from "./shared.ts";
+import { displayPath, expandGlobs, isAbsolutePathArg, relativePathError, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 import { searchLineByLine } from "./search-line.ts";
 import { searchMultiline } from "./search-multiline.ts";
@@ -24,10 +24,11 @@ interface SearchParams {
   multiline?: boolean;
   projectDir?: string;
   allowedDirs?: string[];
+  requireAbsolutePath?: boolean;
 }
 
 export async function handleSearch(params: SearchParams): Promise<ToolResult> {
-  const { pattern, projectDir, allowedDirs } = params;
+  const { pattern, projectDir, allowedDirs, requireAbsolutePath } = params;
   const contextLines = params.context_lines ?? 2;
   const maxMatches = params.max_matches ?? 10;
 
@@ -36,17 +37,37 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     return errorResult(`context_lines must be between 0 and ${MAX_CONTEXT_LINES}`);
   }
 
-  // Normalize file_path / file_paths, then expand globs
+  // Normalize file_path / file_paths
   const rawPaths = normalizeFilePaths(params);
-  const filePaths = await expandGlobs(rawPaths, projectDir);
+
+  if (requireAbsolutePath && rawPaths.length === 1 && !isAbsolutePathArg(rawPaths[0])) {
+    return relativePathError(rawPaths[0]);
+  }
+
+  // Reject relative entries before glob expansion, so a relative glob never
+  // resolves against a possibly-stale projectDir. Absolute siblings still
+  // proceed (graceful degradation).
+  const rejectedSections: string[] = [];
+  let candidatePaths = rawPaths;
+  if (requireAbsolutePath) {
+    candidatePaths = rawPaths.filter((entry) => {
+      if (isAbsolutePathArg(entry)) return true;
+      const errorText = (relativePathError(entry).content[0] as { text: string }).text;
+      rejectedSections.push(`${entry}:\nerror: ${errorText}\n`);
+      return false;
+    });
+  }
+
+  const filePaths = await expandGlobs(candidatePaths, projectDir);
   if (filePaths.length === 0) {
+    if (rejectedSections.length > 0) return textResult(rejectedSections.join("\n"));
     return errorResult("file_paths must be a non-empty array");
   }
 
   // Search each file, tracking global match budget
   let matchBudget = maxMatches;
   const results: FileSearchResult[] = [];
-  const multiFile = filePaths.length > 1;
+  const multiFile = filePaths.length > 1 || rejectedSections.length > 0;
 
   if (params.multiline) {
     // Multiline mode: build regex with dotAll flag, delegate to multiline engine
@@ -131,7 +152,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     }
   }
 
-  return formatResults(
+  const formatted = formatResults(
     results,
     filePaths,
     pattern,
@@ -140,6 +161,12 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     projectDir,
     params.regex || params.multiline,
   );
+  if (rejectedSections.length === 0) return formatted;
+
+  // Prepend rejected-path sections so a relative sibling doesn't hide the
+  // successful matches from the rest of the batch.
+  const formattedText = (formatted.content[0] as { text: string }).text;
+  return textResult([...rejectedSections, formattedText].join("\n"));
 }
 
 // ---------------------------------------------------------------------------

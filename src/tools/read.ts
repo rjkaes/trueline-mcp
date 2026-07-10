@@ -13,7 +13,16 @@ import { LF_BUF } from "../line-splitter.ts";
 import { transcodedLines } from "../encoding.ts";
 import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, hashToLetters } from "../hash.ts";
 import { parseFilePathWithRanges, parseRanges, type ReadRange } from "../parse.ts";
-import { binaryFileError, displayPath, expandGlobs, isBinaryError, validateEncoding, validatePath } from "./shared.ts";
+import {
+  binaryFileError,
+  displayPath,
+  expandGlobs,
+  isAbsolutePathArg,
+  isBinaryError,
+  relativePathError,
+  validateEncoding,
+  validatePath,
+} from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 /** Expand each range by 1 line on each side for boundary context, then re-merge. */
@@ -48,6 +57,7 @@ export interface ReadMultiParams {
   ranges?: string[];
   projectDir?: string;
   allowedDirs?: string[];
+  requireAbsolutePath?: boolean;
 }
 
 export async function handleRead(params: ReadParams): Promise<ToolResult> {
@@ -207,10 +217,29 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 }
 
 export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResult> {
-  const { file_paths, ranges, ...rest } = params;
+  const { file_paths, ranges, requireAbsolutePath, ...rest } = params;
+
+  if (requireAbsolutePath && file_paths.length === 1 && !isAbsolutePathArg(file_paths[0])) {
+    return relativePathError(file_paths[0]);
+  }
+
+  // Reject relative entries before glob expansion, so a relative glob like
+  // "src/*.ts" is never resolved against a possibly-stale projectDir.
+  // Absolute siblings still proceed (graceful degradation).
+  const rejectedSections: string[] = [];
+  let candidates = file_paths;
+  if (requireAbsolutePath) {
+    candidates = file_paths.filter((entry) => {
+      if (isAbsolutePathArg(entry)) return true;
+      const { path } = parseFilePathWithRanges(entry);
+      const errorText = (relativePathError(entry).content[0] as { text: string }).text;
+      rejectedSections.push(`--- ${displayPath(path, rest.projectDir)} ---\nerror: ${errorText}`);
+      return false;
+    });
+  }
 
   // Expand globs before parsing inline ranges (globs never contain ':')
-  const expanded = await expandGlobs(file_paths, rest.projectDir);
+  const expanded = await expandGlobs(candidates, rest.projectDir);
 
   // Parse inline ranges from file_paths (e.g. "src/foo.ts:10-25")
   const parsed = expanded.map(parseFilePathWithRanges);
@@ -224,7 +253,7 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
   }
 
   // Single file: top-level ranges still work for backward compat
-  if (parsed.length === 1) {
+  if (parsed.length === 1 && rejectedSections.length === 0) {
     const fp = parsed[0];
     const effectiveRanges = fp.rangeSpecs ?? ranges;
     return handleRead({ ...rest, file_path: fp.path, ranges: effectiveRanges });
@@ -232,7 +261,7 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
 
   // Multiple files: skip per-file errors (deny patterns, missing files) so one
   // bad path from a glob doesn't abort the entire batch.
-  const parts: string[] = [];
+  const parts: string[] = [...rejectedSections];
   for (const fp of parsed) {
     const result = await handleRead({ ...rest, file_path: fp.path, ranges: fp.rangeSpecs });
     const text = (result.content[0] as { text: string }).text;

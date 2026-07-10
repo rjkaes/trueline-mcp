@@ -218,7 +218,7 @@ const readJsonSchema = {
       items: { type: "string" },
       description:
         'One or more files to read. Supports globs: "src/tools/*.ts". ' +
-        'Append :range for specific lines: "src/foo.ts:10-25". Accepts file_path as alias.',
+        'Append :range for specific lines: "src/foo.ts:10-25". Accepts file_path as alias. Paths must be absolute.',
     },
     ranges: {
       type: "array",
@@ -299,7 +299,8 @@ const changesJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: 'Paths to diff. Pass multiple files in one call. Use ["*"] for all changed files.',
+      description:
+        'Paths to diff. Pass multiple files in one call. Use ["*"] for all changed files. Explicit paths must be absolute.',
     },
     compare_against: {
       type: "string",
@@ -315,7 +316,7 @@ const outlineJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: 'One or more file paths or globs (e.g. "src/tools/*.ts") to outline.',
+      description: 'One or more file paths or globs (e.g. "src/tools/*.ts") to outline. Paths must be absolute.',
     },
     depth: {
       type: "integer",
@@ -333,7 +334,7 @@ const searchJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: 'Paths or globs (e.g. "src/tools/*.ts") to search.',
+      description: 'Paths or globs (e.g. "src/tools/*.ts") to search. Paths must be absolute.',
     },
     pattern: {
       type: "string",
@@ -375,7 +376,7 @@ const verifyJsonSchema = {
   properties: {
     file_path: {
       type: "string",
-      description: "Path to the file whose refs should be verified.",
+      description: "Path to the file whose refs should be verified. Must be absolute.",
     },
     refs: {
       type: "array",
@@ -397,7 +398,7 @@ registerTool(
   readJsonSchema,
   safeTool(async (rawParams) => {
     const params = readSchema.parse(coerceParams(rawParams));
-    return handleReadMulti({ ...params, projectDir, allowedDirs });
+    return handleReadMulti({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
 );
 
@@ -433,7 +434,7 @@ registerTool(
       delete coerced.ref;
     }
     const params = changesSchema.parse(coerced);
-    return handleDiff({ ...params, projectDir, allowedDirs });
+    return handleDiff({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
 );
 
@@ -445,7 +446,7 @@ registerTool(
   outlineJsonSchema,
   safeTool(async (rawParams) => {
     const params = outlineSchema.parse(coerceParams(rawParams));
-    return handleOutline({ ...params, projectDir, allowedDirs });
+    return handleOutline({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
 );
 
@@ -458,7 +459,7 @@ registerTool(
   safeTool(async (rawParams) => {
     const coerced = coerceParams(rawParams) as Record<string, unknown>;
     const params = searchSchema.parse(coerced);
-    return handleSearch({ ...params, projectDir, allowedDirs });
+    return handleSearch({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
 );
 
@@ -470,7 +471,7 @@ registerTool(
   verifyJsonSchema,
   safeTool(async (rawParams) => {
     const params = verifySchema.parse(coerceParams(rawParams));
-    return handleVerify({ ...params, projectDir, allowedDirs });
+    return handleVerify({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
 );
 

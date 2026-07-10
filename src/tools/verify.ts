@@ -9,7 +9,7 @@
 import { splitLines } from "../line-splitter.ts";
 import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash } from "../hash.ts";
 import { parseInlineRef } from "../parse.ts";
-import { binaryFileError, isBinaryError, validatePath } from "./shared.ts";
+import { binaryFileError, isAbsolutePathArg, isBinaryError, relativePathError, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
 interface VerifyParams {
@@ -17,6 +17,7 @@ interface VerifyParams {
   refs: string[];
   projectDir?: string;
   allowedDirs?: string[];
+  requireAbsolutePath?: boolean;
 }
 
 interface RefAcc {
@@ -29,6 +30,10 @@ interface RefAcc {
 
 export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
   const { file_path, refs, projectDir, allowedDirs } = params;
+
+  if (params.requireAbsolutePath && !isAbsolutePathArg(file_path)) {
+    return relativePathError(file_path);
+  }
 
   if (!refs || refs.length === 0) {
     return errorResult("No refs provided");

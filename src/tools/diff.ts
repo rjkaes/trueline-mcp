@@ -4,7 +4,7 @@ import { constants, open } from "node:fs/promises";
 import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
-import { validatePath } from "./shared.ts";
+import { isAbsolutePathArg, relativePathError, validatePath } from "./shared.ts";
 import { type ToolResult, textResult, errorResult } from "./types.ts";
 
 interface DiffParams {
@@ -12,10 +12,11 @@ interface DiffParams {
   compare_against?: string;
   projectDir?: string;
   allowedDirs?: string[];
+  requireAbsolutePath?: boolean;
 }
 
 export async function handleDiff(params: DiffParams): Promise<ToolResult> {
-  const { compare_against = "HEAD", projectDir, allowedDirs } = params;
+  const { compare_against = "HEAD", projectDir, allowedDirs, requireAbsolutePath } = params;
   let filePaths = params.file_paths;
 
   // Expand "*" to all changed files
@@ -29,6 +30,12 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const sections: string[] = [];
 
   for (const filePath of filePaths) {
+    if (requireAbsolutePath && filePath !== "*" && !isAbsolutePathArg(filePath)) {
+      const errorText = (relativePathError(filePath).content[0] as { text: string }).text;
+      sections.push(`## ${filePath}\n\n${errorText}`);
+      continue;
+    }
+
     const validated = await validatePath(filePath, "Read", projectDir, allowedDirs);
     if (!validated.ok) {
       sections.push(`## ${filePath}\n\nAccess denied.`);

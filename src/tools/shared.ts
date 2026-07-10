@@ -1,7 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { statSync } from "node:fs";
-import { resolve, sep } from "node:path";
-import { type ChecksumRef, parseRange, parseInlineRef } from "../parse.ts";
+import { isAbsolute, resolve, sep } from "node:path";
+import { type ChecksumRef, parseFilePathWithRanges, parseRange, parseInlineRef } from "../parse.ts";
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
 
@@ -28,6 +28,35 @@ export interface EditInput {
   range: string;
   content: string;
   action?: "replace" | "insert_after";
+}
+
+// ==============================================================================
+// Absolute path enforcement (MCP-only; the CLI keeps relative resolution
+// since its projectDir is the real shell cwd, not a value pinned at server
+// startup that can go stale when the caller is working in a git worktree)
+// ==============================================================================
+
+/**
+ * Whether the path portion of a file_path/file_paths entry is absolute,
+ * ignoring any inline ":range" suffix (e.g. "/abs/foo.ts:10-25" -> true,
+ * "foo.ts:10-25" -> false). Globs are just paths for this check.
+ */
+export function isAbsolutePathArg(fp: string): boolean {
+  return isAbsolute(parseFilePathWithRanges(fp).path);
+}
+
+/**
+ * Actionable error for a relative file_path under requireAbsolutePath.
+ * Wording matches the trueline_edit guard so agents recognize the same
+ * failure mode across tools.
+ */
+export function relativePathError(fp: string): ToolResult {
+  return errorResult(
+    `file_path must be an absolute path, got "${fp}". ` +
+      "Relative paths resolve against the session project root, which can differ from your working directory " +
+      "(e.g. a git worktree under .claude/worktrees/), so trueline could operate on the wrong file. " +
+      "Pass the absolute path.",
+  );
 }
 
 // ==============================================================================

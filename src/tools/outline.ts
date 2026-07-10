@@ -11,7 +11,7 @@ import { extractOutline, formatOutline } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { extractMarkdownOutline } from "../outline/markdown.ts";
 import { extractXmlOutline } from "../outline/xml.ts";
-import { displayPath, expandGlobs, validatePath } from "./shared.ts";
+import { displayPath, expandGlobs, isAbsolutePathArg, relativePathError, validatePath } from "./shared.ts";
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 const XML_EXTENSIONS = new Set([
@@ -35,23 +35,42 @@ interface OutlineParams {
   depth?: number;
   projectDir?: string;
   allowedDirs?: string[];
+  requireAbsolutePath?: boolean;
 }
 
 export async function handleOutline(params: OutlineParams): Promise<ToolResult> {
-  const { projectDir, allowedDirs } = params;
+  const { projectDir, allowedDirs, requireAbsolutePath } = params;
 
-  const filePaths = await expandGlobs(params.file_paths, projectDir);
+  if (requireAbsolutePath && params.file_paths.length === 1 && !isAbsolutePathArg(params.file_paths[0])) {
+    return relativePathError(params.file_paths[0]);
+  }
+
+  // Reject relative entries before glob expansion (mirrors trueline_read), so
+  // a relative glob is never resolved against a possibly-stale projectDir.
+  const rejectedSections: string[] = [];
+  let candidates = params.file_paths;
+  if (requireAbsolutePath) {
+    candidates = params.file_paths.filter((entry) => {
+      if (isAbsolutePathArg(entry)) return true;
+      const errorText = (relativePathError(entry).content[0] as { text: string }).text;
+      rejectedSections.push(`--- ${entry} ---\n${errorText}`);
+      return false;
+    });
+  }
+
+  const filePaths = await expandGlobs(candidates, projectDir);
   if (filePaths.length === 0) {
+    if (rejectedSections.length > 0) return textResult(rejectedSections.join("\n\n"));
     return errorResult("Provide at least one file path in file_paths.");
   }
 
   // Single file — preserve original compact output
-  if (filePaths.length === 1) {
+  if (filePaths.length === 1 && rejectedSections.length === 0) {
     return outlineOneFile(filePaths[0], params.depth, projectDir, allowedDirs);
   }
 
   // Multiple files — collect results with per-file headers
-  const sections: string[] = [];
+  const sections: string[] = [...rejectedSections];
   let totalSymbols = 0;
   let totalLines = 0;
 

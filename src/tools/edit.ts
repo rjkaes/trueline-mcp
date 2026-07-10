@@ -20,7 +20,14 @@ import { detectBOM } from "../encoding.ts";
 import { streamingEdit } from "../streaming-edit.ts";
 import { fnv1aHash, fnv1aHashBytes, hashToLetters } from "../hash.ts";
 import { splitLines } from "../line-splitter.ts";
-import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
+import {
+  type EditInput,
+  relativePathError,
+  type StreamEditOp,
+  validateEdits,
+  validateEncoding,
+  validatePath,
+} from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 interface EditParams {
@@ -39,12 +46,7 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const { file_path, edits, dry_run, context_lines, projectDir, allowedDirs } = params;
 
   if (params.requireAbsolutePath && !isAbsolute(file_path)) {
-    return errorResult(
-      `file_path must be an absolute path, got "${file_path}". ` +
-        `Relative paths resolve against the session project root, which can differ from your working directory ` +
-        `(e.g. a git worktree under .claude/worktrees/), silently sending the edit to the wrong file. ` +
-        `Pass the absolute path to the file you want to edit.`,
-    );
+    return relativePathError(file_path);
   }
 
   // dry_run uses Read deny patterns: it's a read-only preview, same as the old trueline_changes
