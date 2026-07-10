@@ -34,6 +34,7 @@
     "hooks/",
     "configs/",
     "src/security.js",
+    "src/outline/supported-extensions.js",
     "README.md",
     "INSTALL.md",
     "LICENSE"
