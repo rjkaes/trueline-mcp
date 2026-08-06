@@ -64,6 +64,12 @@ const LARGE_FILE_THRESHOLD = 10240; // 10KB
 // Files between MEDIUM and LARGE are blocked with a concise redirect.
 const MEDIUM_FILE_THRESHOLD = 3072; // 3KB
 
+// Formats the built-in Read renders natively: images become visual input and
+// PDFs paginate. trueline_read is line- and hash-oriented and cannot surface
+// any of it, so redirecting these would leave the agent with no way to see the
+// content at all. Pass them through regardless of size.
+const NATIVE_MEDIA_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"]);
+
 /**
  * @param {string} toolName
  * @returns {string}
@@ -175,6 +181,9 @@ export function detectBashFilePeek(command) {
  * - Read, small file (< MEDIUM_FILE_THRESHOLD): **pass** silently.
  *   No advisory overhead; built-in Read is fine for small files.
  *
+ * - Read, image or PDF (any size): **pass** silently. Only the built-in Read
+ *   can render them; trueline_read would return nothing usable.
+ *
  * - Edit/MultiEdit: **block** and redirect to trueline_search ->
  *   trueline_edit. Hash-verified edits prevent stale-content mismatches
  *   that built-in Edit can't detect.
@@ -227,6 +236,9 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
   }
 
   if (canonical === "Read") {
+    // Images and PDFs: only the built-in Read can render them.
+    if (NATIVE_MEDIA_EXTENSIONS.has(extname(filePath).toLowerCase())) return null;
+
     // Partial reads (offset/limit, start_line/end_line) already limit context
     // consumption, which is the same goal as trueline_read with ranges. Let
     // them through unconditionally.

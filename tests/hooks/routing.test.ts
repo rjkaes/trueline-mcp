@@ -13,6 +13,8 @@ let smallNonOutlineable: string;
 let largeNonOutlineable: string;
 let mediumFile: string;
 let mediumNonOutlineable: string;
+let largeImage: string;
+let largePdf: string;
 
 beforeAll(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "routing-test-"));
@@ -28,6 +30,11 @@ beforeAll(() => {
   writeFileSync(mediumFile, "const x = 1;\n".repeat(400)); // ~5.2KB
   mediumNonOutlineable = join(tmpDir, "medium.json");
   writeFileSync(mediumNonOutlineable, '{"x": 1}\n'.repeat(600)); // ~5.4KB
+  // Binary media: well over LARGE_FILE_THRESHOLD, as real images are.
+  largeImage = join(tmpDir, "screenshot.PNG");
+  writeFileSync(largeImage, Buffer.alloc(20480, 0));
+  largePdf = join(tmpDir, "invoice.pdf");
+  writeFileSync(largePdf, Buffer.alloc(20480, 0));
 });
 
 afterAll(() => {
@@ -128,6 +135,27 @@ describe("isPartialRead", () => {
   });
 });
 
+describe("routePreToolUse — binary media pass-through", () => {
+  test("passes through Read on a large image, case-insensitively", async () => {
+    const result = await routePreToolUse("Read", { file_path: largeImage }, alwaysAccessible);
+    expect(result).toBeNull();
+  });
+
+  test("passes through Read on a large PDF", async () => {
+    const result = await routePreToolUse("Read", { file_path: largePdf }, alwaysAccessible);
+    expect(result).toBeNull();
+  });
+
+  test("still blocks Edit on an image", async () => {
+    const result = await routePreToolUse(
+      "Edit",
+      { file_path: largeImage, old_string: "x", new_string: "y" },
+      alwaysAccessible,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.action).toBe("block");
+  });
+});
 describe("routePreToolUse — partial Read pass-through", () => {
   test("passes through partial Read on large files (Claude Code offset)", async () => {
     const result = await routePreToolUse("Read", { file_path: largeFile, offset: 100 }, alwaysAccessible);
