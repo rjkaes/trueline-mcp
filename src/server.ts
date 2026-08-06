@@ -61,10 +61,20 @@ function notify(method: string, params?: unknown): void {
 // Tool registry
 // =============================================================================
 
+// Clients derive read-only-ness solely from the wire annotation; they never infer
+// it from the tool name. Claude Code in particular hard-gates any MCP tool whose
+// readOnlyHint is absent while in plan mode, and that gate is evaluated before the
+// permission allow-list, so no user rule can grant an unannotated read tool. The
+// same hint also marks a tool concurrency-safe, letting reads run in parallel.
+interface ToolAnnotations {
+  readOnlyHint: boolean;
+}
+
 interface ToolDef {
   description: string;
   inputSchema: Record<string, unknown>;
   handler: (params: Record<string, unknown>) => Promise<ToolResult>;
+  annotations?: ToolAnnotations;
 }
 
 const tools = new Map<string, ToolDef>();
@@ -74,8 +84,9 @@ function registerTool(
   description: string,
   inputSchema: Record<string, unknown>,
   handler: (params: Record<string, unknown>) => Promise<ToolResult>,
+  annotations?: ToolAnnotations,
 ): void {
-  tools.set(name, { description, inputSchema, handler });
+  tools.set(name, { description, inputSchema, handler, annotations });
 }
 
 // Wrap handlers so they never throw — errors become MCP error content.
@@ -400,6 +411,7 @@ registerTool(
     const params = readSchema.parse(coerceParams(rawParams));
     return handleReadMulti({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
+  { readOnlyHint: true },
 );
 
 registerTool(
@@ -436,6 +448,7 @@ registerTool(
     const params = changesSchema.parse(coerced);
     return handleDiff({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
+  { readOnlyHint: true },
 );
 
 registerTool(
@@ -448,6 +461,7 @@ registerTool(
     const params = outlineSchema.parse(coerceParams(rawParams));
     return handleOutline({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
+  { readOnlyHint: true },
 );
 
 registerTool(
@@ -461,6 +475,7 @@ registerTool(
     const params = searchSchema.parse(coerced);
     return handleSearch({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
+  { readOnlyHint: true },
 );
 
 registerTool(
@@ -473,6 +488,7 @@ registerTool(
     const params = verifySchema.parse(coerceParams(rawParams));
     return handleVerify({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
+  { readOnlyHint: true },
 );
 
 // =============================================================================
@@ -492,6 +508,7 @@ function handleToolsList(id: string | number): void {
     name,
     description: def.description,
     inputSchema: def.inputSchema,
+    ...(def.annotations ? { annotations: def.annotations } : {}),
   }));
   respond(id, { tools: toolList });
 }
