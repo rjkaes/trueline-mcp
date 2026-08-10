@@ -52,12 +52,15 @@ const BASH_PEEK_DETECTORS = [
 ];
 
 // Different platforms use different field names for file paths in tool input.
-const FILE_PATH_FIELDS = ["file_path", "path", "target_file"];
+// VS Code Copilot's built-in Read/Edit tools use camelCase ("filePath"), unlike
+// the snake_case used by Claude Code/Gemini CLI/OpenCode ("file_path").
+const FILE_PATH_FIELDS = ["file_path", "filePath", "path", "target_file"];
 
 // Fields that indicate a partial/ranged read across platforms:
 //   Claude Code / OpenCode: offset, limit
 //   Gemini CLI: start_line, end_line
-const PARTIAL_READ_FIELDS = ["offset", "limit", "start_line", "end_line"];
+//   VS Code Copilot: startLine, endLine
+const PARTIAL_READ_FIELDS = ["offset", "limit", "start_line", "end_line", "startLine", "endLine"];
 
 // Files at or above this size are blocked with full redirect guidance.
 const LARGE_FILE_THRESHOLD = 10240; // 10KB

@@ -38,5 +38,10 @@ export function detectPlatform() {
 export function getProjectDir(platform) {
   const p = platform ?? detectPlatform();
   const envVar = PLATFORM_ENV_VARS[p];
-  return envVar ? process.env[envVar] : process.env.CLAUDE_PROJECT_DIR;
+  // vscode-copilot isn't in PLATFORM_ENV_VARS (see comment above) and doesn't
+  // set CLAUDE_PROJECT_DIR either, so both branches return undefined for it.
+  // Fall back to process.cwd(): VS Code spawns the hook process with cwd set
+  // to the workspace root, so this resolves correctly without a platform-
+  // specific env var.
+  return envVar ? process.env[envVar] : (process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
 }
