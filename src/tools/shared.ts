@@ -321,12 +321,7 @@ export function validateEdits(edits: EditInput[], _resolvedPath?: string): Valid
       endLine: rangeRef.end.line,
       // "" deletes, except insert_after where it means one blank line. Otherwise
       // one trailing "\n" is a terminator: "\n" is one blank line, not a delete.
-      content:
-        edit.content === ""
-          ? rangeRef.insertAfter
-            ? [""]
-            : []
-          : (edit.content.endsWith("\n") ? edit.content.slice(0, -1) : edit.content).split("\n"),
+      content: edit.content === "" && !rangeRef.insertAfter ? [] : edit.content.replace(/\n$/, "").split("\n"),
       insertAfter: rangeRef.insertAfter,
       startHash: rangeRef.start.hash,
       endHash: rangeRef.end.hash,

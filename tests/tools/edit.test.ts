@@ -580,42 +580,27 @@ describe("handleEdit", () => {
     expect(written).toBe("line 1\nreplaced 2\nreplaced 3\nline 4\n");
   });
 
-  test("insert_after with empty content inserts one blank line", async () => {
-    const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
-    const h2 = lineHash("line 2");
-
-    const result = await handleEdit({
-      file_path: testFile,
-      edits: [{ ref, range: `${h2}2`, content: "", action: "insert_after" }],
-      projectDir: testDir,
-    });
-
-    expect(result.isError).toBeUndefined();
-    const written = readFileSync(testFile, "utf-8");
-    expect(written).toBe("line 1\nline 2\n\nline 3\nline 4\n");
-  });
-
-  test("insert_after with content '\\n' (coerced to blank line) inserts one blank line", async () => {
-    const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
-    const h2 = lineHash("line 2");
-
-    // Exercise coerce.ts's trailing-\n stripping together with handleEdit,
-    // since handleEdit alone bypasses coerceParams.
+  // Cases go through coerceParams, as the MCP server does, so array content
+  // and the trailing-"\n" terminator are exercised end to end.
+  test.each([
+    ["insert_after", "", "line 1\nline 2\n\nline 3\nline 4\n"],
+    ["insert_after", "\n", "line 1\nline 2\n\nline 3\nline 4\n"],
+    ["replace", "", "line 1\nline 3\nline 4\n"],
+    ["replace", "\n", "line 1\n\nline 3\nline 4\n"],
+    ["replace", "replaced 2\n", "line 1\nreplaced 2\nline 3\nline 4\n"],
+    ["replace", "replaced 2\n\n", "line 1\nreplaced 2\n\nline 3\nline 4\n"],
+    ["replace", [""], "line 1\n\nline 3\nline 4\n"],
+    ["replace", ["replaced 2", ""], "line 1\nreplaced 2\n\nline 3\nline 4\n"],
+  ])("%s line 2 with content %j", async (action, content, expected) => {
+    const ref = issueTestRef(testFile, ["line 1", "line 2", "line 3", "line 4"], 1, 4);
     const coerced = coerceParams({
-      edits: [{ ref, range: `${h2}2`, content: "\n", action: "insert_after" }],
+      edits: [{ ref, range: `${lineHash("line 2")}2`, content, action }],
     }) as { edits: EditInput[] };
 
-    const result = await handleEdit({
-      file_path: testFile,
-      edits: coerced.edits,
-      projectDir: testDir,
-    });
+    const result = await handleEdit({ file_path: testFile, edits: coerced.edits, projectDir: testDir });
 
     expect(result.isError).toBeUndefined();
-    const written = readFileSync(testFile, "utf-8");
-    expect(written).toBe("line 1\nline 2\n\nline 3\nline 4\n");
+    expect(readFileSync(testFile, "utf-8")).toBe(expected);
   });
 
   test("dry_run: insert_after with empty content shows blank line in diff", async () => {
@@ -638,112 +623,6 @@ describe("handleEdit", () => {
     // File must be unchanged
     const content = readFileSync(testFile, "utf-8");
     expect(content).toBe("line 1\nline 2\nline 3\nline 4\n");
-  });
-
-  describe("content trailing-\\n semantics (replace)", () => {
-    test("content '' still deletes the range", async () => {
-      const lines = ["line 1", "line 2", "line 3", "line 4"];
-      const ref = issueTestRef(testFile, lines, 1, 4);
-      const h2 = lineHash("line 2");
-
-      const result = await handleEdit({
-        file_path: testFile,
-        edits: [{ ref, range: `${h2}2`, content: "" }],
-        projectDir: testDir,
-      });
-
-      expect(result.isError).toBeUndefined();
-      const written = readFileSync(testFile, "utf-8");
-      expect(written).toBe("line 1\nline 3\nline 4\n");
-    });
-
-    test("content '\\n' leaves one blank line instead of deleting", async () => {
-      const lines = ["line 1", "line 2", "line 3", "line 4"];
-      const ref = issueTestRef(testFile, lines, 1, 4);
-      const h2 = lineHash("line 2");
-
-      const result = await handleEdit({
-        file_path: testFile,
-        edits: [{ ref, range: `${h2}2`, content: "\n" }],
-        projectDir: testDir,
-      });
-
-      expect(result.isError).toBeUndefined();
-      const written = readFileSync(testFile, "utf-8");
-      expect(written).toBe("line 1\n\nline 3\nline 4\n");
-    });
-
-    test("a single trailing '\\n' is a terminator, not a separator (one line, not two)", async () => {
-      const lines = ["line 1", "line 2", "line 3", "line 4"];
-      const ref = issueTestRef(testFile, lines, 1, 4);
-      const h2 = lineHash("line 2");
-
-      const result = await handleEdit({
-        file_path: testFile,
-        edits: [{ ref, range: `${h2}2`, content: "replaced 2\n" }],
-        projectDir: testDir,
-      });
-
-      expect(result.isError).toBeUndefined();
-      const written = readFileSync(testFile, "utf-8");
-      expect(written).toBe("line 1\nreplaced 2\nline 3\nline 4\n");
-    });
-
-    test("two trailing '\\n' keep one deliberate trailing blank line", async () => {
-      const lines = ["line 1", "line 2", "line 3", "line 4"];
-      const ref = issueTestRef(testFile, lines, 1, 4);
-      const h2 = lineHash("line 2");
-
-      const result = await handleEdit({
-        file_path: testFile,
-        edits: [{ ref, range: `${h2}2`, content: "replaced 2\n\n" }],
-        projectDir: testDir,
-      });
-
-      expect(result.isError).toBeUndefined();
-      const written = readFileSync(testFile, "utf-8");
-      expect(written).toBe("line 1\nreplaced 2\n\nline 3\nline 4\n");
-    });
-
-    test("array content [''] (via coerce) leaves one blank line", async () => {
-      const lines = ["line 1", "line 2", "line 3", "line 4"];
-      const ref = issueTestRef(testFile, lines, 1, 4);
-      const h2 = lineHash("line 2");
-
-      const coerced = coerceParams({
-        edits: [{ ref, range: `${h2}2`, content: [""] }],
-      }) as { edits: EditInput[] };
-
-      const result = await handleEdit({
-        file_path: testFile,
-        edits: coerced.edits,
-        projectDir: testDir,
-      });
-
-      expect(result.isError).toBeUndefined();
-      const written = readFileSync(testFile, "utf-8");
-      expect(written).toBe("line 1\n\nline 3\nline 4\n");
-    });
-
-    test("array content ['replaced 2', ''] (via coerce) keeps both lines", async () => {
-      const lines = ["line 1", "line 2", "line 3", "line 4"];
-      const ref = issueTestRef(testFile, lines, 1, 4);
-      const h2 = lineHash("line 2");
-
-      const coerced = coerceParams({
-        edits: [{ ref, range: `${h2}2`, content: ["replaced 2", ""] }],
-      }) as { edits: EditInput[] };
-
-      const result = await handleEdit({
-        file_path: testFile,
-        edits: coerced.edits,
-        projectDir: testDir,
-      });
-
-      expect(result.isError).toBeUndefined();
-      const written = readFileSync(testFile, "utf-8");
-      expect(written).toBe("line 1\nreplaced 2\n\nline 3\nline 4\n");
-    });
   });
 
   test("warns when content contains hashLine identifiers", async () => {

@@ -67,17 +67,11 @@ export function coerceParams(val: unknown): unknown {
   // as an edit.
   const FLAT_EDIT_KEYS = ["range", "ref", "content", "action", "old_string", "new_string"];
   if (!("edits" in raw) && ("content" in raw || "old_string" in raw || "new_string" in raw)) {
-    const edit: Record<string, unknown> = {};
-    const rest: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(raw)) {
-      if (FLAT_EDIT_KEYS.includes(key)) {
-        edit[key] = value;
-      } else {
-        rest[key] = value;
-      }
-    }
-    rest.edits = [edit];
-    raw = rest;
+    const entries = Object.entries(raw);
+    raw = {
+      ...Object.fromEntries(entries.filter(([key]) => !FLAT_EDIT_KEYS.includes(key))),
+      edits: [Object.fromEntries(entries.filter(([key]) => FLAT_EDIT_KEYS.includes(key)))],
+    };
   }
 
   const result: Record<string, unknown> = {};
@@ -189,11 +183,10 @@ export function coerceParams(val: unknown): unknown {
         if (e.content === null || e.content === undefined) {
           e.content = "";
         }
-        // content: array → lines. Non-empty gets a trailing "\n" terminator so
-        // [""] stays one blank line instead of collapsing to "" (delete).
+        // content: array → lines, each "\n"-terminated so [""] stays one blank
+        // line instead of collapsing to "" (delete).
         if (Array.isArray(e.content)) {
-          const lines = (e.content as unknown[]).map(String);
-          e.content = lines.length === 0 ? "" : `${lines.join("\n")}\n`;
+          e.content = (e.content as unknown[]).map((line) => `${line}\n`).join("");
         }
         // Normalize ref: strip whitespace
         if (typeof e.ref === "string") {
