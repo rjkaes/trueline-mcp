@@ -4,7 +4,7 @@
 
 const DECIMAL_INT = /^\d+$/;
 
-/** Sentinel hash for bare line numbers (e.g. "78" instead of "rn.78"). */
+/** Sentinel hash for bare line numbers (e.g. "78" instead of "rn78"). */
 export const BARE_LINE_HASH = "??";
 interface LineRef {
   line: number;
@@ -12,7 +12,7 @@ interface LineRef {
 }
 
 /**
- * Parse a `hash.line` reference string like "mp.4".
+ * Parse a hashLine reference string like "mp4".
  *
  * The hash is the 2-letter tag that appears before the line number in
  * trueline_read / trueline_search output. The agent copies it verbatim
@@ -64,9 +64,9 @@ interface RangeRef {
  * Parse a range string into start/end LineRefs.
  *
  * Accepts three forms:
- *   - "gh.12-yz.21"  — explicit start-end range (replace)
- *   - "ab.5"          — single-line shorthand, equivalent to "ab.5-ab.5"
- *   - "+ab.5"         — insert-after line 5 (single-line only)
+ *   - "gh12-yz21"  — explicit start-end range (replace)
+ *   - "ab5"          — single-line shorthand, equivalent to "ab5-ab5"
+ *   - "+ab5"         — insert-after line 5 (single-line only)
  *
  * The `+` prefix signals insert-after and is only valid on single-line
  * ranges (no `-`). Throws on invalid format or if start line > end line.
@@ -86,7 +86,7 @@ export function parseRange(range: string): RangeRef {
 
   if (insertAfter && dashIdx !== -1) {
     throw new Error(
-      `Invalid range "${range}" — insert-after (+) requires a single-line target, not a range. Use "+ab.10" to insert after line 10.`,
+      `Invalid range "${range}" — insert-after (+) requires a single-line target, not a range. Use "+ab10" to insert after line 10.`,
     );
   }
 
@@ -193,7 +193,7 @@ export function parseInlineRef(ref: string): ChecksumRef {
  * Find the index of the "-" that separates the start ref from the end ref.
  *
  * Strategy: scan for the first "-" that is immediately preceded by a digit.
- * In "aj.9-na.10" the separator is at index 4 (after "9").
+ * In "aj9-na10" the separator is at index 3 (after "9").
  * In "9-10" it's at index 1 (after "9").
  * Returns -1 if no range dash is found (single-line reference).
  */

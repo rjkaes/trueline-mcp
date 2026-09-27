@@ -59,7 +59,27 @@ const NUMERIC_KEYS = ["depth", "context_lines", "max_matches"];
  */
 export function coerceParams(val: unknown): unknown {
   if (typeof val !== "object" || val === null) return val;
-  const raw = val as Record<string, unknown>;
+  let raw = val as Record<string, unknown>;
+
+  // Models copy the flat {range, ref, content} shape (or built-in Edit's
+  // old_string/new_string) from prose examples. Wrap it in edits[] before
+  // aliasing turns `range` into trueline_read's `ranges`; `content` marks it
+  // as an edit.
+  const FLAT_EDIT_KEYS = ["range", "ref", "content", "action", "old_string", "new_string"];
+  if (!("edits" in raw) && ("content" in raw || "old_string" in raw || "new_string" in raw)) {
+    const edit: Record<string, unknown> = {};
+    const rest: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (FLAT_EDIT_KEYS.includes(key)) {
+        edit[key] = value;
+      } else {
+        rest[key] = value;
+      }
+    }
+    rest.edits = [edit];
+    raw = rest;
+  }
+
   const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(raw)) {
@@ -169,15 +189,11 @@ export function coerceParams(val: unknown): unknown {
         if (e.content === null || e.content === undefined) {
           e.content = "";
         }
-        // content: array → newline-joined string
+        // content: array → lines. Non-empty gets a trailing "\n" terminator so
+        // [""] stays one blank line instead of collapsing to "" (delete).
         if (Array.isArray(e.content)) {
-          e.content = (e.content as unknown[]).map(String).join("\n");
-        }
-        // Strip a single trailing newline from content. LLMs commonly append
-        // \n as a line terminator, but split("\n") treats it as a separator,
-        // creating an unwanted empty line at the end.
-        if (typeof e.content === "string" && e.content.endsWith("\n")) {
-          e.content = e.content.slice(0, -1);
+          const lines = (e.content as unknown[]).map(String);
+          e.content = lines.length === 0 ? "" : `${lines.join("\n")}\n`;
         }
         // Normalize ref: strip whitespace
         if (typeof e.ref === "string") {

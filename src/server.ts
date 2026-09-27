@@ -165,7 +165,7 @@ const editSchema = z.object({
       z.object({
         ref: z.string({
           required_error:
-            'Missing "ref" — copy the inline ref (e.g. "ab.1-cd.50:efghij") from trueline_read or trueline_search output.',
+            'Missing "ref" — copy the inline ref (e.g. "ab1-cd50/efghij") from trueline_read or trueline_search output.',
         }),
         range: z.string(),
         content: z.string(),
@@ -265,7 +265,7 @@ const editJsonSchema = {
           ref: {
             type: "string",
             description:
-              'Required. Copy the ref from trueline_read/trueline_search output (e.g. "ab.1-cd.50:efghij"). A ref from a wide read works for editing any sub-range within it.',
+              'Required. Copy the ref from trueline_read/trueline_search output (e.g. "ab1-cd50/efghij"). A ref from a wide read works for editing any sub-range within it.',
           },
           range: {
             type: "string",
@@ -274,7 +274,9 @@ const editJsonSchema = {
           },
           content: {
             type: "string",
-            description: "Replacement lines, newline-separated. Empty string to delete.",
+            description:
+              "Replacement lines, newline-separated; a trailing newline is optional. " +
+              'Empty string deletes the range, or inserts one blank line with action: "insert_after".',
           },
           action: {
             type: "string",
@@ -392,7 +394,7 @@ const verifyJsonSchema = {
     refs: {
       type: "array",
       items: { type: "string" },
-      description: 'Inline ref strings from a prior trueline_read/trueline_search, e.g. ["ab.1-cd.50:efghij"].',
+      description: 'Inline ref strings from a prior trueline_read/trueline_search, e.g. ["ab1-cd50/efghij"].',
     },
   },
   required: ["file_path", "refs"],
@@ -417,7 +419,7 @@ registerTool(
 registerTool(
   "trueline_edit",
   "Apply hash-verified edits to a file. Edits go in the edits array. " +
-    'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", ref: "ab.10-cd.20:efghij", content: "new text"}]}. ' +
+    'Example: {file_path: "foo.ts", edits: [{range: "ab10-cd20", ref: "ab10-cd20/efghij", content: "new text"}]}. ' +
     "Copy the ref from trueline_read/trueline_search output. The 2-letter hash prefix on each line number is required in ranges. " +
     'Use action: "insert_after" to insert content after a line instead of replacing it. ' +
     "Set context_lines to get hashLine context around edit sites for chaining edits without re-searching.",

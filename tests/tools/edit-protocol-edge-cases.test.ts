@@ -547,7 +547,8 @@ describe("unicode and special content", () => {
     });
 
     expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\n\n\nccc\n");
+    // "\n" is one blank-line terminator, not a separator producing two blanks.
+    expect(readFileSync(path, "utf-8")).toBe("aaa\n\nccc\n");
   });
 
   test("very long line", async () => {

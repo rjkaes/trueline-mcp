@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseChecksum, parseFilePathWithRanges, parseRange, parseRanges } from "../src/parse.ts";
+import { parseChecksum, parseFilePathWithRanges, parseInlineRef, parseRange, parseRanges } from "../src/parse.ts";
 
 describe("parseRanges", () => {
   test("returns whole-file sentinel for undefined input", () => {
@@ -226,5 +226,21 @@ describe("parseFilePathWithRanges", () => {
     const result = parseFilePathWithRanges("C:\\src\\foo.ts");
     expect(result.path).toBe("C:\\src\\foo.ts");
     expect(result.rangeSpecs).toBeUndefined();
+  });
+});
+
+// The trueline_edit JSON schema (src/server.ts) shows range/ref examples in its
+// description text for LLM consumption. server.ts can't be imported directly here
+// (starts listening as a side effect - see tests/tools-list-schema.test.ts), so these
+// are hardcoded copies of that example. Keep them in sync with src/server.ts by hand;
+// this test only guards against the dotted "ab.10-cd.20"/"ab.10-cd.20:efghij" format
+// the parser has never accepted regressing back into the docs.
+describe("docs examples match the real hashLine/checksum format", () => {
+  test("trueline_edit schema's range example parses", () => {
+    expect(() => parseRange("ab10-cd20")).not.toThrow();
+  });
+
+  test("trueline_edit schema's ref example parses", () => {
+    expect(() => parseInlineRef("ab10-cd20/efghij")).not.toThrow();
   });
 });

@@ -327,7 +327,7 @@ describe("coerceParams", () => {
         }),
       ).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab10-cd12", ref: "R1", content: "line1\nline2\nline3" }],
+        edits: [{ range: "ab10-cd12", ref: "R1", content: "line1\nline2\nline3\n" }],
       });
     });
 
@@ -351,7 +351,37 @@ describe("coerceParams", () => {
         }),
       ).toEqual({
         file_paths: ["foo.ts"],
-        edits: [{ range: "ab10", ref: "R1", content: "42\ntrue\ntext" }],
+        edits: [{ range: "ab10", ref: "R1", content: "42\ntrue\ntext\n" }],
+      });
+    });
+
+    test('empty array becomes empty string (delete, same as content: "")', () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab10", ref: "R1", content: [] }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab10", ref: "R1", content: "" }],
+      });
+    });
+
+    test("single empty-string element gets a trailing newline (one blank line downstream)", () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab10", ref: "R1", content: [""] }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab10", ref: "R1", content: "\n" }],
+      });
+    });
+
+    test("trailing empty-string element is preserved as a deliberate blank line", () => {
+      expect(
+        coerceParams({
+          edits: [{ range: "ab10-cd11", ref: "R1", content: ["a", ""] }],
+        }),
+      ).toEqual({
+        edits: [{ range: "ab10-cd11", ref: "R1", content: "a\n\n" }],
       });
     });
   });
@@ -556,6 +586,49 @@ describe("coerceParams", () => {
           edits: [{ old_string: "foo", new_string: "bar" }],
         }),
       ).toThrow("trueline_search");
+    });
+  });
+
+  // ===========================================================================
+  // Flat edit shape (#12): {file_path, range, ref, content} at top level
+  // ===========================================================================
+
+  describe("flat edit shape → edits wrapper (#12)", () => {
+    test("wraps flat {range, ref, content} into edits array", () => {
+      expect(coerceParams({ file_path: "foo.ts", range: "ab10-cd12", ref: "R1", content: "text" })).toEqual({
+        file_paths: ["foo.ts"],
+        edits: [{ range: "ab10-cd12", ref: "R1", content: "text" }],
+      });
+    });
+
+    test("keeps action inside the edit and context_lines at top level", () => {
+      expect(
+        coerceParams({
+          file_path: "foo.ts",
+          range: "ab10",
+          ref: "R1",
+          content: "",
+          action: "insert_after",
+          context_lines: 2,
+        }),
+      ).toEqual({
+        file_paths: ["foo.ts"],
+        context_lines: 2,
+        edits: [{ range: "ab10", ref: "R1", content: "", action: "insert_after" }],
+      });
+    });
+
+    test("top-level old_string/new_string still throws the built-in Edit tool error", () => {
+      expect(() => coerceParams({ file_path: "foo.ts", old_string: "foo", new_string: "bar" })).toThrow(
+        "old_string/new_string",
+      );
+    });
+
+    test("flat {file_path, range} without content still becomes ranges (trueline_read)", () => {
+      expect(coerceParams({ file_path: "foo.ts", range: "10-20" })).toEqual({
+        file_paths: ["foo.ts"],
+        ranges: ["10-20"],
+      });
     });
   });
 });

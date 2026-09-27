@@ -85,7 +85,7 @@ export function getInstructions(platform = "claude-code") {
 **Example (search-then-edit)**
 \`\`\`
 trueline_search -> "->ab10 old line one / cd11 old line two / ref: ab10-cd11/efghij"
-trueline_edit: range="ab10-cd11", ref="ab10-cd11/efghij", content="new line one\nnew line two"
+trueline_edit: file_path="/abs/path/src/app.ts", edits=[{range: "ab10-cd11", ref: "ab10-cd11/efghij", content: "new line one\nnew line two"}]
 \`\`\`
 
 **Multi-file**: ${p.grepAdvice}, then pass all file_paths to one trueline_search call

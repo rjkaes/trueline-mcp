@@ -63,6 +63,15 @@ describe("edit subcommand", () => {
     expect(readFileSync(testFile, "utf-8")).toContain("GAMMA_NEW");
   });
 
+  test("--content with a trailing newline is a terminator, not an extra blank line", () => {
+    // readRef("3-3") returns a ref widened with 1 line of context (covers lines 2-3:
+    // "beta"/"gamma"), so the edit below replaces both lines with one.
+    const { ref, hashRange } = readRef("3-3");
+    const { exitCode } = run(tmpDir, "edit", testFile, "--ref", ref, "--range", hashRange, "--content", "GAMMA_NEW\n");
+    expect(exitCode).toBe(0);
+    expect(readFileSync(testFile, "utf-8")).toBe("alpha\nGAMMA_NEW\n");
+  });
+
   test("via stdin: pipe edits JSON via --edits -", () => {
     const { ref, hashRange } = readRef("1-1");
     const editsJson = JSON.stringify([{ ref, range: hashRange, content: "STDIN_CONTENT" }]);

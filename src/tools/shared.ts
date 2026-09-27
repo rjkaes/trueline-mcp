@@ -264,7 +264,7 @@ export function validateEdits(edits: EditInput[], _resolvedPath?: string): Valid
         return {
           ok: false,
           error: errorResult(
-            'action "insert_after" requires a single-line range (e.g. "ab.10"), not a multi-line range. To insert new lines after line 10, use range "ab.10" with action "insert_after".',
+            'action "insert_after" requires a single-line range (e.g. "ab10"), not a multi-line range. To insert new lines after line 10, use range "ab10" with action "insert_after".',
           ),
         };
       }
@@ -279,20 +279,6 @@ export function validateEdits(edits: EditInput[], _resolvedPath?: string): Valid
       return {
         ok: false,
         error: errorResult('range starting at line 0 requires insert-after (use action: "insert_after" or +0 prefix)'),
-      };
-    }
-
-    // Reject insert_after with empty content — inserting zero lines is a no-op
-    // that likely signals the LLM confused content format (e.g. sent "\n" which
-    // got stripped to "").  Rejecting early prevents a crash in editSummary and
-    // gives the LLM a chance to correct course.
-    if (rangeRef.insertAfter && edit.content === "") {
-      return {
-        ok: false,
-        error: errorResult(
-          "insert_after with empty content would insert zero lines (no-op). " +
-            "To insert a blank line, use content: ' ' or include the actual content to insert.",
-        ),
       };
     }
 
@@ -333,7 +319,14 @@ export function validateEdits(edits: EditInput[], _resolvedPath?: string): Valid
     ops.push({
       startLine: rangeRef.start.line,
       endLine: rangeRef.end.line,
-      content: edit.content === "" ? [] : edit.content.split("\n"),
+      // "" deletes, except insert_after where it means one blank line. Otherwise
+      // one trailing "\n" is a terminator: "\n" is one blank line, not a delete.
+      content:
+        edit.content === ""
+          ? rangeRef.insertAfter
+            ? [""]
+            : []
+          : (edit.content.endsWith("\n") ? edit.content.slice(0, -1) : edit.content).split("\n"),
       insertAfter: rangeRef.insertAfter,
       startHash: rangeRef.start.hash,
       endHash: rangeRef.end.hash,

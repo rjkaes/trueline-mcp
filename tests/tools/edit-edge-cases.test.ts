@@ -999,7 +999,8 @@ describe("special content", () => {
     });
 
     expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\n\n\n\nccc\n");
+    // content "\n\n" drops one trailing terminator, leaving two blank lines (not three).
+    expect(readFileSync(path, "utf-8")).toBe("aaa\n\n\nccc\n");
   });
 });
 
