@@ -30,18 +30,6 @@ const PLATFORM_TOOLS = {
       "If file content was injected by an @ reference, never call Read or trueline_read just to view it again. " +
       "Only call trueline_read or trueline_search when you need refs for editing.",
   },
-  opencode: {
-    readTool: "view",
-    editTool: "edit",
-    writeTool: "write",
-    grepAdvice: "use bash with grep/rg to identify the files",
-  },
-  codex: {
-    readTool: "read_file / shell cat",
-    editTool: "shell sed/awk",
-    writeTool: "shell redirection",
-    grepAdvice: "use shell with grep/rg to identify the files",
-  },
 };
 
 /**

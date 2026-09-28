@@ -176,11 +176,6 @@ describe("routePreToolUse — partial Read pass-through", () => {
     expect(result).toBeNull();
   });
 
-  test("passes through partial Read on large files (OpenCode view offset)", async () => {
-    const result = await routePreToolUse("view", { file_path: largeFile, offset: 200 }, alwaysAccessible);
-    expect(result).toBeNull();
-  });
-
   test("still blocks full Read on large files", async () => {
     const result = await routePreToolUse("Read", { file_path: largeFile }, alwaysAccessible);
     expect(result).not.toBeNull();

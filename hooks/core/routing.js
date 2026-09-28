@@ -22,11 +22,6 @@ const TOOL_ALIASES = {
   // VS Code Copilot
   replace_string_in_file: "Edit",
   multi_replace_string_in_file: "MultiEdit",
-  // OpenCode
-  view: "Read",
-  bash: "Bash",
-  // Codex CLI
-  shell: "Bash",
 };
 
 // Bash file-peek detection. These commands inspect file contents outside

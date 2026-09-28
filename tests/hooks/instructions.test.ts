@@ -7,7 +7,7 @@ import { getInstructions } from "../../hooks/core/instructions.js";
 //
 // Validates that getInstructions() produces correct markdown for every platform.
 
-const PLATFORMS = ["claude-code", "gemini-cli", "vscode-copilot", "opencode", "codex"] as const;
+const PLATFORMS = ["claude-code", "gemini-cli", "vscode-copilot"] as const;
 
 describe("instructions markdown content", () => {
   for (const platform of PLATFORMS) {

@@ -45,13 +45,6 @@ const formatters = {
     }),
     approve: () => null,
   },
-  // OpenCode uses in-process TS plugins, not JSON hooks. Included for
-  // completeness but the CLI dispatcher is the only realistic consumer.
-  opencode: {
-    block: (reason) => ({ decision: "block", reason }),
-    advise: (reason) => ({ decision: "approve", reason }),
-    approve: () => null,
-  },
 };
 
 /**
