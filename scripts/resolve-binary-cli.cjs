@@ -1,63 +1,13 @@
 #!/usr/bin/env node
 "use strict";
 
-const { spawn, execFileSync } = require("node:child_process");
-const { existsSync } = require("node:fs");
+const { spawn } = require("node:child_process");
 const path = require("node:path");
+const { hasBun, hasDeno, ensureDeps } = require("./resolve-binary-shared.cjs");
 
 const pluginRoot = path.join(__dirname, "..");
 
-// ==============================================================================
-// Runtime Selection
-// ==============================================================================
-
-function hasBun() {
-  try {
-    execFileSync("bun", ["--version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function hasDeno() {
-  try {
-    execFileSync("deno", ["--version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// ==============================================================================
-// Dependency Installation
-// ==============================================================================
-
-function ensureDeps() {
-  if (existsSync(path.join(pluginRoot, "node_modules"))) return;
-
-  process.stderr.write("trueline: installing dependencies (first run)...\n");
-  try {
-    const installer = hasBun() ? "bun" : "npm";
-    const args = installer === "bun" ? ["install"] : ["install", "--production"];
-    execFileSync(installer, args, {
-      cwd: pluginRoot,
-      stdio: ["ignore", "ignore", "inherit"],
-      timeout: 120_000,
-    });
-    process.stderr.write("trueline: dependencies installed.\n");
-  } catch (err) {
-    process.stderr.write(
-      `trueline: dependency install failed (${err.message}). trueline_outline will be unavailable.\n`,
-    );
-  }
-}
-
-// ==============================================================================
-// Launch
-// ==============================================================================
-
-ensureDeps();
+ensureDeps(pluginRoot, "trueline");
 
 let cmd, args;
 if (hasBun()) {
