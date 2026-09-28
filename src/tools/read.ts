@@ -17,6 +17,7 @@ import {
   binaryFileError,
   displayPath,
   expandGlobs,
+  filterAbsolutePaths,
   isAbsolutePathArg,
   isBinaryError,
   relativePathError,
@@ -224,17 +225,10 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
   // Reject relative entries before glob expansion, so a relative glob like
   // "src/*.ts" is never resolved against a possibly-stale projectDir.
   // Absolute siblings still proceed (graceful degradation).
-  const rejectedSections: string[] = [];
-  let candidates = file_paths;
-  if (requireAbsolutePath) {
-    candidates = file_paths.filter((entry) => {
-      if (isAbsolutePathArg(entry)) return true;
-      const { path } = parseFilePathWithRanges(entry);
-      const errorText = (relativePathError(entry).content[0] as { text: string }).text;
-      rejectedSections.push(`--- ${displayPath(path, rest.projectDir)} ---\nerror: ${errorText}`);
-      return false;
-    });
-  }
+  const { candidates, rejectedSections } = filterAbsolutePaths(file_paths, requireAbsolutePath, (entry, errorText) => {
+    const { path } = parseFilePathWithRanges(entry);
+    return `--- ${displayPath(path, rest.projectDir)} ---\nerror: ${errorText}`;
+  });
 
   // Expand globs before parsing inline ranges (globs never contain ':')
   const expanded = await expandGlobs(candidates, rest.projectDir);

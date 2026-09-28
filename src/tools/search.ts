@@ -9,6 +9,7 @@ import { checksumToLetters, hashToLetters, foldHash, FNV_OFFSET_BASIS } from "..
 import {
   displayPath,
   expandGlobs,
+  filterAbsolutePaths,
   isAbsolutePathArg,
   relativePathError,
   type ToolContext,
@@ -51,16 +52,11 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   // Reject relative entries before glob expansion, so a relative glob never
   // resolves against a possibly-stale projectDir. Absolute siblings still
   // proceed (graceful degradation).
-  const rejectedSections: string[] = [];
-  let candidatePaths = rawPaths;
-  if (requireAbsolutePath) {
-    candidatePaths = rawPaths.filter((entry) => {
-      if (isAbsolutePathArg(entry)) return true;
-      const errorText = (relativePathError(entry).content[0] as { text: string }).text;
-      rejectedSections.push(`${entry}:\nerror: ${errorText}\n`);
-      return false;
-    });
-  }
+  const { candidates: candidatePaths, rejectedSections } = filterAbsolutePaths(
+    rawPaths,
+    requireAbsolutePath,
+    (entry, errorText) => `${entry}:\nerror: ${errorText}\n`,
+  );
 
   const filePaths = await expandGlobs(candidatePaths, projectDir);
   if (filePaths.length === 0) {

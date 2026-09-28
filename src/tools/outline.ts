@@ -15,6 +15,7 @@ import { MARKDOWN_EXTENSIONS, XML_EXTENSIONS } from "../outline/supported-extens
 import {
   displayPath,
   expandGlobs,
+  filterAbsolutePaths,
   isAbsolutePathArg,
   relativePathError,
   type ToolContext,
@@ -37,16 +38,11 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
 
   // Reject relative entries before glob expansion (mirrors trueline_read), so
   // a relative glob is never resolved against a possibly-stale projectDir.
-  const rejectedSections: string[] = [];
-  let candidates = params.file_paths;
-  if (requireAbsolutePath) {
-    candidates = params.file_paths.filter((entry) => {
-      if (isAbsolutePathArg(entry)) return true;
-      const errorText = (relativePathError(entry).content[0] as { text: string }).text;
-      rejectedSections.push(`--- ${entry} ---\n${errorText}`);
-      return false;
-    });
-  }
+  const { candidates, rejectedSections } = filterAbsolutePaths(
+    params.file_paths,
+    requireAbsolutePath,
+    (entry, errorText) => `--- ${entry} ---\n${errorText}`,
+  );
 
   const filePaths = await expandGlobs(candidates, projectDir);
   if (filePaths.length === 0) {

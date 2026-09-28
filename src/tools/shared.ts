@@ -68,6 +68,27 @@ export function relativePathError(fp: string): ToolResult {
   );
 }
 
+/**
+ * Split entries into absolute-path candidates and formatted rejections for
+ * requireAbsolutePath guards. Callers supply formatRejection to reproduce
+ * their existing output shape byte-for-byte.
+ */
+export function filterAbsolutePaths(
+  entries: string[],
+  requireAbsolutePath: boolean | undefined,
+  formatRejection: (entry: string, errorText: string) => string,
+): { candidates: string[]; rejectedSections: string[] } {
+  if (!requireAbsolutePath) return { candidates: entries, rejectedSections: [] };
+  const rejectedSections: string[] = [];
+  const candidates = entries.filter((entry) => {
+    if (isAbsolutePathArg(entry)) return true;
+    const errorText = (relativePathError(entry).content[0] as { text: string }).text;
+    rejectedSections.push(formatRejection(entry, errorText));
+    return false;
+  });
+  return { candidates, rejectedSections };
+}
+
 // ==============================================================================
 // Path validation: resolution, deny check, stat
 // ==============================================================================
