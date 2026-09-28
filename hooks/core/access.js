@@ -3,12 +3,13 @@
 // ==============================================================================
 //
 // Generalized version of truelineCanAccess — determines whether trueline can
-// serve a given file path. Mirrors the containment + deny-pattern checks in
-// src/tools/shared.ts. Platform-agnostic: caller passes the project directory.
+// serve a given file path. Shares the containment check (isContained) with
+// src/tools/shared.ts and mirrors its deny-pattern check. Platform-agnostic:
+// caller passes the project directory.
 
-import { resolve, sep } from "node:path";
+import { resolve } from "node:path";
 import { realpath } from "node:fs/promises";
-import { resolveAllowedDirs } from "../../src/allowed-dirs.js";
+import { isContained, resolveAllowedDirs } from "../../src/allowed-dirs.js";
 import { readToolDenyPatterns, evaluateFilePath } from "../../src/security.js";
 
 /**
@@ -46,8 +47,7 @@ export async function createAccessChecker(projectDir) {
       return false;
     }
 
-    const isContained = allowedBases.some((base) => realPath === base || realPath.startsWith(base + sep));
-    if (!isContained) return false;
+    if (!isContained(realPath, allowedBases)) return false;
 
     // Check deny patterns for this tool.
     const denyGlobs = await readToolDenyPatterns(toolName, projectDir);
