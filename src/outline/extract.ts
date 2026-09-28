@@ -154,13 +154,18 @@ export async function extractOutline(
         text: extractSignature(node),
       });
 
-      // For recurse types (e.g. class_body), visit their children
-      // to extract members at depth+1
+      // For recurse types (e.g. class_body), visit their children to extract
+      // members at depth+1. Wrapper nodes (TS/JS `export_statement`, Python
+      // `decorated_definition`) hold the real declaration one level deeper than
+      // the outline node itself, so a recurse target may be a grandchild.
       if (depth + 1 <= maxDepth) {
         for (const child of node.children) {
           if (!child.isNamed) continue;
-          if (config.recurse?.has(child.type)) {
-            for (const member of child.children) {
+          const recurseTargets = config.recurse?.has(child.type)
+            ? [child]
+            : child.children.filter((c) => c.isNamed && config.recurse?.has(c.type));
+          for (const target of recurseTargets) {
+            for (const member of target.children) {
               if (!member.isNamed) continue;
               visit(member, depth + 1, false);
             }

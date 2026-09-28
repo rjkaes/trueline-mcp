@@ -89,6 +89,57 @@ describe("trueline_outline", () => {
     expect(text).toMatch(/^ {2}\d.*greet/m);
   });
 
+  test("shows class members at depth 1 when exported", async () => {
+    const file = writeTestFile(
+      "exported-class.ts",
+      [
+        "export class Greeter {",
+        "  name: string;",
+        "  constructor(name: string) {",
+        "    this.name = name;",
+        "  }",
+        "  greet(): string {",
+        "    return 'Hello, ' + this.name;",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+    const text = getText(result);
+
+    // Same expectations as the non-exported case: class at depth 0, members indented
+    expect(text).toMatch(/^\d.*export class Greeter/m);
+    expect(text).toMatch(/^ {2}\d.*constructor/m);
+    expect(text).toMatch(/^ {2}\d.*greet/m);
+  });
+
+  test("shows class members at depth 1 for export default class", async () => {
+    const file = writeTestFile(
+      "exported-default-class.ts",
+      [
+        "export default class Greeter {",
+        "  name: string;",
+        "  constructor(name: string) {",
+        "    this.name = name;",
+        "  }",
+        "  greet(): string {",
+        "    return 'Hello, ' + this.name;",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+    const text = getText(result);
+
+    expect(text).toMatch(/^\d.*export default class Greeter/m);
+    expect(text).toMatch(/^ {2}\d.*constructor/m);
+    expect(text).toMatch(/^ {2}\d.*greet/m);
+  });
+
   test("extracts Python functions and classes", async () => {
     const file = writeTestFile(
       "example.py",
@@ -120,6 +171,28 @@ describe("trueline_outline", () => {
     // Should not include imports
     expect(text).not.toContain("import os");
     expect(text).not.toContain("from pathlib");
+  });
+
+  test("shows class members at depth 1 for decorated Python class", async () => {
+    const file = writeTestFile(
+      "decorated_class.py",
+      [
+        "@dataclasses.dataclass",
+        "class Greeter:",
+        "    name: str",
+        "",
+        "    def greet(self) -> str:",
+        '        return f"Hello, {self.name}"',
+        "",
+      ].join("\n"),
+    );
+
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+    const text = getText(result);
+
+    // Same expectations as the non-decorated case: members indented at depth 1
+    expect(text).toMatch(/^ {2}\d.*name: str/m);
+    expect(text).toMatch(/^ {2}\d.*def greet/m);
   });
 
   test("extracts Go functions and types", async () => {
