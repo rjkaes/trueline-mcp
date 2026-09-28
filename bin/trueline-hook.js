@@ -45,9 +45,6 @@ if (!platform || !event || process.argv.includes("--help") || process.argv.inclu
 // map to the same routing logic.
 const EVENT_ALIASES = {
   beforetool: "pretooluse",
-  before_tool: "pretooluse",
-  "session-start": "session-start",
-  sessionstart: "session-start",
 };
 
 const normalizedEvent = EVENT_ALIASES[event.toLowerCase()] ?? event.toLowerCase();
