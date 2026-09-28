@@ -46,7 +46,8 @@
     "test": "bun test",
     "lint": "bunx biome ci .",
     "lint:fix": "bunx biome check --write .",
-    "benchmark": "bun run benchmarks/perf-benchmark.ts"
+    "benchmark": "bun run benchmarks/perf-benchmark.ts",
+    "version": "jq --arg v \"$npm_package_version\" '.version = $v' .claude-plugin/plugin.json > .claude-plugin/plugin.json.tmp && mv .claude-plugin/plugin.json.tmp .claude-plugin/plugin.json && git add .claude-plugin/plugin.json"
   },
   "dependencies": {
     "tree-sitter-wasms": "0.1.13",

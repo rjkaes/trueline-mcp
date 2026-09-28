@@ -29,12 +29,6 @@ new_version="$1"
 # Strip leading "v" if someone passes "v0.2.0" out of habit
 new_version="${new_version#v}"
 
-# Validate semver format (major.minor.patch, optional pre-release)
-if ! [[ "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-  echo "Error: '$new_version' is not valid semver (expected X.Y.Z)" >&2
-  exit 1
-fi
-
 tag="v${new_version}"
 
 # Ensure we're in the repo root
@@ -46,7 +40,8 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 1
 fi
 
-# Check tag doesn't already exist
+# Check tag doesn't already exist. npm version commits before tagging, so a
+# clashing tag would fail only after stranding a release commit.
 if git rev-parse "$tag" >/dev/null 2>&1; then
   echo "Error: tag '$tag' already exists." >&2
   exit 1
@@ -61,19 +56,11 @@ echo ""
 echo "==> Syncing with origin/main..."
 git pull --rebase --quiet origin main
 
-# Bump version in both files
+# npm version validates semver, bumps package.json, runs the "version"
+# script (syncs .claude-plugin/plugin.json), then commits and tags.
 echo ""
 echo "==> Bumping version in package.json and .claude-plugin/plugin.json..."
-
-tmp=$(mktemp)
-jq --arg v "$new_version" '.version = $v' package.json > "$tmp" && mv "$tmp" package.json
-tmp=$(mktemp)
-jq --arg v "$new_version" '.version = $v' .claude-plugin/plugin.json > "$tmp" && mv "$tmp" .claude-plugin/plugin.json
-
-# Commit and tag
-git add package.json .claude-plugin/plugin.json
-LEFTHOOK=0 git commit -m "chore: release v${new_version}"
-git tag "$tag"
+LEFTHOOK=0 npm version "$new_version" -m "chore: release v%s"
 
 # Push commit and tag
 echo ""
