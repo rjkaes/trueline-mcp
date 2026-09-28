@@ -273,15 +273,9 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
         const buf = bufferedLine;
         const bufNum = bufferedLineNumber;
         bufferedLine = null;
-        let consumed = processLine(buf, bufNum);
-        while (!consumed) {
-          consumed = processLine(buf, bufNum);
-        }
+        while (!processLine(buf, bufNum));
       }
-      let consumed = processLine(line, lineNumber);
-      while (!consumed) {
-        consumed = processLine(line, lineNumber);
-      }
+      while (!processLine(line, lineNumber));
       continue;
     }
 
@@ -301,10 +295,7 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
       const buf = bufferedLine;
       const bufNum = bufferedLineNumber;
       bufferedLine = null;
-      let consumed = processLine(buf, bufNum);
-      while (!consumed) {
-        consumed = processLine(buf, bufNum);
-      }
+      while (!processLine(buf, bufNum));
     }
 
     // Buffer potential table header for lookahead
@@ -314,20 +305,14 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
       continue;
     }
 
-    let consumed = processLine(line, lineNumber);
-    while (!consumed) {
-      consumed = processLine(line, lineNumber);
-    }
+    while (!processLine(line, lineNumber));
   }
 
   // ==============================================================================
   // Flush EOF: emit any open blocks or buffered lines
   // ==============================================================================
   if (bufferedLine !== null) {
-    let consumed = processLine(bufferedLine, bufferedLineNumber);
-    while (!consumed) {
-      consumed = processLine(bufferedLine, bufferedLineNumber);
-    }
+    while (!processLine(bufferedLine, bufferedLineNumber));
   }
 
   flushOpenBlock(state, totalLines);
