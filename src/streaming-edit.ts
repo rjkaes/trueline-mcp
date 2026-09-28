@@ -110,7 +110,6 @@ export async function streamingEdit(
   const csAccumulators = checksumRefs.map((ref) => ({
     ref,
     hash: FNV_OFFSET_BASIS,
-    verified: false,
   }));
   let csIdx = 0;
 
@@ -329,7 +328,6 @@ export async function streamingEdit(
       // advance csIdx past fully consumed accumulators, then fold lineH into
       // every accumulator whose range covers this line.
       while (csIdx < csAccumulators.length && csAccumulators[csIdx].ref.endLine < lineNumber) {
-        csAccumulators[csIdx].verified = true;
         csIdx++;
       }
       for (let ci = csIdx; ci < csAccumulators.length; ci++) {
