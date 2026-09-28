@@ -192,11 +192,16 @@ describe("gitignore-aware globs", () => {
   beforeAll(() => {
     const { execSync } = require("node:child_process");
     gitDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-glob-git-")));
+    // Strip inherited GIT_* env vars: under `git commit -a`, lefthook runs this
+    // with an absolute GIT_INDEX_FILE, and `git add -A` would rewrite the parent
+    // repo's pending commit.
+    const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+    const git = (cmd: string) => execSync(`git ${cmd}`, { cwd: gitDir, env: cleanEnv });
 
     // Create a git repo with .gitignore
-    execSync("git init", { cwd: gitDir });
-    execSync("git config user.email test@test.com", { cwd: gitDir });
-    execSync("git config user.name test", { cwd: gitDir });
+    git("init");
+    git("config user.email test@test.com");
+    git("config user.name test");
 
     mkdirSync(join(gitDir, "src"), { recursive: true });
     mkdirSync(join(gitDir, "node_modules", "dep"), { recursive: true });
@@ -209,7 +214,7 @@ describe("gitignore-aware globs", () => {
     writeFileSync(join(gitDir, ".gitignore"), "node_modules/\ndist/\n");
 
     // Stage files so git ls-files sees them
-    execSync("git add -A", { cwd: gitDir });
+    git("add -A");
   });
 
   beforeEach(() => {
