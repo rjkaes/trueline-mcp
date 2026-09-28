@@ -1,4 +1,4 @@
 #!/usr/bin/env node
-// CLI entry point for npm distribution; forwards to resolve-binary.cjs (bun > deno > node).
+// CLI entry point for npm distribution; forwards to resolve-binary.cjs (bun > node).
 process.argv.splice(2, 0, "cli");
 await import("../scripts/resolve-binary.cjs");
