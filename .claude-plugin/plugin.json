@@ -19,7 +19,8 @@
     "mcp": {
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-binary.cjs"
+        "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-binary.cjs",
+        "server"
       ]
     }
   }

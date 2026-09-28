@@ -14,7 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const script = resolve(__dirname, "..", "scripts", "resolve-binary.cjs");
 
 try {
-  execFileSync("node", [script, ...process.argv.slice(2)], { stdio: "inherit" });
+  execFileSync("node", [script, "server", ...process.argv.slice(2)], { stdio: "inherit" });
 } catch (err) {
   process.exit(err.status ?? 1);
 }

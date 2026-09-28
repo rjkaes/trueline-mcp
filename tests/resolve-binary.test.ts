@@ -10,20 +10,19 @@ let pluginRoot: string;
 let fakeBinDir: string;
 
 // Stands in for bun: passes hasBun()'s `--version` probe, then echoes the
-// argv resolve-binary-cli.cjs hands it instead of running anything.
+// argv resolve-binary.cjs hands it instead of running anything.
 const FAKE_BUN = '#!/bin/sh\n[ "$1" = "--version" ] && exit 0\necho "$@"\n';
 
 beforeEach(() => {
   // realpath: node resolves __dirname through the macOS /var -> /private/var symlink.
-  pluginRoot = realpathSync(mkdtempSync(join(tmpdir(), "resolve-binary-cli-")));
+  pluginRoot = realpathSync(mkdtempSync(join(tmpdir(), "resolve-binary-")));
   mkdirSync(join(pluginRoot, "scripts"));
-  for (const name of ["resolve-binary-cli.cjs", "resolve-binary-shared.cjs"]) {
-    copyFileSync(join(scriptsDir, name), join(pluginRoot, "scripts", name));
-  }
+  copyFileSync(join(scriptsDir, "resolve-binary.cjs"), join(pluginRoot, "scripts", "resolve-binary.cjs"));
   // Present node_modules makes ensureDeps() skip the first-run install.
   mkdirSync(join(pluginRoot, "node_modules"));
   mkdirSync(join(pluginRoot, "dist"));
   writeFileSync(join(pluginRoot, "dist", "cli.js"), "");
+  writeFileSync(join(pluginRoot, "dist", "server.js"), "");
 
   fakeBinDir = join(pluginRoot, "fake-bin");
   mkdirSync(fakeBinDir);
@@ -34,8 +33,8 @@ afterEach(() => {
   rmSync(pluginRoot, { recursive: true, force: true });
 });
 
-function runLauncher(): string {
-  const result = spawnSync("node", [join(pluginRoot, "scripts", "resolve-binary-cli.cjs"), "--help"], {
+function runLauncher(entry: "cli" | "server"): string {
+  const result = spawnSync("node", [join(pluginRoot, "scripts", "resolve-binary.cjs"), entry, "--help"], {
     env: { ...process.env, PATH: `${fakeBinDir}${delimiter}${process.env.PATH}` },
     encoding: "utf8",
   });
@@ -44,14 +43,18 @@ function runLauncher(): string {
 }
 
 // The fake bun is a POSIX shell script; Windows can't exec it without a shell.
-describe.skipIf(process.platform === "win32")("resolve-binary-cli.cjs under bun", () => {
+describe.skipIf(process.platform === "win32")("resolve-binary.cjs under bun", () => {
   test("runs dist/cli.js when src/ isn't published (npm install)", () => {
-    expect(runLauncher()).toBe(`${join(pluginRoot, "dist", "cli.js")} --help`);
+    expect(runLauncher("cli")).toBe(`${join(pluginRoot, "dist", "cli.js")} --help`);
   });
 
   test("runs src/cli.ts when the source is present (plugin clone)", () => {
     mkdirSync(join(pluginRoot, "src"));
     writeFileSync(join(pluginRoot, "src", "cli.ts"), "");
-    expect(runLauncher()).toBe(`${join(pluginRoot, "src", "cli.ts")} --help`);
+    expect(runLauncher("cli")).toBe(`${join(pluginRoot, "src", "cli.ts")} --help`);
+  });
+
+  test("runs dist/server.js for the server entry the same way", () => {
+    expect(runLauncher("server")).toBe(`${join(pluginRoot, "dist", "server.js")} --help`);
   });
 });

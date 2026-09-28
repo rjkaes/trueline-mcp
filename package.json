@@ -30,8 +30,6 @@
     "dist/",
     "bin/",
     "scripts/resolve-binary.cjs",
-    "scripts/resolve-binary-cli.cjs",
-    "scripts/resolve-binary-shared.cjs",
     "hooks/",
     "configs/",
     "src/security.js",

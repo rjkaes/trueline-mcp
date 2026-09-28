@@ -1,17 +1,72 @@
 #!/usr/bin/env node
 "use strict";
 
-const { spawn } = require("node:child_process");
+const { spawn, execFileSync } = require("node:child_process");
 const { existsSync } = require("node:fs");
 const path = require("node:path");
-const { hasBun, hasDeno, ensureDeps } = require("./resolve-binary-shared.cjs");
+
+function hasBun() {
+  try {
+    execFileSync("bun", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hasDeno() {
+  try {
+    execFileSync("deno", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// When installed as a Claude Code plugin, node_modules won't exist.
+// Install dependencies on first launch so tree-sitter WASMs (needed by
+// trueline_outline) and other native deps are available.
+function ensureDeps(pluginRoot, logName) {
+  if (existsSync(path.join(pluginRoot, "node_modules"))) return;
+
+  process.stderr.write(`${logName}: installing dependencies (first run)...\n`);
+  try {
+    // Prefer bun for speed, fall back to npm (ships with node).
+    const installer = hasBun() ? "bun" : "npm";
+    const args = installer === "bun" ? ["install"] : ["install", "--production"];
+    execFileSync(installer, args, {
+      cwd: pluginRoot,
+      stdio: ["ignore", "ignore", "inherit"],
+      timeout: 120_000,
+    });
+    process.stderr.write(`${logName}: dependencies installed.\n`);
+  } catch (err) {
+    // Non-fatal: outline won't work, but read/edit/search/diff/verify will.
+    process.stderr.write(
+      `${logName}: dependency install failed (${err.message}). trueline_outline will be unavailable.\n`,
+    );
+  }
+}
+
+// Entry-specific strings: ensureDeps() log prefix and the spawn-error message.
+const ENTRIES = {
+  server: { logName: "trueline-mcp", failPrefix: "trueline-mcp: failed to start server" },
+  cli: { logName: "trueline", failPrefix: "trueline: failed to start" },
+};
+
+const entryArg = process.argv[2];
+const entry = ENTRIES[entryArg];
+if (!entry) {
+  process.stderr.write(`resolve-binary.cjs: unknown entry "${entryArg}" (expected "server" or "cli")\n`);
+  process.exit(1);
+}
 
 const pluginRoot = path.join(__dirname, "..");
 
-ensureDeps(pluginRoot, "trueline-mcp");
+ensureDeps(pluginRoot, entry.logName);
 
-const srcEntry = path.join(pluginRoot, "src", "server.ts");
-const distEntry = path.join(pluginRoot, "dist", "server.js");
+const srcEntry = path.join(pluginRoot, "src", `${entryArg}.ts`);
+const distEntry = path.join(pluginRoot, "dist", `${entryArg}.js`);
 
 // Prefer bun: it runs the TypeScript source directly with no build step.
 // Then try deno, then fall back to node — both use the pre-bundled JS file.
@@ -26,18 +81,18 @@ if (hasBun() && existsSync(srcEntry)) {
   args = [distEntry];
 } else if (hasDeno()) {
   cmd = "deno";
-  args = ["run", "-A", path.join(pluginRoot, "dist", "server.js")];
+  args = ["run", "-A", distEntry];
 } else {
   cmd = "node";
-  args = [path.join(pluginRoot, "dist", "server.js")];
+  args = [distEntry];
 }
 
-const child = spawn(cmd, [...args, ...process.argv.slice(2)], {
+const child = spawn(cmd, [...args, ...process.argv.slice(3)], {
   stdio: "inherit",
 });
 
 child.on("error", (err) => {
-  process.stderr.write(`trueline-mcp: failed to start server: ${err.message}\n`);
+  process.stderr.write(`${entry.failPrefix}: ${err.message}\n`);
   process.exit(1);
 });
 
