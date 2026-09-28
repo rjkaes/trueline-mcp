@@ -27,7 +27,7 @@ function treeSitterWasmPath(): string {
 }
 
 /** Ensure web-tree-sitter WASM runtime is initialized (idempotent). */
-export async function ensureInit(): Promise<void> {
+async function ensureInit(): Promise<void> {
   if (initialized) return;
   // Guard against WASM loading that hangs (e.g. missing .wasm files).
   const timeout = new Promise<never>((_, reject) =>
@@ -47,7 +47,7 @@ function grammarPath(grammar: string): string {
 
 /** Load a language grammar (cached). */
 // biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
-export async function loadLanguage(grammar: string): Promise<any> {
+async function loadLanguage(grammar: string): Promise<any> {
   const cached = languageCache.get(grammar);
   if (cached) return cached;
 
