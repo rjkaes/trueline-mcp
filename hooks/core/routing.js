@@ -69,7 +69,7 @@ const NATIVE_MEDIA_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp
  * @param {string} toolName
  * @returns {string}
  */
-export function canonicalToolName(toolName) {
+function canonicalToolName(toolName) {
   return TOOL_ALIASES[toolName] ?? toolName;
 }
 
@@ -78,7 +78,7 @@ export function canonicalToolName(toolName) {
  * @param {Record<string, unknown> | undefined} toolInput
  * @returns {string | null}
  */
-export function extractFilePath(toolInput) {
+function extractFilePath(toolInput) {
   if (!toolInput || typeof toolInput !== "object") return null;
   for (const field of FILE_PATH_FIELDS) {
     const val = toolInput[field];
