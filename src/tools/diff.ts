@@ -5,15 +5,12 @@ import { lcsMiddle, trimCommonEnds } from "../diff-collector.ts";
 import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
-import { isAbsolutePathArg, relativePathError, validatePath } from "./shared.ts";
+import { isAbsolutePathArg, relativePathError, type ToolContext, validatePath } from "./shared.ts";
 import { type ToolResult, textResult, errorResult } from "./types.ts";
 
-interface DiffParams {
+interface DiffParams extends ToolContext {
   file_paths: string[];
   compare_against?: string;
-  projectDir?: string;
-  allowedDirs?: string[];
-  requireAbsolutePath?: boolean;
 }
 
 export async function handleDiff(params: DiffParams): Promise<ToolResult> {

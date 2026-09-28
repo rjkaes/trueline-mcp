@@ -9,15 +9,19 @@
 import { splitLines } from "../line-splitter.ts";
 import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash } from "../hash.ts";
 import { parseChecksum } from "../parse.ts";
-import { binaryFileError, isAbsolutePathArg, isBinaryError, relativePathError, validatePath } from "./shared.ts";
+import {
+  binaryFileError,
+  isAbsolutePathArg,
+  isBinaryError,
+  relativePathError,
+  type ToolContext,
+  validatePath,
+} from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
-interface VerifyParams {
+interface VerifyParams extends ToolContext {
   file_path: string;
   refs: string[];
-  projectDir?: string;
-  allowedDirs?: string[];
-  requireAbsolutePath?: boolean;
 }
 
 interface RefAcc {

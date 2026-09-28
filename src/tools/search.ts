@@ -6,13 +6,20 @@
  * checksums, and refs ready for immediate editing.
  */
 import { checksumToLetters, hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
-import { displayPath, expandGlobs, isAbsolutePathArg, relativePathError, validatePath } from "./shared.ts";
+import {
+  displayPath,
+  expandGlobs,
+  isAbsolutePathArg,
+  relativePathError,
+  type ToolContext,
+  validatePath,
+} from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 import { searchLineByLine } from "./search-line.ts";
 import { searchMultiline } from "./search-multiline.ts";
 import type { FileSearchResult, LineMatcher } from "./search-types.ts";
 
-interface SearchParams {
+interface SearchParams extends ToolContext {
   file_path?: string;
   file_paths?: string[];
   pattern: string;
@@ -22,9 +29,6 @@ interface SearchParams {
   case_insensitive?: boolean;
   regex?: boolean;
   multiline?: boolean;
-  projectDir?: string;
-  allowedDirs?: string[];
-  requireAbsolutePath?: boolean;
 }
 
 export async function handleSearch(params: SearchParams): Promise<ToolResult> {

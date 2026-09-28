@@ -24,21 +24,19 @@ import {
   type EditInput,
   relativePathError,
   type StreamEditOp,
+  type ToolContext,
   validateEdits,
   validateEncoding,
   validatePath,
 } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
-interface EditParams {
+interface EditParams extends ToolContext {
   file_path: string;
   encoding?: string;
   edits: EditInput[];
   dry_run?: boolean;
   context_lines?: number;
-  projectDir?: string;
-  allowedDirs?: string[];
-  requireAbsolutePath?: boolean;
 }
 
 export async function handleEdit(params: EditParams): Promise<ToolResult> {

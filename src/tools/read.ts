@@ -20,6 +20,7 @@ import {
   isAbsolutePathArg,
   isBinaryError,
   relativePathError,
+  type ToolContext,
   validateEncoding,
   validatePath,
 } from "./shared.ts";
@@ -51,13 +52,10 @@ interface ReadParams {
   allowedDirs?: string[];
 }
 
-export interface ReadMultiParams {
+export interface ReadMultiParams extends ToolContext {
   file_paths: string[];
   encoding?: string;
   ranges?: string[];
-  projectDir?: string;
-  allowedDirs?: string[];
-  requireAbsolutePath?: boolean;
 }
 
 export async function handleRead(params: ReadParams): Promise<ToolResult> {

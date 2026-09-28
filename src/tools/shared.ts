@@ -30,6 +30,16 @@ export interface EditInput {
 }
 
 // ==============================================================================
+// Shared param fields for path resolution/validation, used across tool handlers
+// ==============================================================================
+
+export interface ToolContext {
+  projectDir?: string;
+  allowedDirs?: string[];
+  requireAbsolutePath?: boolean;
+}
+
+// ==============================================================================
 // Absolute path enforcement (MCP-only; the CLI keeps relative resolution
 // since its projectDir is the real shell cwd, not a value pinned at server
 // startup that can go stale when the caller is working in a git worktree)

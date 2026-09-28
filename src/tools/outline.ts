@@ -11,7 +11,14 @@ import { extractOutline, formatOutline } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { extractMarkdownOutline } from "../outline/markdown.ts";
 import { extractXmlOutline } from "../outline/xml.ts";
-import { displayPath, expandGlobs, isAbsolutePathArg, relativePathError, validatePath } from "./shared.ts";
+import {
+  displayPath,
+  expandGlobs,
+  isAbsolutePathArg,
+  relativePathError,
+  type ToolContext,
+  validatePath,
+} from "./shared.ts";
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 const XML_EXTENSIONS = new Set([
@@ -30,12 +37,9 @@ const XML_EXTENSIONS = new Set([
 
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
-interface OutlineParams {
+interface OutlineParams extends ToolContext {
   file_paths: string[];
   depth?: number;
-  projectDir?: string;
-  allowedDirs?: string[];
-  requireAbsolutePath?: boolean;
 }
 
 export async function handleOutline(params: OutlineParams): Promise<ToolResult> {
