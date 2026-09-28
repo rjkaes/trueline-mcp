@@ -187,6 +187,34 @@ describe("XML outline", () => {
     expect(text).not.toContain("DOCTYPE");
   });
 
+  test("skips DOCTYPE internal subset declarations", async () => {
+    const file = writeTestFile(
+      "doctype-subset.xml",
+      [
+        '<?xml version="1.0"?>',
+        "<!DOCTYPE note [",
+        "  <!ELEMENT note (to,body)>",
+        "  <!ATTLIST note id CDATA #REQUIRED>",
+        '  <!ENTITY writer "Jane">',
+        "]>",
+        '<note id="1">',
+        "  <to>Tove</to>",
+        "  <body>&writer;</body>",
+        "</note>",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+    const text = getText(result);
+
+    // Markup declarations inside [...] end with '>' but must not end the DOCTYPE
+    expect(text).not.toContain("<!ATTLIST");
+    expect(text).not.toContain("<!ENTITY");
+    expect(text).toMatch(/^7-10: <note id="1">/m);
+    expect(text).toMatch(/^ {2}8-8: <to>/m);
+  });
+
   test("reports correct line numbers", async () => {
     const file = writeTestFile(
       "lines.xml",

@@ -51,8 +51,10 @@ export async function extractXmlOutline(
   let totalLines = 0;
 
   let state: State = State.Text;
-  // Accumulates tag content when state is TagOpen, PI, Comment, CData, or DocType
+  // Accumulates tag content when state is TagOpen, PI, Comment, or CData
   let buf = "";
+  // Inside a DOCTYPE's internal subset ([...]), where '>' ends a markup declaration
+  let inDocSubset = false;
   // Line where the current tag/comment/PI started
   let tokenStartLine = 0;
 
@@ -214,14 +216,15 @@ export async function extractXmlOutline(
           break;
 
         case State.DocType: {
-          // DOCTYPE can contain internal subsets with nested brackets.
-          // Track bracket depth to find the real closing '>'.
-          if (ch === ">") {
+          // Only a '>' outside the internal subset closes the DOCTYPE.
+          // TODO: a quoted ']' or '>' in an entity value still ends the subset or DOCTYPE early.
+          if (ch === "[") {
+            inDocSubset = true;
+          } else if (ch === "]") {
+            inDocSubset = false;
+          } else if (ch === ">" && !inDocSubset) {
             state = State.Text;
             buf = "";
-          } else if (ch === "[") {
-            // Enter internal subset; scan for ']' before resuming
-            buf += ch;
           }
           break;
         }
