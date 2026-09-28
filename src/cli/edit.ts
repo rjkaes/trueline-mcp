@@ -9,7 +9,6 @@ import {
   emitUsageError,
   jsonFlag,
   loadAtOrDashOrLiteral,
-  parseEditsArg,
   UsageError,
 } from "./io.ts";
 
@@ -41,6 +40,32 @@ Options:
   --encoding <enc>         File encoding (utf-8, ascii, latin1)
   --json                   Output JSON envelope {ok, result}
 `;
+
+/**
+ * Validate and return an EditInput array from a parsed --edits value.
+ *
+ * Accepts an array of objects with required keys: ref, range, content.
+ * Optional key: action.
+ */
+function parseEditsArg(raw: unknown): EditInput[] {
+  if (!Array.isArray(raw)) {
+    throw new UsageError("--edits must be a JSON array");
+  }
+  return raw.map((item: unknown, i: number) => {
+    if (typeof item !== "object" || item === null) {
+      throw new UsageError(`--edits[${i}]: expected an object`);
+    }
+    const obj = item as Record<string, unknown>;
+    if (typeof obj.ref !== "string") throw new UsageError(`--edits[${i}]: missing "ref"`);
+    if (typeof obj.range !== "string") throw new UsageError(`--edits[${i}]: missing "range"`);
+    if (typeof obj.content !== "string") throw new UsageError(`--edits[${i}]: missing "content"`);
+    const action = obj.action;
+    if (action !== undefined && action !== "replace" && action !== "insert_after") {
+      throw new UsageError(`--edits[${i}]: action must be "replace" or "insert_after"`);
+    }
+    return { ref: obj.ref, range: obj.range, content: obj.content, action: action as EditInput["action"] };
+  });
+}
 
 export default {
   usage: USAGE,

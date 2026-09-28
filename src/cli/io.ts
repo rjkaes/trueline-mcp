@@ -6,8 +6,6 @@
 //   3. Result formatting (human-readable vs --json envelope)
 
 import { readFileSync } from "node:fs";
-import { parseFilePathWithRanges } from "../parse.ts";
-import type { EditInput } from "../tools/shared.ts";
 import type { ToolResult } from "../tools/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -36,10 +34,6 @@ export function asString(value: string | boolean | undefined): string | undefine
   return typeof value === "string" ? value : undefined;
 }
 
-/** Narrow a parseArgs multiple:true string-option value. */
-export function asStringArray(value: Array<string | boolean> | undefined): string[] {
-  return value === undefined ? [] : value.filter((v): v is string => typeof v === "string");
-}
 // ---------------------------------------------------------------------------
 // User-facing errors that map to exit code 3 (usage / parse error)
 // ---------------------------------------------------------------------------
@@ -106,92 +100,6 @@ export function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): unk
     }
   }
   return raw;
-}
-
-// ---------------------------------------------------------------------------
-// Edit argument parsing
-// ---------------------------------------------------------------------------
-
-/**
- * Validate and return an EditInput array from a parsed --edits value.
- *
- * Accepts an array of objects with required keys: ref, range, content.
- * Optional key: action.
- */
-export function parseEditsArg(raw: unknown): EditInput[] {
-  if (!Array.isArray(raw)) {
-    throw new UsageError("--edits must be a JSON array");
-  }
-  return raw.map((item: unknown, i: number) => {
-    if (typeof item !== "object" || item === null) {
-      throw new UsageError(`--edits[${i}]: expected an object`);
-    }
-    const obj = item as Record<string, unknown>;
-    if (typeof obj.ref !== "string") throw new UsageError(`--edits[${i}]: missing "ref"`);
-    if (typeof obj.range !== "string") throw new UsageError(`--edits[${i}]: missing "range"`);
-    if (typeof obj.content !== "string") throw new UsageError(`--edits[${i}]: missing "content"`);
-    const action = obj.action;
-    if (action !== undefined && action !== "replace" && action !== "insert_after") {
-      throw new UsageError(`--edits[${i}]: action must be "replace" or "insert_after"`);
-    }
-    return { ref: obj.ref, range: obj.range, content: obj.content, action: action as EditInput["action"] };
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Refs argument parsing
-// ---------------------------------------------------------------------------
-
-/**
- * Parse the --refs argument array which supports three forms:
- *   repeatable:  --refs r1 --refs r2  (each arg is a ref string)
- *   @file:       --refs @path         (single element starting with @)
- *   stdin:       --refs -             (single element "-")
- *
- * If @file or - is mixed with other entries, raises UsageError (exit 3).
- */
-export function parseRefsArg(refsArray: string[]): string[] {
-  if (refsArray.length === 0) {
-    throw new UsageError("--refs is required");
-  }
-
-  // Detect @file or - forms
-  const hasAtFile = refsArray.some((r) => r.startsWith("@"));
-  const hasDash = refsArray.some((r) => r === "-");
-
-  if ((hasAtFile || hasDash) && refsArray.length > 1) {
-    throw new UsageError("--refs @file and --refs - cannot be combined with other --refs values");
-  }
-
-  if (hasAtFile || hasDash) {
-    // Load via @file or stdin, then split on newlines (one ref per line)
-    const raw = loadAtOrDashOrLiteral(refsArray[0], "text") as string;
-    return raw
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
-  }
-
-  return refsArray;
-}
-
-// ---------------------------------------------------------------------------
-// Ranges argument validation (conflict detection)
-// ---------------------------------------------------------------------------
-
-/**
- * Check for ambiguous ranges: a path like "src/foo.ts:10-20" already embeds
- * a range; combining it with --ranges is ambiguous and exits 3.
- */
-export function validateRangesConflict(paths: string[], flagRanges: string[] | undefined): void {
-  if (!flagRanges || flagRanges.length === 0) return;
-
-  for (const p of paths) {
-    const parsed = parseFilePathWithRanges(p);
-    if (parsed.rangeSpecs && parsed.rangeSpecs.length > 0) {
-      throw new UsageError(`ambiguous ranges for ${p}: use either inline ':range' or --ranges, not both`);
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
