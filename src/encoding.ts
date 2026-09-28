@@ -103,15 +103,7 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
     async function* utf16Chunks(): AsyncGenerator<Buffer> {
       const decoder = new TextDecoder(bomInfo.encoding);
 
-      // First chunk: strip BOM, then transcode
-      const afterBom = firstChunk.subarray(bomInfo.bomLength);
-      if (afterBom.length > 0) {
-        const decoded = decoder.decode(afterBom, { stream: true });
-        if (decoded.length > 0) yield Buffer.from(decoded, "utf-8");
-      }
-
-      // Remaining chunks
-      for await (const chunk of readFdChunks(fd, readBuf)) {
+      for await (const chunk of readFdChunks(fd, readBuf, firstChunk.subarray(bomInfo.bomLength))) {
         const decoded = decoder.decode(chunk, { stream: true });
         if (decoded.length > 0) yield Buffer.from(decoded, "utf-8");
       }
@@ -125,16 +117,8 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
   }
 
   // UTF-8 (with or without BOM): strip BOM if present, then split directly.
-  async function* utf8Chunks(): AsyncGenerator<Buffer> {
-    // First chunk: strip BOM bytes if present
-    const afterBom = bomInfo.hasBOM ? firstChunk.subarray(bomInfo.bomLength) : firstChunk;
-    if (afterBom.length > 0) yield afterBom;
-
-    // Remaining chunks
-    yield* readFdChunks(fd, readBuf);
-  }
-
-  return { lines: splitChunks(utf8Chunks(), opts), bomInfo };
+  const afterBom = bomInfo.hasBOM ? firstChunk.subarray(bomInfo.bomLength) : firstChunk;
+  return { lines: splitChunks(readFdChunks(fd, readBuf, afterBom), opts), bomInfo };
 }
 
 // ==============================================================================

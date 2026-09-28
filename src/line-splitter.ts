@@ -145,9 +145,13 @@ const READ_BUF_SIZE = 65536;
 /**
  * Reads chunks from an open fd until EOF, closing it when done. Shared by
  * splitLines and the encoding-aware transcoding paths in encoding.ts.
+ *
+ * `leadingChunk` (already read by the caller, e.g. for BOM sniffing) is
+ * yielded inside the try so an early `return()` still closes the fd.
  */
-export async function* readFdChunks(fd: FileHandle, readBuf: Buffer): AsyncGenerator<Buffer> {
+export async function* readFdChunks(fd: FileHandle, readBuf: Buffer, leadingChunk?: Buffer): AsyncGenerator<Buffer> {
   try {
+    if (leadingChunk && leadingChunk.length > 0) yield leadingChunk;
     let bytesRead: number;
     do {
       ({ bytesRead } = await fd.read(readBuf, 0, readBuf.length));

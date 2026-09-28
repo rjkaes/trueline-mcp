@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { detectBOM, transcodedLines, bomBytes, encodeString, encodeBuffer } from "../src/encoding.ts";
@@ -230,6 +230,45 @@ describe("transcodedLines — plain UTF-8", () => {
       collected.push(line);
     }
     expect(collected).toHaveLength(0);
+  });
+});
+
+// ==============================================================================
+// transcodedLines — fd lifetime
+// ==============================================================================
+
+// Bun >= 1.4 throws when a FileHandle is garbage-collected unclosed, so an
+// early exit from `lines` must close the fd itself. /dev/fd lists this
+// process's open descriptors; Windows has no equivalent.
+const openFdCount = () => readdirSync("/dev/fd").length;
+
+describe.skipIf(process.platform === "win32")("transcodedLines — fd lifetime", () => {
+  test("closes the fd when the consumer stops on the first chunk", async () => {
+    const p = writeFile("early-exit.txt", Buffer.from("alpha\nbeta\ngamma\n"));
+    const before = openFdCount();
+    const { lines } = await transcodedLines(p);
+    for await (const _line of lines) break;
+    expect(openFdCount()).toBe(before);
+  });
+
+  test("closes the fd when binary detection throws on the first chunk", async () => {
+    const p = writeFile("null-first-chunk.bin", Buffer.from("alpha\x00beta\n"));
+    const before = openFdCount();
+    const { lines } = await transcodedLines(p, { detectBinary: true });
+    await expect(async () => {
+      for await (const _line of lines) {
+        // drain
+      }
+    }).toThrow(/binary/);
+    expect(openFdCount()).toBe(before);
+  });
+
+  test("closes the fd when the consumer stops on the first UTF-16 chunk", async () => {
+    const p = writeFile("early-exit-utf16.txt", utf16leFile("alpha", "beta", "gamma"));
+    const before = openFdCount();
+    const { lines } = await transcodedLines(p);
+    for await (const _line of lines) break;
+    expect(openFdCount()).toBe(before);
   });
 });
 
