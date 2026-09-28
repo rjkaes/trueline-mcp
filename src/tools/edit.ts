@@ -230,14 +230,8 @@ function hl(content: string, lineNumber: number): string {
 /** Truncated preview of deleted content for the edit summary. */
 function truncatePreview(lines: string[]): string {
   const MAX = 80;
-  let result = "";
-  for (let i = 0; i < lines.length; i++) {
-    if (i > 0) result += "\\n";
-    const remaining = MAX - result.length;
-    if (remaining <= 0) return `"${result}\u2026"`;
-    result += lines[i].length <= remaining ? lines[i] : lines[i].slice(0, remaining);
-  }
-  return result.length > MAX ? `"${result.slice(0, MAX)}\u2026"` : `"${result}"`;
+  const joined = lines.join("\\n");
+  return joined.length > MAX ? `"${joined.slice(0, MAX)}…"` : `"${joined}"`;
 }
 
 // ==============================================================================
