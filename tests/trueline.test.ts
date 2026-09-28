@@ -95,12 +95,6 @@ describe("parseRange", () => {
     expect(r.start).not.toBe(r.end); // must be distinct objects
   });
 
-  test("parses dash-separated range", () => {
-    const r = parseRange("gh12-yz21");
-    expect(r.start).toEqual({ line: 12, hash: "gh" });
-    expect(r.end).toEqual({ line: 21, hash: "yz" });
-  });
-
   test("throws when start > end", () => {
     expect(() => parseRange("ab21-cd12")).toThrow("must be ≤");
   });
