@@ -169,11 +169,6 @@ function editSummary(ops: StreamEditOp[]): string {
 
       if (op.insertAfter) {
         const location = op.startLine === 0 ? "@start" : `@${op.startLine}`;
-        if (lines === 0) {
-          // Shouldn't reach here (validateEdits rejects empty insert_after),
-          // but guard against crash in case it does.
-          return `inserted 0 lines ${location}`;
-        }
         const newStart = op.startLine + 1 + shift;
         const newEnd = op.startLine + lines + shift;
         const rangeHint =

@@ -184,11 +184,6 @@ export function parseChecksum(checksum: string): ChecksumRef {
   return result;
 }
 
-/** Parse an inline ref string as emitted by trueline_read/trueline_search. Delegates to parseChecksum. */
-export function parseInlineRef(ref: string): ChecksumRef {
-  return parseChecksum(ref);
-}
-
 /**
  * Find the index of the "-" that separates the start ref from the end ref.
  *

@@ -8,7 +8,7 @@
 
 import { splitLines } from "../line-splitter.ts";
 import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash } from "../hash.ts";
-import { parseInlineRef } from "../parse.ts";
+import { parseChecksum } from "../parse.ts";
 import { binaryFileError, isAbsolutePathArg, isBinaryError, relativePathError, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
@@ -44,9 +44,9 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
 
   const accs: RefAcc[] = [];
   for (const rawRef of refs) {
-    let parsed: ReturnType<typeof parseInlineRef>;
+    let parsed: ReturnType<typeof parseChecksum>;
     try {
-      parsed = parseInlineRef(rawRef);
+      parsed = parseChecksum(rawRef);
     } catch (err: unknown) {
       return errorResult((err as Error).message);
     }

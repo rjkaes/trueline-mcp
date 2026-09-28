@@ -102,13 +102,6 @@ function unwrapFilePath(coerced: Record<string, unknown>): void {
     coerced.file_path = paths[0];
     delete coerced.file_paths;
   }
-  if (Array.isArray(coerced.file_path)) {
-    const paths = coerced.file_path as string[];
-    if (paths.length > 1) {
-      throw new Error(`This tool accepts a single file path; received ${paths.length}. Pass one path as file_path.`);
-    }
-    coerced.file_path = paths[0];
-  }
 }
 function safeTool(
   handler: (params: Record<string, unknown>) => Promise<ToolResult>,

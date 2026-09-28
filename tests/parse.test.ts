@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseChecksum, parseFilePathWithRanges, parseInlineRef, parseRange, parseRanges } from "../src/parse.ts";
+import { parseChecksum, parseFilePathWithRanges, parseRange, parseRanges } from "../src/parse.ts";
 
 describe("parseRanges", () => {
   test("returns whole-file sentinel for undefined input", () => {
@@ -241,6 +241,6 @@ describe("docs examples match the real hashLine/checksum format", () => {
   });
 
   test("trueline_edit schema's ref example parses", () => {
-    expect(() => parseInlineRef("ab10-cd20/efghij")).not.toThrow();
+    expect(() => parseChecksum("ab10-cd20/efghij")).not.toThrow();
   });
 });

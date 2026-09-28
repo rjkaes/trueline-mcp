@@ -1,7 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
-import { statSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
-import { type ChecksumRef, parseFilePathWithRanges, parseRange, parseInlineRef } from "../parse.ts";
+import { type ChecksumRef, parseChecksum, parseFilePathWithRanges, parseRange } from "../parse.ts";
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
 
@@ -215,19 +214,6 @@ type ValidateEditsOk = {
 type ValidateEditsErr = { ok: false; error: ToolResult };
 type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
 
-// On Windows, async realpath() and realpathSync() may disagree on 8.3 short
-// names (e.g. RUNNER~1 vs runneradmin). Compare by inode to handle this.
-function _sameFile(a: string, b: string): boolean {
-  if (process.platform !== "win32") return false;
-  try {
-    const sa = statSync(a);
-    const sb = statSync(b);
-    return sa.dev === sb.dev && sa.ino === sb.ino && sa.ino !== 0;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Validate edit inputs without reading file content.
  *
@@ -243,7 +229,7 @@ export function validateEdits(edits: EditInput[], _resolvedPath?: string): Valid
   for (const edit of edits) {
     let checksumRef: ChecksumRef;
     try {
-      checksumRef = parseInlineRef(edit.ref);
+      checksumRef = parseChecksum(edit.ref);
     } catch (err) {
       return { ok: false, error: errorResult((err as Error).message) };
     }
