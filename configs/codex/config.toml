@@ -1,3 +1,0 @@
-[mcp_servers.trueline]
-command = "npx"
-args = ["-y", "trueline-mcp"]

@@ -1,9 +1,0 @@
-{
-  "hooks": {
-    "BeforeTool": [
-      {
-        "command": "trueline-hook gemini-cli beforetool"
-      }
-    ]
-  }
-}
