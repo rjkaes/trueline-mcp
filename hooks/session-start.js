@@ -3,7 +3,6 @@ import { getInstructions } from "./core/instructions.js";
 
 // Re-export for backwards compatibility — other code may import this directly.
 export { getInstructions };
-export const getSessionStartInstructions = getInstructions;
 
 // Main: detect hook event from stdin and format output accordingly.
 // SessionStart: plain stdout is added as context.

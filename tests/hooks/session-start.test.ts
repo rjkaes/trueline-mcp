@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getInstructions, getSessionStartInstructions } from "../../hooks/session-start.js";
+import { getInstructions } from "../../hooks/session-start.js";
 
 describe("getInstructions", () => {
   test("starts with trueline heading", () => {
@@ -56,9 +56,5 @@ describe("getInstructions", () => {
   test("includes search-then-edit example", () => {
     const out = getInstructions();
     expect(out).toContain("search-then-edit");
-  });
-
-  test("getSessionStartInstructions is a backwards-compatible alias", () => {
-    expect(getSessionStartInstructions).toBe(getInstructions);
   });
 });
