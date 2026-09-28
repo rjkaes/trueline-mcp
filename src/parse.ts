@@ -204,13 +204,9 @@ function findRangeDash(rangePart: string): number {
 
 /**
  * Parse a single side of a checksum range — either "aj9" or "9" format.
- * Returns the line number and optional 2-letter hash prefix.
+ * Returns the line number.
  */
-function extractLineNumber(
-  ref: string,
-  originalInput: string,
-  which: "start" | "end",
-): { line: number; hashPrefix?: string } {
+function extractLineNumber(ref: string, originalInput: string, which: "start" | "end"): { line: number } {
   if (!DECIMAL_INT.test(ref)) {
     // hashLine format: "aj9"
     const hashPrefix = ref.slice(0, 2).toLowerCase();
@@ -225,7 +221,7 @@ function extractLineNumber(
         `Invalid checksum "${originalInput}" — ${which} line must be a decimal integer, got "${lineStr}"`,
       );
     }
-    return { line: Number(lineStr), hashPrefix };
+    return { line: Number(lineStr) };
   }
 
   // Decimal format: "9"
