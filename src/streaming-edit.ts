@@ -21,7 +21,7 @@
 // ==============================================================================
 
 import { randomBytes } from "node:crypto";
-import { chmod, open, rename, stat, unlink } from "node:fs/promises";
+import { chmod, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
   EMPTY_FILE_CHECKSUM,
@@ -684,6 +684,37 @@ export async function streamingEdit(
           }
         }
         // delays.length retries attempted (delays.length + 1 total attempts)
+        //
+        // Last resort: on Windows, the destination or temp file can be held by a
+        // process that never releases FILE_SHARE_DELETE for the whole retry
+        // window above — e.g. an editor or agent harness keeping the file open
+        // as long-lived context, not just a transient AV/indexer scan (see
+        // https://github.com/rjkaes/trueline-mcp/issues/11 for the original
+        // report; this covers the residual case that report's fix didn't).
+        // rename() requires delete-share permission on the destination; a plain
+        // write only requires write-share, which such holders almost always
+        // still grant. Fall back to writing the temp file's content directly
+        // into the destination instead of renaming over it.
+        //
+        // This trades the rename's atomicity — and the symlink-swap safety it
+        // provides (see README security model) — for availability. Re-check
+        // mtime immediately before writing, using the same staleness guard as
+        // the retry loop above, so we don't silently clobber a concurrent
+        // external change. If anything here fails, fall through to the
+        // original rename error below; a second failure mode is no worse.
+        if (process.platform === "win32") {
+          try {
+            const currentStat = await stat(resolvedPath);
+            if (currentStat.mtimeMs === mtimeMs) {
+              const data = await readFile(tmpPath);
+              await writeFile(resolvedPath, data);
+              await unlink(tmpPath).catch(() => {});
+              return;
+            }
+          } catch {
+            // Fall through — see comment above.
+          }
+        }
         throw formatRenameError(lastErr, tmpPath, resolvedPath, delays.length);
       }
       await renameWithRetry();
