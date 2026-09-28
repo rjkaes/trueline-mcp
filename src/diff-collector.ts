@@ -7,7 +7,7 @@
 // memory.
 // ==============================================================================
 
-export type DiffEntry = { type: "ctx" | "del" | "ins"; text: string };
+type DiffEntry = { type: "ctx" | "del" | "ins"; text: string };
 
 // A replaced range arrives here as every original line deleted followed by
 // every replacement line inserted: the streaming engine reports what it wrote

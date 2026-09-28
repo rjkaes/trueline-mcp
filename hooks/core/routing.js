@@ -130,7 +130,7 @@ function formatSize(bytes) {
  * @param {unknown} command
  * @returns {{ tool: string; file: string; hint: string } | null}
  */
-export function detectBashFilePeek(command) {
+function detectBashFilePeek(command) {
   if (typeof command !== "string") return null;
 
   for (const det of BASH_PEEK_DETECTORS) {

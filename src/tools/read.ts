@@ -53,7 +53,7 @@ interface ReadParams {
   allowedDirs?: string[];
 }
 
-export interface ReadMultiParams extends ToolContext {
+interface ReadMultiParams extends ToolContext {
   file_paths: string[];
   encoding?: string;
   ranges?: string[];

@@ -6,7 +6,7 @@ import { fnv1aHash, foldHash, FNV_OFFSET_BASIS } from "./hash.ts";
 // Types
 // ==============================================================================
 
-export interface SymbolInfo {
+interface SymbolInfo {
   name: string;
   signature: string;
   bodyHash: number;
