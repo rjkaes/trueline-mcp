@@ -480,6 +480,10 @@ const gitFilesCache = new Map<string, string[] | null>();
 
 const execFileAsync = promisify(execFile);
 
+// Strip inherited GIT_* env vars so git discovers the repo from cwd,
+// not from a parent worktree or other inherited context.
+export const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+
 async function gitListFiles(cwd: string): Promise<string[] | null> {
   const cached = gitFilesCache.get(cwd);
   if (cached !== undefined) return cached;
@@ -487,6 +491,7 @@ async function gitListFiles(cwd: string): Promise<string[] | null> {
   try {
     const { stdout } = await execFileAsync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
       cwd,
+      env: gitEnv,
       maxBuffer: 10 * 1024 * 1024,
     });
     const result = stdout.split("\0").filter(Boolean);

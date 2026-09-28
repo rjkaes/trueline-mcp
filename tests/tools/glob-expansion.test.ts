@@ -188,14 +188,14 @@ describe("search glob expansion", () => {
 
 describe("gitignore-aware globs", () => {
   let gitDir: string;
+  // Strip inherited GIT_* env vars: under `git commit -a`, lefthook runs this
+  // with an absolute GIT_INDEX_FILE, and `git add -A` would rewrite the parent
+  // repo's pending commit.
+  const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
 
   beforeAll(() => {
     const { execSync } = require("node:child_process");
     gitDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-glob-git-")));
-    // Strip inherited GIT_* env vars: under `git commit -a`, lefthook runs this
-    // with an absolute GIT_INDEX_FILE, and `git add -A` would rewrite the parent
-    // repo's pending commit.
-    const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
     const git = (cmd: string) => execSync(`git ${cmd}`, { cwd: gitDir, env: cleanEnv });
 
     // Create a git repo with .gitignore
@@ -239,6 +239,26 @@ describe("gitignore-aware globs", () => {
     // Should NOT find gitignored files
     expect(text).not.toContain("dep");
     expect(text).not.toContain("bundle");
+  });
+
+  test("recursive glob ignores an inherited GIT_DIR", async () => {
+    const { execSync } = require("node:child_process");
+    const decoyDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-glob-decoy-")));
+    execSync("git init", { cwd: decoyDir, env: cleanEnv });
+    writeFileSync(join(decoyDir, "decoy.ts"), "export const decoy = 1;\n");
+    execSync("git add -A", { cwd: decoyDir, env: cleanEnv });
+
+    const inherited = process.env.GIT_DIR;
+    process.env.GIT_DIR = join(decoyDir, ".git");
+    try {
+      const text = getText(await handleReadMulti({ file_paths: ["**/*.ts"], projectDir: gitDir }));
+      expect(text).toContain("main");
+      expect(text).not.toContain("decoy");
+    } finally {
+      if (inherited === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = inherited;
+      rmSync(decoyDir, { recursive: true, force: true });
+    }
   });
 
   test("non-recursive glob in non-ignored dir works", async () => {

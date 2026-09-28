@@ -5,7 +5,7 @@ import { lcsMiddle, trimCommonEnds } from "../diff-collector.ts";
 import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
-import { isAbsolutePathArg, relativePathError, type ToolContext, validatePath } from "./shared.ts";
+import { gitEnv, isAbsolutePathArg, relativePathError, type ToolContext, validatePath } from "./shared.ts";
 import { type ToolResult, textResult, errorResult } from "./types.ts";
 
 interface DiffParams extends ToolContext {
@@ -91,10 +91,6 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 // ==============================================================================
 // Git helpers
 // ==============================================================================
-
-// Strip inherited GIT_* env vars so git discovers the repo from cwd,
-// not from a parent worktree or other inherited context.
-const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
 
 const execFileAsync = promisify(execFile);
 
