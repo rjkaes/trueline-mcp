@@ -1,7 +1,8 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll, afterEach } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
+import { isContained } from "../../src/allowed-dirs.js";
 import { handleRead } from "../../src/tools/read.ts";
 
 // Two temp directories simulate: (1) the project dir, (2) an external allowed dir.
@@ -91,5 +92,33 @@ describe("allowedDirs containment", () => {
     });
     expect(result.isError).toBeUndefined();
     expect(result.content[0].text).toContain("top secret");
+  });
+});
+
+describe("isContained", () => {
+  const originalPlatform = process.platform;
+  const base = join(sep, "Users", "Alice", "project");
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform });
+  });
+
+  test("accepts the base itself and paths under it", () => {
+    expect(isContained(base, [base])).toBe(true);
+    expect(isContained(join(base, "src", "app.ts"), [base])).toBe(true);
+  });
+
+  test("rejects a sibling that shares the base as a string prefix", () => {
+    expect(isContained(`${base}-archive${sep}app.ts`, [base])).toBe(false);
+  });
+
+  test("ignores case on win32", () => {
+    Object.defineProperty(process, "platform", { value: "win32" });
+    expect(isContained(join(sep, "users", "alice", "project", "app.ts"), [base])).toBe(true);
+  });
+
+  test("respects case elsewhere", () => {
+    Object.defineProperty(process, "platform", { value: "linux" });
+    expect(isContained(join(sep, "users", "alice", "project", "app.ts"), [base])).toBe(false);
   });
 });

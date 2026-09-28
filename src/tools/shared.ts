@@ -1,6 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
-import { isAbsolute, resolve, sep } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
+import { isContained } from "../allowed-dirs.js";
 import { type ChecksumRef, parseChecksum, parseFilePathWithRanges, parseRange } from "../parse.ts";
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
@@ -171,15 +172,7 @@ export async function validatePath(
     }),
   );
   const allBases = [realBase, ...resolvedAllowed];
-  const isContained =
-    process.platform === "win32"
-      ? allBases.some((base) => {
-          const rp = realPath.toLowerCase();
-          const bp = base.toLowerCase();
-          return rp === bp || rp.startsWith(bp + sep);
-        })
-      : allBases.some((base) => realPath === base || realPath.startsWith(base + sep));
-  if (!isContained) {
+  if (!isContained(realPath, allBases)) {
     return {
       ok: false,
       error: errorResult(`Access denied: "${file_path}" is outside the project directory`),

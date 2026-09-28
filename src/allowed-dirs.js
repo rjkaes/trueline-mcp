@@ -6,7 +6,7 @@
 
 import { mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, sep } from "node:path";
 
 /**
  * Resolve the set of directories trueline tools are allowed to access.
@@ -51,4 +51,21 @@ export async function resolveProjectDirs() {
   const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
   const allowedDirs = await resolveAllowedDirs();
   return { projectDir, allowedDirs };
+}
+
+/**
+ * Whether realPath equals or sits under one of the realpath'd bases.
+ * Case-insensitive on Windows, where realpath() and realpathSync() can
+ * disagree on drive-letter casing (C:\ vs c:\).
+ * @param {string} realPath
+ * @param {string[]} bases
+ * @returns {boolean}
+ */
+export function isContained(realPath, bases) {
+  const win = process.platform === "win32";
+  const target = win ? realPath.toLowerCase() : realPath;
+  return bases.some((base) => {
+    const b = win ? base.toLowerCase() : base;
+    return target === b || target.startsWith(b + sep);
+  });
 }
