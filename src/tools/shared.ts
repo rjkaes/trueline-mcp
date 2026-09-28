@@ -1,5 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, resolve, sep } from "node:path";
+import { promisify } from "node:util";
 import { type ChecksumRef, parseChecksum, parseFilePathWithRanges, parseRange } from "../parse.ts";
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
@@ -487,22 +488,18 @@ export async function expandGlobs(filePaths: string[], projectDir: string | unde
 /** Cache git ls-files results per directory within a single call chain. */
 const gitFilesCache = new Map<string, string[] | null>();
 
+const execFileAsync = promisify(execFile);
+
 async function gitListFiles(cwd: string): Promise<string[] | null> {
   const cached = gitFilesCache.get(cwd);
   if (cached !== undefined) return cached;
 
   try {
-    const result = await new Promise<string[]>((resolve, reject) => {
-      execFile(
-        "git",
-        ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-        { cwd, maxBuffer: 10 * 1024 * 1024 },
-        (err, stdout) => {
-          if (err) return reject(err);
-          resolve(stdout.split("\0").filter(Boolean));
-        },
-      );
+    const { stdout } = await execFileAsync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+      cwd,
+      maxBuffer: 10 * 1024 * 1024,
     });
+    const result = stdout.split("\0").filter(Boolean);
     gitFilesCache.set(cwd, result);
     return result;
   } catch {
