@@ -7,7 +7,7 @@
 // memory.
 // ==============================================================================
 
-type DiffEntry = { type: "ctx" | "del" | "ins"; text: string };
+export type DiffEntry = { type: "ctx" | "del" | "ins"; text: string };
 
 // A replaced range arrives here as every original line deleted followed by
 // every replacement line inserted: the streaming engine reports what it wrote
@@ -43,16 +43,15 @@ function realign(entries: DiffEntry[]): DiffEntry[] {
   return out;
 }
 
-/** Diff one change block: common prefix and suffix as context, LCS for the middle. */
-function alignBlock(oldLines: string[], newLines: string[]): DiffEntry[] {
-  const out: DiffEntry[] = [];
+/** Split into common prefix, common suffix, and the differing middle. */
+export function trimCommonEnds(
+  oldLines: string[],
+  newLines: string[],
+): { prefix: string[]; suffix: string[]; oldMid: string[]; newMid: string[] } {
   const shorter = Math.min(oldLines.length, newLines.length);
 
   let prefix = 0;
-  while (prefix < shorter && oldLines[prefix] === newLines[prefix]) {
-    out.push({ type: "ctx", text: oldLines[prefix] });
-    prefix++;
-  }
+  while (prefix < shorter && oldLines[prefix] === newLines[prefix]) prefix++;
 
   let suffix = 0;
   while (
@@ -62,20 +61,40 @@ function alignBlock(oldLines: string[], newLines: string[]): DiffEntry[] {
     suffix++;
   }
 
-  const oldMid = oldLines.slice(prefix, oldLines.length - suffix);
-  const newMid = newLines.slice(prefix, newLines.length - suffix);
+  return {
+    prefix: oldLines.slice(0, prefix),
+    suffix: oldLines.slice(oldLines.length - suffix),
+    oldMid: oldLines.slice(prefix, oldLines.length - suffix),
+    newMid: newLines.slice(prefix, newLines.length - suffix),
+  };
+}
 
-  if (oldMid.length > 0 && newMid.length > 0 && oldMid.length * newMid.length <= MAX_ALIGN_CELLS) {
-    out.push(...lcsScript(oldMid, newMid));
-  } else {
-    for (const text of oldMid) out.push({ type: "del", text });
-    for (const text of newMid) out.push({ type: "ins", text });
-  }
+/**
+ * Minimal ctx/del/ins script for a change block's middle via LCS.
+ * Returns null when oldMid × newMid would exceed maxCells; the caller
+ * decides its own fallback for a block too large to align.
+ */
+export function lcsMiddle(oldMid: string[], newMid: string[], maxCells: number): DiffEntry[] | null {
+  if (oldMid.length * newMid.length > maxCells) return null;
+  return lcsScript(oldMid, newMid);
+}
 
-  for (let k = oldLines.length - suffix; k < oldLines.length; k++) {
-    out.push({ type: "ctx", text: oldLines[k] });
-  }
-  return out;
+/** Diff one change block: common prefix and suffix as context, LCS for the middle. */
+function alignBlock(oldLines: string[], newLines: string[]): DiffEntry[] {
+  const { prefix, suffix, oldMid, newMid } = trimCommonEnds(oldLines, newLines);
+
+  const middle =
+    lcsMiddle(oldMid, newMid, MAX_ALIGN_CELLS) ??
+    ([
+      ...oldMid.map((text) => ({ type: "del", text }) as const),
+      ...newMid.map((text) => ({ type: "ins", text }) as const),
+    ] satisfies DiffEntry[]);
+
+  return [
+    ...prefix.map((text) => ({ type: "ctx", text }) as const),
+    ...middle,
+    ...suffix.map((text) => ({ type: "ctx", text }) as const),
+  ];
 }
 
 /** Minimal del/ins script for two blocks, matching identical lines via LCS. */

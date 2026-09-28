@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { constants, open } from "node:fs/promises";
+import { lcsMiddle, trimCommonEnds } from "../diff-collector.ts";
 import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
@@ -198,68 +199,18 @@ export function computeMiniDiff(oldBody?: string, newBody?: string): string | nu
 
   // Use LCS (longest common subsequence) to find the minimal diff.
   // The greedy approach fails for insertions that shift all lines.
-  const m = oldLines.length;
-  const n = newLines.length;
-
-  // Strip common prefix and suffix to shrink the DP table. For typical
-  // diffs (a few lines changed in a large function) this makes the
-  // O(m*n) LCS tractable.
-  let prefixLen = 0;
-  while (prefixLen < m && prefixLen < n && oldLines[prefixLen] === newLines[prefixLen]) prefixLen++;
-
-  let suffixLen = 0;
-  while (
-    suffixLen < m - prefixLen &&
-    suffixLen < n - prefixLen &&
-    oldLines[m - 1 - suffixLen] === newLines[n - 1 - suffixLen]
-  )
-    suffixLen++;
-
-  const oldMid = oldLines.slice(prefixLen, m - suffixLen);
-  const newMid = newLines.slice(prefixLen, n - suffixLen);
-  const mm = oldMid.length;
-  const nn = newMid.length;
+  const { oldMid, newMid } = trimCommonEnds(oldLines, newLines);
 
   // If the remaining region is still too large, bail out.
   const MAX_DP_CELLS = 1_000_000;
-  if (mm * nn > MAX_DP_CELLS) return null;
+  const script = lcsMiddle(oldMid, newMid, MAX_DP_CELLS);
+  if (script === null) return null;
 
-  // Build LCS length table on the trimmed middle region
-  const dp: number[][] = Array.from({ length: mm + 1 }, () => new Array(nn + 1).fill(0));
-  for (let i = 1; i <= mm; i++) {
-    for (let j = 1; j <= nn; j++) {
-      if (oldMid[i - 1] === newMid[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1] + 1;
-      } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-      }
-    }
-  }
-
-  // Backtrack to find removed/added lines
-  const removed: string[] = [];
-  const added: string[] = [];
-  let i = mm;
-  let j = nn;
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && oldMid[i - 1] === newMid[j - 1]) {
-      i--;
-      j--;
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      added.push(newMid[j - 1]);
-      j--;
-    } else {
-      removed.push(oldMid[i - 1]);
-      i--;
-    }
-  }
+  const removed = script.filter((e) => e.type === "del").map((e) => e.text);
+  const added = script.filter((e) => e.type === "ins").map((e) => e.text);
 
   const totalDiffLines = removed.length + added.length;
   if (totalDiffLines === 0 || totalDiffLines > INLINE_DIFF_THRESHOLD) return null;
-
-  // Reverse since we backtracked from the end
-  removed.reverse();
-  added.reverse();
 
   const lines: string[] = [];
   for (const r of removed) lines.push(`-${r.trim()}`);
