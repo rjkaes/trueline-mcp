@@ -63,15 +63,13 @@ const srcEntry = path.join(pluginRoot, "src", `${entryArg}.ts`);
 const distEntry = path.join(pluginRoot, "dist", `${entryArg}.js`);
 
 // Prefer bun: it runs the TypeScript source directly with no build step.
-// Then try deno, then fall back to node — both use the pre-bundled JS file.
+// Fall back to node, which uses the pre-bundled JS file.
 const [cmd, args] =
   bun && existsSync(srcEntry)
     ? ["bun", [srcEntry]] // Dev / plugin-clone context: run TypeScript source directly.
     : bun
       ? ["bun", [distEntry]] // npx / npm-install context: src/ isn't published, use bundled JS.
-      : has("deno")
-        ? ["deno", ["run", "-A", distEntry]]
-        : ["node", [distEntry]];
+      : ["node", [distEntry]];
 
 const child = spawn(cmd, [...args, ...process.argv.slice(3)], {
   stdio: "inherit",
