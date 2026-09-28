@@ -10,6 +10,18 @@ import {
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 
+// Production formatChecksum only emits the plain decimal form; tests need
+// the letter-prefixed hashLine ref format ("ab10-cd20/efghij") for fixtures.
+function formatChecksumWithLetters(
+  startLine: number,
+  endLine: number,
+  hash: number,
+  startLetters: string,
+  endLetters: string,
+): string {
+  return `${startLetters}${startLine}-${endLetters}${endLine}/${checksumToLetters(hash)}`;
+}
+
 /**
  * Compute a read-range checksum over a slice of file lines.
  *
@@ -37,7 +49,7 @@ export function rangeChecksum(
   if (options?.decimal) {
     return formatChecksum(startLine, effectiveEnd, hash);
   }
-  return formatChecksum(startLine, effectiveEnd, hash, firstLetters, lastLetters);
+  return formatChecksumWithLetters(startLine, effectiveEnd, hash, firstLetters, lastLetters);
 }
 
 /**
@@ -66,7 +78,7 @@ export function rawRangeChecksum(bufs: Buffer[], startLine: number, endLine: num
     lastLetters = letters;
     hash = foldHash(hash, h);
   }
-  return formatChecksum(startLine, endLine, hash, firstLetters, lastLetters);
+  return formatChecksumWithLetters(startLine, endLine, hash, firstLetters, lastLetters);
 }
 
 /**

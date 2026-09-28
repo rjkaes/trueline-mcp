@@ -22,6 +22,9 @@ export type DiffEntry = { type: "ctx" | "del" | "ins"; text: string };
 // rewrites where a minimal script buys little.
 const MAX_ALIGN_CELLS = 250_000;
 
+// Lines of unchanged context shown around each hunk in the unified diff.
+const CONTEXT_LINES = 3;
+
 /** Rewrite every run of del/ins entries as a minimal edit script. */
 function realign(entries: DiffEntry[]): DiffEntry[] {
   const out: DiffEntry[] = [];
@@ -154,7 +157,7 @@ export class DiffCollector {
    * Format collected entries as a unified diff string.
    * Returns an empty string when there are no changes.
    */
-  format(oldPath: string, newPath: string, contextLines = 3): string {
+  format(oldPath: string, newPath: string): string {
     if (this.entries.length === 0) return "";
     const entries = realign(this.entries);
 
@@ -165,14 +168,14 @@ export class DiffCollector {
     }
     if (changeIndices.length === 0) return "";
 
-    // Group changes, merging when the context gap between groups ≤ 2*contextLines
+    // Group changes, merging when the context gap between groups ≤ 2*CONTEXT_LINES
     const groups: Array<[number, number]> = [];
     let gStart = changeIndices[0];
     let gEnd = changeIndices[0];
 
     for (let ci = 1; ci < changeIndices.length; ci++) {
       const gap = changeIndices[ci] - gEnd - 1;
-      if (gap <= 2 * contextLines) {
+      if (gap <= 2 * CONTEXT_LINES) {
         gEnd = changeIndices[ci];
       } else {
         groups.push([gStart, gEnd]);
@@ -186,8 +189,8 @@ export class DiffCollector {
     const parts: string[] = [`--- ${oldPath}`, `+++ ${newPath}`];
 
     for (const [gs, ge] of groups) {
-      const hStart = Math.max(0, gs - contextLines);
-      const hEnd = Math.min(entries.length - 1, ge + contextLines);
+      const hStart = Math.max(0, gs - CONTEXT_LINES);
+      const hEnd = Math.min(entries.length - 1, ge + CONTEXT_LINES);
 
       // Compute 1-based line numbers at hStart by counting preceding entries
       let oldLine = 1;

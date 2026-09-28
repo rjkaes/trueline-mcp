@@ -114,19 +114,9 @@ export function checksumToLetters(h: number): string {
   return result;
 }
 
-/** Format a checksum as `"<start>-<end>/<6letters>"`, optionally with hash letters. */
-export function formatChecksum(
-  startLine: number,
-  endLine: number,
-  hash: number,
-  startLetters?: string,
-  endLetters?: string,
-): string {
-  const ck = checksumToLetters(hash);
-  if (startLetters && endLetters) {
-    return `${startLetters}${startLine}-${endLetters}${endLine}/${ck}`;
-  }
-  return `${startLine}-${endLine}/${ck}`;
+/** Format a checksum as `"<start>-<end>/<6letters>"`. */
+export function formatChecksum(startLine: number, endLine: number, hash: number): string {
+  return `${startLine}-${endLine}/${checksumToLetters(hash)}`;
 }
 
 // 623 pairs, 1246 chars
