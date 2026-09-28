@@ -29,22 +29,6 @@ const formatters = {
     advise: (reason) => ({ stderr: reason }),
     approve: () => ({}),
   },
-  "vscode-copilot": {
-    block: (reason) => ({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: reason,
-      },
-    }),
-    advise: (reason) => ({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        additionalContext: reason,
-      },
-    }),
-    approve: () => null,
-  },
 };
 
 /**
@@ -55,6 +39,7 @@ const formatters = {
  * @returns {Record<string, unknown> | null} JSON to write to stdout, or null for passthrough
  */
 export function formatDecision(platform, routing) {
+  // vscode-copilot has no entry here — it falls back to claude-code's formatters.
   const fmt = formatters[platform] ?? formatters["claude-code"];
 
   if (!routing) return fmt.approve();

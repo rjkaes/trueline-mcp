@@ -21,15 +21,6 @@ const PLATFORM_TOOLS = {
     writeTool: "write_file",
     grepAdvice: "use run_shell_command with grep/rg to identify the files",
   },
-  "vscode-copilot": {
-    readTool: "Read",
-    editTool: "Edit",
-    writeTool: "Write",
-    grepAdvice: "use Grep to identify the files",
-    atRefAdvice:
-      "If file content was injected by an @ reference, never call Read or trueline_read just to view it again. " +
-      "Only call trueline_read or trueline_search when you need refs for editing.",
-  },
 };
 
 /**
@@ -38,6 +29,7 @@ const PLATFORM_TOOLS = {
  * @returns {string}
  */
 export function getInstructions(platform = "claude-code") {
+  // vscode-copilot has no entry here — it falls back to claude-code's tool names.
   const p = PLATFORM_TOOLS[platform] ?? PLATFORM_TOOLS["claude-code"];
 
   const atRefTip = p.atRefAdvice ? `\n- ${p.atRefAdvice}` : "";
