@@ -16,13 +16,12 @@ import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { DiffCollector } from "../diff-collector.ts";
 import { detectBOM } from "../encoding.ts";
-import { streamingEdit } from "../streaming-edit.ts";
+import { streamingEdit, type StreamEditOp } from "../streaming-edit.ts";
 import { fnv1aHash, fnv1aHashBytes, hashToLetters } from "../hash.ts";
 import { splitLines } from "../line-splitter.ts";
 import {
   type EditInput,
   relativePathError,
-  type StreamEditOp,
   type ToolContext,
   validateEdits,
   validateEncoding,

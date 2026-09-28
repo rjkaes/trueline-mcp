@@ -234,9 +234,6 @@ export function binaryFileError(filePath: string): ToolResult {
 
 import type { StreamEditOp } from "../streaming-edit.ts";
 
-// Re-exported for convenience since validateEdits produces StreamEditOps.
-export type { StreamEditOp } from "../streaming-edit.ts";
-
 type ValidateEditsOk = {
   ok: true;
   ops: StreamEditOp[];
