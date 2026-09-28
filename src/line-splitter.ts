@@ -13,7 +13,7 @@
 // each caller to implement it separately.
 // ==============================================================================
 
-import { constants, open } from "node:fs/promises";
+import { constants, open, type FileHandle } from "node:fs/promises";
 
 // ==============================================================================
 // Public types and constants
@@ -143,6 +143,24 @@ export async function* splitChunks(chunks: AsyncIterable<Buffer>, opts?: SplitCh
 const READ_BUF_SIZE = 65536;
 
 /**
+ * Reads chunks from an open fd until EOF, closing it when done. Shared by
+ * splitLines and the encoding-aware transcoding paths in encoding.ts.
+ */
+export async function* readFdChunks(fd: FileHandle, readBuf: Buffer): AsyncGenerator<Buffer> {
+  try {
+    let bytesRead: number;
+    do {
+      ({ bytesRead } = await fd.read(readBuf, 0, readBuf.length));
+      if (bytesRead === 0) break;
+      // Copy — readBuf is reused, and consumers may hold references to yielded slices.
+      yield Buffer.from(readBuf.subarray(0, bytesRead));
+    } while (bytesRead > 0);
+  } finally {
+    await fd.close();
+  }
+}
+
+/**
  * Stream lines from a file as raw Buffers without decoding to JS strings.
  *
  * Opens the file, reads it in 64KB chunks, and delegates to `splitChunks`.
@@ -155,17 +173,7 @@ export async function* splitLines(filePath: string, opts?: { detectBinary?: bool
     const noFollow = constants.O_NOFOLLOW ?? 0;
     const fd = await open(filePath, constants.O_RDONLY | noFollow);
     const readBuf = Buffer.allocUnsafe(READ_BUF_SIZE);
-    try {
-      let bytesRead: number;
-      do {
-        ({ bytesRead } = await fd.read(readBuf, 0, READ_BUF_SIZE));
-        if (bytesRead === 0) break;
-        // Copy — readBuf is reused, and consumers may hold references to yielded slices.
-        yield Buffer.from(readBuf.subarray(0, bytesRead));
-      } while (bytesRead > 0);
-    } finally {
-      await fd.close();
-    }
+    yield* readFdChunks(fd, readBuf);
   }
 
   yield* splitChunks(fileChunks(), opts);

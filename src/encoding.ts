@@ -12,7 +12,7 @@
 // ==============================================================================
 
 import { constants, open } from "node:fs/promises";
-import { splitChunks, type RawLine, type SplitChunksOpts } from "./line-splitter.ts";
+import { readFdChunks, splitChunks, type RawLine, type SplitChunksOpts } from "./line-splitter.ts";
 
 // ==============================================================================
 // BOM detection
@@ -111,22 +111,14 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
       }
 
       // Remaining chunks
-      try {
-        let bytesRead: number;
-        do {
-          ({ bytesRead } = await fd.read(readBuf, 0, READ_BUF_SIZE));
-          if (bytesRead === 0) break;
-          const chunk = Buffer.from(readBuf.subarray(0, bytesRead));
-          const decoded = decoder.decode(chunk, { stream: true });
-          if (decoded.length > 0) yield Buffer.from(decoded, "utf-8");
-        } while (bytesRead > 0);
-
-        // Flush any remaining buffered data in the decoder
-        const final = decoder.decode(new Uint8Array(0), { stream: false });
-        if (final.length > 0) yield Buffer.from(final, "utf-8");
-      } finally {
-        await fd.close();
+      for await (const chunk of readFdChunks(fd, readBuf)) {
+        const decoded = decoder.decode(chunk, { stream: true });
+        if (decoded.length > 0) yield Buffer.from(decoded, "utf-8");
       }
+
+      // Flush any remaining buffered data in the decoder
+      const final = decoder.decode(new Uint8Array(0), { stream: false });
+      if (final.length > 0) yield Buffer.from(final, "utf-8");
     }
 
     return { lines: splitChunks(utf16Chunks(), optsWithoutBinary), bomInfo };
@@ -139,16 +131,7 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
     if (afterBom.length > 0) yield afterBom;
 
     // Remaining chunks
-    try {
-      let bytesRead: number;
-      do {
-        ({ bytesRead } = await fd.read(readBuf, 0, READ_BUF_SIZE));
-        if (bytesRead === 0) break;
-        yield Buffer.from(readBuf.subarray(0, bytesRead));
-      } while (bytesRead > 0);
-    } finally {
-      await fd.close();
-    }
+    yield* readFdChunks(fd, readBuf);
   }
 
   return { lines: splitChunks(utf8Chunks(), opts), bomInfo };
