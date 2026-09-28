@@ -155,24 +155,54 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
 }
 
 // ==============================================================================
+// Shift math: new line positions after edits are applied, in application order
+// ==============================================================================
+
+interface EditSite {
+  /** First line of new content (or the line after deleted range for deletions). */
+  newStart: number;
+  /** Last line of new content (or newStart - 1 for deletions). */
+  newEnd: number;
+  /** Number of new content lines (0 for deletions). */
+  lineCount: number;
+}
+
+function computeEditSites(ops: StreamEditOp[]): EditSite[] {
+  const sites: EditSite[] = [];
+  let shift = 0;
+  for (const op of ops) {
+    if (op.insertAfter) {
+      const newStart = op.startLine + 1 + shift;
+      const newEnd = op.startLine + op.content.length + shift;
+      sites.push({ newStart, newEnd, lineCount: op.content.length });
+      shift += op.content.length;
+    } else {
+      const span = op.endLine - op.startLine + 1;
+      const newStart = op.startLine + shift;
+      const newEnd = op.startLine + op.content.length - 1 + shift;
+      sites.push({ newStart, newEnd, lineCount: op.content.length });
+      shift += op.content.length - span;
+    }
+  }
+  return sites;
+}
+
+// ==============================================================================
 // Per-edit summary for operator visibility
 // ==============================================================================
 
 function editSummary(ops: StreamEditOp[]): string {
-  let shift = 0;
+  const sites = computeEditSites(ops);
   return ops
-    .map((op) => {
-      const lines = op.content.length;
+    .map((op, i) => {
+      const { newStart, newEnd, lineCount: lines } = sites[i];
 
       if (op.insertAfter) {
         const location = op.startLine === 0 ? "@start" : `@${op.startLine}`;
-        const newStart = op.startLine + 1 + shift;
-        const newEnd = op.startLine + lines + shift;
         const rangeHint =
           lines === 1
             ? hl(op.content[0], newStart)
             : `${hl(op.content[0], newStart)}-${hl(op.content[lines - 1], newEnd)}`;
-        shift += lines;
         return `+${lines} ${location} -> ${rangeHint}`;
       }
 
@@ -180,18 +210,14 @@ function editSummary(ops: StreamEditOp[]): string {
       const rangeStr = op.startLine === op.endLine ? `${op.startLine}` : `${op.startLine}-${op.endLine}`;
 
       if (lines === 0) {
-        shift -= span;
         const preview = op.deletedContent ? `: ${truncatePreview(op.deletedContent)}` : "";
         return `-${rangeStr} (${span})${preview}`;
       }
 
-      const newStart = op.startLine + shift;
-      const newEnd = op.startLine + lines - 1 + shift;
       const hint =
         lines === 1
           ? hl(op.content[0], newStart)
           : `${hl(op.content[0], newStart)}-${hl(op.content[lines - 1], newEnd)}`;
-      shift += lines - span;
       return `~${rangeStr} -> ${hint} (${span}->${lines})`;
     })
     .join("\n");
@@ -219,15 +245,6 @@ function truncatePreview(lines: string[]): string {
 // Edit context: re-read edit sites from written file for chained edits
 // ==============================================================================
 
-interface EditSite {
-  /** First line of new content (or the line after deleted range for deletions). */
-  newStart: number;
-  /** Last line of new content (or newStart - 1 for deletions). */
-  newEnd: number;
-  /** Number of new content lines (0 for deletions). */
-  lineCount: number;
-}
-
 /**
  * Re-reads the written file at each edit site and returns hash.line formatted
  * context. For large edits (new content > 2 * contextLines), the middle is
@@ -239,23 +256,7 @@ async function readEditContext(
   contextLines: number,
   encoding: BufferEncoding,
 ): Promise<string> {
-  // Compute new line positions for each edit site (same shift logic as editSummary).
-  const sites: EditSite[] = [];
-  let shift = 0;
-  for (const op of ops) {
-    if (op.insertAfter) {
-      const newStart = op.startLine + 1 + shift;
-      const newEnd = op.startLine + op.content.length + shift;
-      sites.push({ newStart, newEnd, lineCount: op.content.length });
-      shift += op.content.length;
-    } else {
-      const span = op.endLine - op.startLine + 1;
-      const newStart = op.startLine + shift;
-      const newEnd = op.startLine + op.content.length - 1 + shift;
-      sites.push({ newStart, newEnd, lineCount: op.content.length });
-      shift += op.content.length - span;
-    }
-  }
+  const sites = computeEditSites(ops);
 
   // Build collection ranges: [newStart - contextLines, newEnd + contextLines]
   const collectRanges = sites.map((s) => ({
