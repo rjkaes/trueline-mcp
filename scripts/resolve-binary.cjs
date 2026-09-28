@@ -5,18 +5,9 @@ const { spawn, execFileSync } = require("node:child_process");
 const { existsSync } = require("node:fs");
 const path = require("node:path");
 
-function hasBun() {
+function has(bin) {
   try {
-    execFileSync("bun", ["--version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function hasDeno() {
-  try {
-    execFileSync("deno", ["--version"], { stdio: "ignore" });
+    execFileSync(bin, ["--version"], { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -32,7 +23,7 @@ function ensureDeps(pluginRoot, logName) {
   process.stderr.write(`${logName}: installing dependencies (first run)...\n`);
   try {
     // Prefer bun for speed, fall back to npm (ships with node).
-    const installer = hasBun() ? "bun" : "npm";
+    const installer = bun ? "bun" : "npm";
     const args = installer === "bun" ? ["install"] : ["install", "--production"];
     execFileSync(installer, args, {
       cwd: pluginRoot,
@@ -63,6 +54,9 @@ if (!entry) {
 
 const pluginRoot = path.join(__dirname, "..");
 
+// Computed once, reused by ensureDeps and the runtime selection below.
+const bun = has("bun");
+
 ensureDeps(pluginRoot, entry.logName);
 
 const srcEntry = path.join(pluginRoot, "src", `${entryArg}.ts`);
@@ -70,22 +64,14 @@ const distEntry = path.join(pluginRoot, "dist", `${entryArg}.js`);
 
 // Prefer bun: it runs the TypeScript source directly with no build step.
 // Then try deno, then fall back to node — both use the pre-bundled JS file.
-let cmd, args;
-if (hasBun() && existsSync(srcEntry)) {
-  // Dev / plugin-clone context: run TypeScript source directly.
-  cmd = "bun";
-  args = [srcEntry];
-} else if (hasBun()) {
-  // npx / npm-install context: src/ isn't published, use bundled JS.
-  cmd = "bun";
-  args = [distEntry];
-} else if (hasDeno()) {
-  cmd = "deno";
-  args = ["run", "-A", distEntry];
-} else {
-  cmd = "node";
-  args = [distEntry];
-}
+const [cmd, args] =
+  bun && existsSync(srcEntry)
+    ? ["bun", [srcEntry]] // Dev / plugin-clone context: run TypeScript source directly.
+    : bun
+      ? ["bun", [distEntry]] // npx / npm-install context: src/ isn't published, use bundled JS.
+      : has("deno")
+        ? ["deno", ["run", "-A", distEntry]]
+        : ["node", [distEntry]];
 
 const child = spawn(cmd, [...args, ...process.argv.slice(3)], {
   stdio: "inherit",
