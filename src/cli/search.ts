@@ -1,50 +1,42 @@
-import { defineCommand } from "citty";
+import { parseArgs } from "node:util";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleSearch } from "../tools/search.ts";
-import { emitResult, emitUsageError, jsonFlag, UsageError } from "./io.ts";
+import { asString, type CliSubcommand, emitResult, emitUsageError, jsonFlag, UsageError } from "./io.ts";
 
-export default defineCommand({
-  meta: {
-    name: "search",
-    description: "Search files for a literal string or regex, returns edit-ready hashes",
-  },
-  args: {
-    "ignore-case": {
-      type: "boolean",
-      alias: "i",
-      description: "Case-insensitive matching",
-      default: false,
-    },
-    regex: {
-      type: "boolean",
-      alias: "r",
-      description: "Treat pattern as a regular expression",
-      default: false,
-    },
-    multiline: {
-      type: "boolean",
-      description: "Enable multiline regex matching",
-      default: false,
-    },
-    context: {
-      type: "string",
-      alias: "C",
-      description: "Lines of context around each match",
-    },
-    max: {
-      type: "string",
-      alias: "m",
-      description: "Maximum number of matches to return",
-    },
-    "max-match-lines": {
-      type: "string",
-      description: "Maximum lines a single multiline match can span",
-    },
-    json: jsonFlag,
-  },
-  run: async ({ args }) => {
+const OPTIONS = {
+  "ignore-case": { type: "boolean", short: "i", default: false },
+  regex: { type: "boolean", short: "r", default: false },
+  multiline: { type: "boolean", default: false },
+  context: { type: "string", short: "C" },
+  max: { type: "string", short: "m" },
+  "max-match-lines": { type: "string" },
+  json: jsonFlag,
+} as const;
+
+const USAGE = `Usage: trueline search [options] <pattern> <paths...>
+
+Search files for a literal string or regex, returns edit-ready hashes.
+
+Options:
+  -i, --ignore-case         Case-insensitive matching
+  -r, --regex               Treat pattern as a regular expression
+      --multiline           Enable multiline regex matching
+  -C, --context <n>         Lines of context around each match
+  -m, --max <n>              Maximum number of matches to return
+      --max-match-lines <n> Maximum lines a single multiline match can span
+      --json                Output JSON envelope {ok, result}
+`;
+
+export default {
+  usage: USAGE,
+  async run(argv: string[]): Promise<void> {
+    const { values: args, positionals: rest } = parseArgs({
+      args: argv,
+      options: OPTIONS,
+      allowPositionals: true,
+      strict: false,
+    });
     // First positional is the pattern; remaining are paths.
-    const rest = args._ as string[];
     if (rest.length === 0) {
       emitUsageError(new UsageError("search requires a pattern and at least one path"));
       return;
@@ -57,10 +49,12 @@ export default defineCommand({
       return;
     }
 
-    const contextLines = args.context !== undefined ? Number.parseInt(args.context, 10) : undefined;
-    const maxMatches = args.max !== undefined ? Number.parseInt(args.max, 10) : undefined;
-    const maxMatchLines =
-      args["max-match-lines"] !== undefined ? Number.parseInt(args["max-match-lines"], 10) : undefined;
+    const contextArg = asString(args.context);
+    const maxArg = asString(args.max);
+    const maxMatchLinesArg = asString(args["max-match-lines"]);
+    const contextLines = contextArg !== undefined ? Number.parseInt(contextArg, 10) : undefined;
+    const maxMatches = maxArg !== undefined ? Number.parseInt(maxArg, 10) : undefined;
+    const maxMatchLines = maxMatchLinesArg !== undefined ? Number.parseInt(maxMatchLinesArg, 10) : undefined;
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 
@@ -79,4 +73,4 @@ export default defineCommand({
 
     emitResult(result, { json: Boolean(args.json), search: true });
   },
-});
+} satisfies CliSubcommand;

@@ -11,15 +11,35 @@ import type { EditInput } from "../tools/shared.ts";
 import type { ToolResult } from "../tools/types.ts";
 
 // ---------------------------------------------------------------------------
-// Shared citty arg definitions
+// Shared CLI arg definitions and parseArgs value narrowing
 // ---------------------------------------------------------------------------
 
 export const jsonFlag = {
   type: "boolean",
-  description: "Output JSON envelope {ok, result}",
   default: false,
 } as const;
 
+/** A registered `trueline <name>` subcommand: name is the dispatch key in cli/index.ts. */
+export interface CliSubcommand {
+  /** Printed for `trueline <name> --help`. */
+  usage: string;
+  run(argv: string[]): Promise<void>;
+}
+
+// parseArgs runs with strict:false so unrecognized flags are tolerated (matching
+// the prior citty-based parser) instead of throwing. That tolerance means even a
+// declared `type: "string"` option can come back typed as `boolean` (e.g. a flag
+// given with no following value) — these narrow it back to what each subcommand wants.
+
+/** Narrow a parseArgs string-option value, discarding a stray boolean. */
+export function asString(value: string | boolean | undefined): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+/** Narrow a parseArgs multiple:true string-option value. */
+export function asStringArray(value: Array<string | boolean> | undefined): string[] {
+  return value === undefined ? [] : value.filter((v): v is string => typeof v === "string");
+}
 // ---------------------------------------------------------------------------
 // User-facing errors that map to exit code 3 (usage / parse error)
 // ---------------------------------------------------------------------------

@@ -1,46 +1,48 @@
-import { defineCommand } from "citty";
+import { parseArgs } from "node:util";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleVerify } from "../tools/verify.ts";
-import { emitResult, emitUsageError, jsonFlag, parseRefsArg, UsageError } from "./io.ts";
+import {
+  asStringArray,
+  type CliSubcommand,
+  emitResult,
+  emitUsageError,
+  jsonFlag,
+  parseRefsArg,
+  UsageError,
+} from "./io.ts";
 
-export default defineCommand({
-  meta: {
-    name: "verify",
-    description: "Check if held refs are still valid against current file content",
-  },
-  args: {
-    refs: {
-      type: "string",
-      description: "Refs to verify: repeatable, @file, or - (stdin)",
-    },
-    json: jsonFlag,
-  },
-  run: async ({ args, rawArgs }) => {
-    const paths = args._ as string[];
+const OPTIONS = {
+  refs: { type: "string", multiple: true },
+  json: jsonFlag,
+} as const;
+
+const USAGE = `Usage: trueline verify [options] <path>
+
+Check if held refs are still valid against current file content.
+
+Options:
+  --refs <ref>   Refs to verify: repeatable, @file, or - (stdin)
+  --json         Output JSON envelope {ok, result}
+`;
+
+export default {
+  usage: USAGE,
+  async run(argv: string[]): Promise<void> {
+    const { values: args, positionals: paths } = parseArgs({
+      args: argv,
+      options: OPTIONS,
+      allowPositionals: true,
+      strict: false,
+    });
     if (paths.length === 0) {
       emitUsageError(new UsageError("verify requires a file path"));
       return;
     }
     const filePath = paths[0];
 
-    // citty doesn't support multi-value flags natively. Collect all --refs values
-    // by re-scanning rawArgs ourselves.
-    const refsValues: string[] = [];
-    for (let i = 0; i < rawArgs.length; i++) {
-      if (rawArgs[i] === "--refs" && i + 1 < rawArgs.length) {
-        refsValues.push(rawArgs[i + 1]);
-        i++;
-      }
-    }
-
-    // Fall back to the single string citty parsed if rawArgs scan found nothing
-    if (refsValues.length === 0 && args.refs !== undefined) {
-      refsValues.push(args.refs);
-    }
-
     let refs: string[];
     try {
-      refs = parseRefsArg(refsValues);
+      refs = parseRefsArg(asStringArray(args.refs));
     } catch (err) {
       emitUsageError(err as UsageError);
       return;
@@ -57,4 +59,4 @@ export default defineCommand({
 
     emitResult(result, { json: Boolean(args.json) });
   },
-});
+} satisfies CliSubcommand;

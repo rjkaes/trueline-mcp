@@ -1,61 +1,69 @@
-import { defineCommand } from "citty";
+import { parseArgs } from "node:util";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleEdit } from "../tools/edit.ts";
 import type { EditInput } from "../tools/shared.ts";
-import { emitResult, emitUsageError, jsonFlag, loadAtOrDashOrLiteral, parseEditsArg, UsageError } from "./io.ts";
+import {
+  asString,
+  type CliSubcommand,
+  emitResult,
+  emitUsageError,
+  jsonFlag,
+  loadAtOrDashOrLiteral,
+  parseEditsArg,
+  UsageError,
+} from "./io.ts";
 
-export default defineCommand({
-  meta: {
-    name: "edit",
-    description: "Apply hash-verified edits to a file",
-  },
-  args: {
-    edits: {
-      type: "string",
-      description: "JSON edit array: @file, - (stdin), or JSON string",
-    },
-    // Flat flags for single-edit case
-    ref: {
-      type: "string",
-      description: "Ref from a prior trueline read (single-edit shorthand)",
-    },
-    range: {
-      type: "string",
-      description: "Range in hashLine format (single-edit shorthand)",
-    },
-    content: {
-      type: "string",
-      description: "Replacement content: literal, @file, or - (stdin)",
-    },
-    action: {
-      type: "string",
-      description: "Edit action: replace (default) or insert_after",
-    },
-    "dry-run": {
-      type: "boolean",
-      description: "Preview edits as unified diff without writing",
-      default: false,
-    },
-    "context-lines": {
-      type: "string",
-      description: "Lines of hashLine context to return around each edit site",
-    },
-    encoding: {
-      type: "string",
-      description: "File encoding (utf-8, ascii, latin1)",
-    },
-    json: jsonFlag,
-  },
-  run: async ({ args }) => {
-    const paths = args._ as string[];
+const OPTIONS = {
+  edits: { type: "string" },
+  // Flat flags for single-edit case
+  ref: { type: "string" },
+  range: { type: "string" },
+  content: { type: "string" },
+  action: { type: "string" },
+  "dry-run": { type: "boolean", default: false },
+  "context-lines": { type: "string" },
+  encoding: { type: "string" },
+  json: jsonFlag,
+} as const;
+
+const USAGE = `Usage: trueline edit [options] <path>
+
+Apply hash-verified edits to a file.
+
+Options:
+  --edits <edits>          JSON edit array: @file, - (stdin), or JSON string
+  --ref <ref>              Ref from a prior trueline read (single-edit shorthand)
+  --range <range>          Range in hashLine format (single-edit shorthand)
+  --content <content>      Replacement content: literal, @file, or - (stdin)
+  --action <action>        Edit action: replace (default) or insert_after
+  --dry-run                Preview edits as unified diff without writing
+  --context-lines <n>      Lines of hashLine context to return around each edit site
+  --encoding <enc>         File encoding (utf-8, ascii, latin1)
+  --json                   Output JSON envelope {ok, result}
+`;
+
+export default {
+  usage: USAGE,
+  async run(argv: string[]): Promise<void> {
+    const { values: args, positionals: paths } = parseArgs({
+      args: argv,
+      options: OPTIONS,
+      allowPositionals: true,
+      strict: false,
+    });
     if (paths.length === 0) {
       emitUsageError(new UsageError("edit requires a file path"));
       return;
     }
     const filePath = paths[0];
 
-    const hasFlatFlags = args.ref !== undefined || args.range !== undefined || args.content !== undefined;
-    const hasEditsFlag = args.edits !== undefined;
+    const editsArg = asString(args.edits);
+    const refArg = asString(args.ref);
+    const rangeArg = asString(args.range);
+    const contentArg = asString(args.content);
+
+    const hasFlatFlags = refArg !== undefined || rangeArg !== undefined || contentArg !== undefined;
+    const hasEditsFlag = editsArg !== undefined;
 
     // Mutually exclusive: --edits vs flat flags
     if (hasEditsFlag && hasFlatFlags) {
@@ -64,7 +72,7 @@ export default defineCommand({
     }
 
     // Both --edits - and --content - would consume stdin
-    if (args.edits === "-" && args.content === "-") {
+    if (editsArg === "-" && contentArg === "-") {
       emitUsageError(new UsageError("--edits - and --content - cannot both consume stdin"));
       return;
     }
@@ -75,7 +83,7 @@ export default defineCommand({
       // Load via @file, stdin, or literal JSON string
       let raw: unknown;
       try {
-        raw = loadAtOrDashOrLiteral(args.edits!, "json");
+        raw = loadAtOrDashOrLiteral(editsArg!, "json");
       } catch (err) {
         emitUsageError(err as UsageError);
         return;
@@ -88,29 +96,30 @@ export default defineCommand({
       }
     } else if (hasFlatFlags) {
       // Flat single-edit shorthand: --ref, --range, --content required
-      if (!args.ref || !args.range || args.content === undefined) {
+      if (!refArg || !rangeArg || contentArg === undefined) {
         emitUsageError(new UsageError("single-edit shorthand requires --ref, --range, and --content"));
         return;
       }
       let contentValue: string;
       try {
-        contentValue = loadAtOrDashOrLiteral(args.content!, "text") as string;
+        contentValue = loadAtOrDashOrLiteral(contentArg, "text") as string;
       } catch (err) {
         emitUsageError(err as UsageError);
         return;
       }
-      const action = args.action as EditInput["action"] | undefined;
+      const action = asString(args.action) as EditInput["action"] | undefined;
       if (action !== undefined && action !== "replace" && action !== "insert_after") {
         emitUsageError(new UsageError('--action must be "replace" or "insert_after"'));
         return;
       }
-      edits = [{ ref: args.ref, range: args.range, content: contentValue, action }];
+      edits = [{ ref: refArg, range: rangeArg, content: contentValue, action }];
     } else {
       emitUsageError(new UsageError("provide either --edits or the flat --ref/--range/--content flags"));
       return;
     }
 
-    const contextLines = args["context-lines"] !== undefined ? Number.parseInt(args["context-lines"], 10) : undefined;
+    const contextLinesArg = asString(args["context-lines"]);
+    const contextLines = contextLinesArg !== undefined ? Number.parseInt(contextLinesArg, 10) : undefined;
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 
@@ -119,11 +128,11 @@ export default defineCommand({
       edits,
       dry_run: Boolean(args["dry-run"]),
       context_lines: contextLines,
-      encoding: args.encoding,
+      encoding: asString(args.encoding),
       projectDir,
       allowedDirs,
     });
 
     emitResult(result, { json: Boolean(args.json) });
   },
-});
+} satisfies CliSubcommand;
