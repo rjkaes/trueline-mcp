@@ -3,7 +3,7 @@
 // ==============================================================================
 
 export const FNV_OFFSET_BASIS = 2166136261;
-export const FNV_PRIME = 16777619;
+const FNV_PRIME = 16777619;
 
 /**
  * Sentinel checksum representing an empty file (zero lines).

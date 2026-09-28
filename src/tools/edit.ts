@@ -10,8 +10,7 @@
 // The file is never loaded into memory as a whole.
 // ==============================================================================
 
-import { open, writeFile } from "node:fs/promises";
-import { unlink } from "node:fs/promises";
+import { open, unlink, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -61,7 +60,7 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
 
   const { resolvedPath, mtimeMs } = validated;
 
-  const built = validateEdits(edits, resolvedPath);
+  const built = validateEdits(edits);
   if (!built.ok) return built.error;
 
   // Detect BOM to pass encoding info through to streamingEdit for round-trip fidelity

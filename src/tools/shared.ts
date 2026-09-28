@@ -231,7 +231,7 @@ type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
  * and overlap detection. File-content verification (hash match,
  * boundary hash match) is deferred to the streaming pass.
  */
-export function validateEdits(edits: EditInput[], _resolvedPath?: string): ValidateEditsResult {
+export function validateEdits(edits: EditInput[]): ValidateEditsResult {
   const ops: StreamEditOp[] = [];
   const checksumRefMap = new Map<string, ChecksumRef>();
   const warnings: string[] = [];

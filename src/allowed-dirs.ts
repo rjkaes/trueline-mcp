@@ -15,7 +15,7 @@ import { delimiter, join } from "node:path";
  * themselves (so the server can pass it separately from the allow-list).
  * The ~/.claude/ entry is added only when running under Claude Code.
  */
-export async function resolveAllowedDirs(): Promise<string[]> {
+async function resolveAllowedDirs(): Promise<string[]> {
   const dirs: string[] = [];
 
   // ~/.claude/ — only relevant for Claude Code

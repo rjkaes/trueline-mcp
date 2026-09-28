@@ -70,7 +70,7 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
       // For single-line nodes, innerBody is empty; rename detection won't apply.
       const innerLines = bodyLines.length > 1 ? bodyLines.slice(1) : bodyLines;
       const normalized = normalizeBody(innerLines.join("\n"), wsMode);
-      const name = extractName(entry.text, entry.nodeType);
+      const name = extractName(entry.text);
 
       return {
         name,
@@ -83,7 +83,7 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
 }
 
 /** Extract a human-readable name from a signature line. */
-function extractName(sig: string, _nodeType: string): string {
+function extractName(sig: string): string {
   const match = sig.match(
     /(?:function|class|interface|type|enum|const|let|var|def|fn|func|fun|pub\s+fn|async\s+function)\s+(\w+)/,
   );
