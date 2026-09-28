@@ -219,14 +219,12 @@ platform, set `TRUELINE_ALLOWED_DIRS` to a colon-separated list of paths
 
 ## Platform detection
 
-The hook dispatcher auto-detects the platform from environment variables:
+The hook dispatcher takes an explicit platform argument and reads its project directory from the matching env var:
 
 | Env var                | Platform       |
 |------------------------|----------------|
 | `GEMINI_PROJECT_DIR`   | gemini-cli     |
 | `CLAUDE_PROJECT_DIR`   | claude-code    |
-
-Override with `TRUELINE_PLATFORM=<platform>` if auto-detection doesn't work.
 
 ## Keeping trueline up to date
 
