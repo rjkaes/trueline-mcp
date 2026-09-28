@@ -47,13 +47,12 @@ async function fetchLatestVersion(): Promise<string | null> {
  * Checks at most once per 24 hours (cached in a temp file).
  *
  * @param onUpdate Called with `{ current, latest }` when a newer version exists.
- *                 Defaults to writing a notice to stderr.
  */
 export function scheduleUpdateCheck(
   currentVersion: string,
-  onUpdate?: (info: { current: string; latest: string }) => void,
+  onUpdate: (info: { current: string; latest: string }) => void,
 ): void {
-  const notify = onUpdate ?? defaultNotify;
+  const notify = onUpdate;
 
   // Fire-and-forget — never delays startup or rejects into the event loop
   void (async () => {
@@ -74,10 +73,6 @@ export function scheduleUpdateCheck(
       notify({ current: currentVersion, latest });
     }
   })();
-}
-
-function defaultNotify({ current, latest }: { current: string; latest: string }): void {
-  process.stderr.write(`[trueline-mcp] update available: ${current} → ${latest} (npm i -g trueline-mcp)\n`);
 }
 
 /** Simple semver comparison: returns >0 if a > b, <0 if a < b, 0 if equal. */

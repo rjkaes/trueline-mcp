@@ -9,6 +9,11 @@ async function clearCache() {
   await unlink(CACHE_FILE).catch(() => {});
 }
 
+// Stand-in for the production onUpdate callback (now required by scheduleUpdateCheck).
+function notify({ current, latest }: { current: string; latest: string }): void {
+  process.stderr.write(`update available: ${current} -> ${latest}\n`);
+}
+
 describe("scheduleUpdateCheck", () => {
   let stderrSpy: ReturnType<typeof spyOn>;
   let stderrOutput: string;
@@ -33,7 +38,7 @@ describe("scheduleUpdateCheck", () => {
     );
 
     const { scheduleUpdateCheck } = await import("../src/update-check.ts");
-    scheduleUpdateCheck("1.0.0");
+    scheduleUpdateCheck("1.0.0", notify);
 
     // Wait for the async fire-and-forget to complete
     await Bun.sleep(100);
@@ -51,7 +56,7 @@ describe("scheduleUpdateCheck", () => {
     );
 
     const { scheduleUpdateCheck } = await import("../src/update-check.ts");
-    scheduleUpdateCheck("1.0.0");
+    scheduleUpdateCheck("1.0.0", notify);
 
     await Bun.sleep(100);
 
@@ -66,7 +71,7 @@ describe("scheduleUpdateCheck", () => {
     );
 
     const { scheduleUpdateCheck } = await import("../src/update-check.ts");
-    scheduleUpdateCheck("2.0.0");
+    scheduleUpdateCheck("2.0.0", notify);
 
     await Bun.sleep(100);
 
@@ -79,7 +84,7 @@ describe("scheduleUpdateCheck", () => {
     const fetchMock = spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("network error"));
 
     const { scheduleUpdateCheck } = await import("../src/update-check.ts");
-    scheduleUpdateCheck("1.0.0");
+    scheduleUpdateCheck("1.0.0", notify);
 
     await Bun.sleep(100);
 
@@ -94,7 +99,7 @@ describe("scheduleUpdateCheck", () => {
     );
 
     const { scheduleUpdateCheck } = await import("../src/update-check.ts");
-    scheduleUpdateCheck("1.0.0");
+    scheduleUpdateCheck("1.0.0", notify);
 
     await Bun.sleep(100);
 
