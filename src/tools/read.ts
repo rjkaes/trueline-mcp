@@ -89,6 +89,11 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   const MAX_OUTPUT_BYTES = 20 * 1024 * 1024; // 20 MB
   const outputChunks: Buffer[] = [];
   let outputLen = 0;
+  const append = (text: string) => {
+    const buf = Buffer.from(text);
+    outputChunks.push(buf);
+    outputLen += buf.length;
+  };
   let rangeIdx = 0;
   let currentRange = ranges[0];
   let rangeChecksumHash = FNV_OFFSET_BASIS;
@@ -120,9 +125,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       if (lineNumber > currentRange.end) {
         const ck = checksumToLetters(rangeChecksumHash);
         const refLine = `\nref: ${rangeFirstLetters}${rangeFirstLine}-${rangeLastLetters}${rangeLastLine}/${ck}\n`;
-        const cb = Buffer.from(refLine);
-        outputChunks.push(cb);
-        outputLen += cb.length;
+        append(refLine);
 
         rangeIdx++;
         rangeChecksumHash = FNV_OFFSET_BASIS;
@@ -179,35 +182,27 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   if (rangeFirstLine > 0 && rangeLastLine > 0) {
     const ck = checksumToLetters(rangeChecksumHash);
     const refLine = `\nref: ${rangeFirstLetters}${rangeFirstLine}-${rangeLastLetters}${rangeLastLine}/${ck}`;
-    const cb = Buffer.from(refLine);
-    outputChunks.push(cb);
-    outputLen += cb.length;
+    append(refLine);
   }
 
   // Append truncation notice so the agent knows to use narrower ranges
   if (truncated) {
     const reason = outputLines > MAX_OUTPUT_LINES ? `${MAX_OUTPUT_LINES} line` : "20 MB output";
     const notice = `\n\n(truncated at ${reason} limit — use ranges for specific sections)`;
-    const nb = Buffer.from(notice);
-    outputChunks.push(nb);
-    outputLen += nb.length;
+    append(notice);
   }
 
   // Nudge toward targeted reads when a full-file read returns many lines.
   const LARGE_READ_NUDGE = 150;
   const isFullFileRead = requestedRanges.length === 1 && requestedRanges[0].end === Infinity;
   if (!truncated && isFullFileRead && outputLines > LARGE_READ_NUDGE) {
-    const nudge = Buffer.from(`\n\n(${outputLines} lines — consider ranges for targeted reads)`);
-    outputChunks.push(nudge);
-    outputLen += nudge.length;
+    append(`\n\n(${outputLines} lines — consider ranges for targeted reads)`);
   }
 
   // Include encoding metadata when non-default, so trueline_edit can round-trip
   if (bomInfo.hasBOM) {
     const encLabel = bomInfo.encoding === "utf-8" ? "utf-8-bom" : bomInfo.encoding;
-    const encLine = Buffer.from(`\nencoding: ${encLabel}`);
-    outputChunks.push(encLine);
-    outputLen += encLine.length;
+    append(`\nencoding: ${encLabel}`);
   }
 
   // UTF-16 content has been transcoded to UTF-8; always decode output as UTF-8.
