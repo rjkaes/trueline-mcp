@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-// CLI entry point for npm distribution.
-// Delegates to resolve-binary.cjs which prefers bun > deno > node.
-//
-// Usage:
-//   npx trueline read src/foo.ts
-//   trueline read src/foo.ts        # after npm i -g trueline-mcp
-
-import { execFileSync } from "node:child_process";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const script = resolve(__dirname, "..", "scripts", "resolve-binary.cjs");
-
-try {
-  execFileSync("node", [script, "cli", ...process.argv.slice(2)], { stdio: "inherit" });
-} catch (err) {
-  process.exit(err.status ?? 1);
-}
+// CLI entry point for npm distribution; forwards to resolve-binary.cjs (bun > deno > node).
+process.argv.splice(2, 0, "cli");
+await import("../scripts/resolve-binary.cjs");
