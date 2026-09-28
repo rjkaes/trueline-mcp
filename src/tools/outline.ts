@@ -8,6 +8,7 @@
 import { constants, open } from "node:fs/promises";
 import { extname } from "node:path";
 import { extractOutline, formatOutline } from "../outline/extract.ts";
+import type { OutlineEntry } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { extractMarkdownOutline } from "../outline/markdown.ts";
 import { extractXmlOutline } from "../outline/xml.ts";
@@ -93,29 +94,11 @@ async function outlineOneFile(
 
   // Streaming extractors (no tree-sitter, no full-file load)
   if (MARKDOWN_EXTENSIONS.has(ext)) {
-    try {
-      const { entries, totalLines } = await extractMarkdownOutline(resolvedPath);
-      if (entries.length === 0) {
-        return textResult(`(no outline entries found in ${totalLines}-line file)`);
-      }
-      const text = formatOutline(entries, totalLines);
-      return textResult(text);
-    } catch (err: unknown) {
-      return errorResult(`Markdown outline extraction failed: ${(err as Error).message}`);
-    }
+    return runStreamingExtractor("Markdown", () => extractMarkdownOutline(resolvedPath));
   }
 
   if (XML_EXTENSIONS.has(ext)) {
-    try {
-      const { entries, totalLines } = await extractXmlOutline(resolvedPath, depth);
-      if (entries.length === 0) {
-        return textResult(`(no outline entries found in ${totalLines}-line file)`);
-      }
-      const text = formatOutline(entries, totalLines);
-      return textResult(text);
-    } catch (err: unknown) {
-      return errorResult(`XML outline extraction failed: ${(err as Error).message}`);
-    }
+    return runStreamingExtractor("XML", () => extractXmlOutline(resolvedPath, depth));
   }
 
   let source: string;
@@ -149,5 +132,21 @@ async function outlineOneFile(
     return textResult(text);
   } catch (err: unknown) {
     return errorResult(`Outline extraction failed: ${(err as Error).message}`);
+  }
+}
+
+/** Shared try/format/empty-check/error-label plumbing for the streaming (markdown, XML) extractors. */
+async function runStreamingExtractor(
+  label: string,
+  extract: () => Promise<{ entries: OutlineEntry[]; totalLines: number }>,
+): Promise<ToolResult> {
+  try {
+    const { entries, totalLines } = await extract();
+    if (entries.length === 0) {
+      return textResult(`(no outline entries found in ${totalLines}-line file)`);
+    }
+    return textResult(formatOutline(entries, totalLines));
+  } catch (err: unknown) {
+    return errorResult(`${label} outline extraction failed: ${(err as Error).message}`);
   }
 }
