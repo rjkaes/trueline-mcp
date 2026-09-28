@@ -10,7 +10,6 @@ export interface SymbolInfo {
   name: string;
   signature: string;
   bodyHash: number;
-  nodeType: string;
   /** Full body text for inline mini-diffs of small changes */
   bodyText?: string;
 }
@@ -76,7 +75,6 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
         name,
         signature: entry.text,
         bodyHash: hashBody(normalized),
-        nodeType: entry.nodeType,
         bodyText,
       };
     });

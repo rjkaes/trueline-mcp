@@ -37,10 +37,10 @@ function goodbye(): void {
 
 describe("diffSymbols", () => {
   test("detects added symbol", () => {
-    const old = [{ name: "foo", signature: "function foo()", bodyHash: 123, nodeType: "function_declaration" }];
+    const old = [{ name: "foo", signature: "function foo()", bodyHash: 123 }];
     const new_ = [
-      { name: "foo", signature: "function foo()", bodyHash: 123, nodeType: "function_declaration" },
-      { name: "bar", signature: "function bar()", bodyHash: 456, nodeType: "function_declaration" },
+      { name: "foo", signature: "function foo()", bodyHash: 123 },
+      { name: "bar", signature: "function bar()", bodyHash: 456 },
     ];
     const diff = diffSymbols(old, new_);
     expect(diff.added).toEqual([new_[1]]);
@@ -48,17 +48,17 @@ describe("diffSymbols", () => {
 
   test("detects removed symbol", () => {
     const old = [
-      { name: "foo", signature: "function foo()", bodyHash: 123, nodeType: "function_declaration" },
-      { name: "bar", signature: "function bar()", bodyHash: 456, nodeType: "function_declaration" },
+      { name: "foo", signature: "function foo()", bodyHash: 123 },
+      { name: "bar", signature: "function bar()", bodyHash: 456 },
     ];
-    const new_ = [{ name: "foo", signature: "function foo()", bodyHash: 123, nodeType: "function_declaration" }];
+    const new_ = [{ name: "foo", signature: "function foo()", bodyHash: 123 }];
     const diff = diffSymbols(old, new_);
     expect(diff.removed).toEqual([old[1]]);
   });
 
   test("detects renamed symbol via body hash", () => {
-    const old = [{ name: "foo", signature: "function foo()", bodyHash: 123, nodeType: "function_declaration" }];
-    const new_ = [{ name: "bar", signature: "function bar()", bodyHash: 123, nodeType: "function_declaration" }];
+    const old = [{ name: "foo", signature: "function foo()", bodyHash: 123 }];
+    const new_ = [{ name: "bar", signature: "function bar()", bodyHash: 123 }];
     const diff = diffSymbols(old, new_);
     expect(diff.renamed.length).toBe(1);
     expect(diff.renamed[0].oldName).toBe("foo");
@@ -66,17 +66,15 @@ describe("diffSymbols", () => {
   });
 
   test("detects signature modification", () => {
-    const old = [{ name: "foo", signature: "function foo()", bodyHash: 123, nodeType: "function_declaration" }];
-    const new_ = [
-      { name: "foo", signature: "function foo(x: number)", bodyHash: 123, nodeType: "function_declaration" },
-    ];
+    const old = [{ name: "foo", signature: "function foo()", bodyHash: 123 }];
+    const new_ = [{ name: "foo", signature: "function foo(x: number)", bodyHash: 123 }];
     const diff = diffSymbols(old, new_);
     expect(diff.signatureChanged.length).toBe(1);
   });
 
   test("detects logic modification", () => {
-    const old = [{ name: "foo", signature: "function foo()", bodyHash: 123, nodeType: "function_declaration" }];
-    const new_ = [{ name: "foo", signature: "function foo()", bodyHash: 789, nodeType: "function_declaration" }];
+    const old = [{ name: "foo", signature: "function foo()", bodyHash: 123 }];
+    const new_ = [{ name: "foo", signature: "function foo()", bodyHash: 789 }];
     const diff = diffSymbols(old, new_);
     expect(diff.logicChanged.length).toBe(1);
   });
