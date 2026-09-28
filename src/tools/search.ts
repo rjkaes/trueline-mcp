@@ -18,7 +18,7 @@ import {
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 import { searchLineByLine } from "./search-line.ts";
 import { searchMultiline } from "./search-multiline.ts";
-import type { FileSearchResult, LineMatcher } from "./search-types.ts";
+import { failedSearchResult, type FileSearchResult, type LineMatcher } from "./search-types.ts";
 
 interface SearchParams extends ToolContext {
   file_path?: string;
@@ -87,26 +87,20 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     for (const fp of filePaths) {
       const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
       if (!validated.ok) {
-        results.push({
-          filePath: fp,
-          resolvedPath: fp,
-          matches: [],
-          totalMatches: 0,
-          capped: false,
-          error: validated.error.content[0].text,
-        });
+        results.push(failedSearchResult(fp, validated.error.content[0].text));
         continue;
       }
+      const { resolvedPath } = validated;
 
       const fileResult = await searchMultiline({
-        resolvedPath: validated.resolvedPath,
+        resolvedPath,
         regex,
         contextLines,
         maxMatches: matchBudget,
         maxMatchLines,
       });
       fileResult.filePath = fp;
-      fileResult.resolvedPath = validated.resolvedPath;
+      fileResult.resolvedPath = resolvedPath;
       results.push(fileResult);
       matchBudget = Math.max(0, matchBudget - fileResult.matches.length);
     }
@@ -126,25 +120,19 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     for (const fp of filePaths) {
       const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
       if (!validated.ok) {
-        results.push({
-          filePath: fp,
-          resolvedPath: fp,
-          matches: [],
-          totalMatches: 0,
-          capped: false,
-          error: validated.error.content[0].text,
-        });
+        results.push(failedSearchResult(fp, validated.error.content[0].text));
         continue;
       }
+      const { resolvedPath } = validated;
 
       const fileResult = await searchLineByLine({
-        resolvedPath: validated.resolvedPath,
+        resolvedPath,
         matchLine,
         contextLines,
         maxMatches: matchBudget,
       });
       fileResult.filePath = fp;
-      fileResult.resolvedPath = validated.resolvedPath;
+      fileResult.resolvedPath = resolvedPath;
       results.push(fileResult);
 
       const captured = fileResult.matches.reduce((sum, m) => sum + m.lines.filter((l) => l.isMatch).length, 0);

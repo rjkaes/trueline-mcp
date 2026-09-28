@@ -1,7 +1,13 @@
 import { transcodedLines } from "../encoding.ts";
 import { fnv1aHashBytes } from "../hash.ts";
 import { isBinaryError } from "./shared.ts";
-import type { DecodedLine, EngineParams, FileSearchResult, SearchMatch } from "./search-types.ts";
+import {
+  type DecodedLine,
+  type EngineParams,
+  failedSearchResult,
+  type FileSearchResult,
+  type SearchMatch,
+} from "./search-types.ts";
 
 const POST_LIMIT_SCAN_CAP = 1000;
 
@@ -101,14 +107,7 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
     }
   } catch (err: unknown) {
     if (isBinaryError(err)) {
-      return {
-        filePath: resolvedPath,
-        resolvedPath,
-        matches: [],
-        totalMatches: 0,
-        capped: false,
-        error: "binary file",
-      };
+      return failedSearchResult(resolvedPath, "binary file");
     }
     throw err;
   }

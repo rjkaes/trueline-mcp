@@ -1,7 +1,7 @@
 import { transcodedLines } from "../encoding.ts";
 import { fnv1aHashBytes } from "../hash.ts";
 import { isBinaryError } from "./shared.ts";
-import type { DecodedLine, FileSearchResult, SearchMatch } from "./search-types.ts";
+import { type DecodedLine, failedSearchResult, type FileSearchResult, type SearchMatch } from "./search-types.ts";
 
 export interface MultilineEngineParams {
   resolvedPath: string;
@@ -32,14 +32,7 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
     }
   } catch (err: unknown) {
     if (isBinaryError(err)) {
-      return {
-        filePath: resolvedPath,
-        resolvedPath,
-        matches: [],
-        totalMatches: 0,
-        capped: false,
-        error: "binary file",
-      };
+      return failedSearchResult(resolvedPath, "binary file");
     }
     throw err;
   }
