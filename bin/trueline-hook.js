@@ -13,7 +13,7 @@
 // Reads hook event JSON from stdin (for tool-use hooks), writes platform-
 // formatted JSON to stdout.
 
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve, dirname } from "node:path";
 
 const hooksDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "hooks");
@@ -57,13 +57,13 @@ const normalizedEvent = EVENT_ALIASES[event.toLowerCase()] ?? event.toLowerCase(
 // ==============================================================================
 
 if (normalizedEvent === "session-start") {
-  const { getInstructions } = await import(resolve(hooksDir, "core", "instructions.js"));
+  const { getInstructions } = await import(pathToFileURL(resolve(hooksDir, "core", "instructions.js")).href);
   process.stdout.write(getInstructions(platform));
 } else if (normalizedEvent === "pretooluse") {
-  const { createAccessChecker } = await import(resolve(hooksDir, "core", "access.js"));
-  const { routePreToolUse } = await import(resolve(hooksDir, "core", "routing.js"));
-  const { formatDecision } = await import(resolve(hooksDir, "core", "formatters.js"));
-  const { getProjectDir } = await import(resolve(hooksDir, "core", "platform.js"));
+  const { createAccessChecker } = await import(pathToFileURL(resolve(hooksDir, "core", "access.js")).href);
+  const { routePreToolUse } = await import(pathToFileURL(resolve(hooksDir, "core", "routing.js")).href);
+  const { formatDecision } = await import(pathToFileURL(resolve(hooksDir, "core", "formatters.js")).href);
+  const { getProjectDir } = await import(pathToFileURL(resolve(hooksDir, "core", "platform.js")).href);
 
   const chunks = [];
   process.stdin.on("data", (chunk) => chunks.push(chunk));
