@@ -6,16 +6,9 @@
  */
 import type { LanguageConfig } from "./languages.ts";
 import { createParser } from "./parser.ts";
+import type Parser from "web-tree-sitter";
 
-/** Minimal interface for tree-sitter SyntaxNode (web-tree-sitter 0.24.x lacks proper types). */
-interface SyntaxNode {
-  type: string;
-  isNamed: boolean;
-  startPosition: { row: number; column: number };
-  endPosition: { row: number; column: number };
-  children: SyntaxNode[];
-  childCount: number;
-}
+type SyntaxNode = Parser.SyntaxNode;
 
 export interface OutlineEntry {
   /** 1-based start line */
