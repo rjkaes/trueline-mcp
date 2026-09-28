@@ -11,7 +11,6 @@
       "!**/dist",
       "!**/build",
       "!tests/fixtures/",
-      "!tests/benchmark-results-v04.json",
       "!package.json",
       "!.claude-plugin/**",
       "!.claude/**",
