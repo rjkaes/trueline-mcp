@@ -11,6 +11,7 @@ import { extractOutline, formatOutline } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { extractMarkdownOutline } from "../outline/markdown.ts";
 import { extractXmlOutline } from "../outline/xml.ts";
+import { MARKDOWN_EXTENSIONS, XML_EXTENSIONS } from "../outline/supported-extensions.js";
 import {
   displayPath,
   expandGlobs,
@@ -19,21 +20,6 @@ import {
   type ToolContext,
   validatePath,
 } from "./shared.ts";
-
-const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
-const XML_EXTENSIONS = new Set([
-  ".xml",
-  ".xsl",
-  ".xslt",
-  ".xhtml",
-  ".svg",
-  ".pom",
-  ".csproj",
-  ".props",
-  ".targets",
-  ".fxml",
-  ".xaml",
-]);
 
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
