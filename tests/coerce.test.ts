@@ -10,32 +10,16 @@ describe("coerceParams", () => {
   });
 
   describe("alias mapping", () => {
-    test("maps paths → file_paths", () => {
-      expect(coerceParams({ paths: ["a.ts", "b.ts"] })).toEqual({ file_paths: ["a.ts", "b.ts"] });
-    });
-
-    test("maps path → file_paths (wrapped)", () => {
-      expect(coerceParams({ path: "a.ts" })).toEqual({ file_paths: ["a.ts"] });
-    });
-
-    test("maps filePath → file_paths (wrapped)", () => {
-      expect(coerceParams({ filePath: "a.ts" })).toEqual({ file_paths: ["a.ts"] });
-    });
-
-    test("maps filePaths → file_paths", () => {
-      expect(coerceParams({ filePaths: ["a.ts"] })).toEqual({ file_paths: ["a.ts"] });
-    });
-
-    test("maps file → file_paths (wrapped)", () => {
-      expect(coerceParams({ file: "a.ts" })).toEqual({ file_paths: ["a.ts"] });
-    });
-
-    test("maps file_path → file_paths (wrapped)", () => {
-      expect(coerceParams({ file_path: "a.ts" })).toEqual({ file_paths: ["a.ts"] });
-    });
-
-    test("maps files → file_paths", () => {
-      expect(coerceParams({ files: ["a.ts"] })).toEqual({ file_paths: ["a.ts"] });
+    test.each<[string, string | string[]]>([
+      ["paths", ["a.ts", "b.ts"]],
+      ["path", "a.ts"],
+      ["filePath", "a.ts"],
+      ["filePaths", ["a.ts"]],
+      ["file", "a.ts"],
+      ["file_path", "a.ts"],
+      ["files", ["a.ts"]],
+    ])("maps %s → file_paths", (alias, value) => {
+      expect(coerceParams({ [alias]: value })).toEqual({ file_paths: [value].flat() });
     });
 
     test("does NOT alias ref globally (first-class edit field)", () => {
@@ -285,36 +269,17 @@ describe("coerceParams", () => {
   });
 
   describe("camelCase aliases for snake_case params", () => {
-    test("maps contextLines → context_lines", () => {
-      expect(coerceParams({ contextLines: 3 })).toEqual({ context_lines: 3 });
-    });
-
-    test("maps maxMatches → max_matches", () => {
-      expect(coerceParams({ maxMatches: 10 })).toEqual({ max_matches: 10 });
-    });
-
-    test("maps max_results → max_matches", () => {
-      expect(coerceParams({ max_results: 10 })).toEqual({ max_matches: 10 });
-    });
-
-    test("maps maxResults → max_matches", () => {
-      expect(coerceParams({ maxResults: 10 })).toEqual({ max_matches: 10 });
-    });
-
-    test("maps caseInsensitive → case_insensitive", () => {
-      expect(coerceParams({ caseInsensitive: true })).toEqual({ case_insensitive: true });
-    });
-
-    test("maps ignoreCase → case_insensitive", () => {
-      expect(coerceParams({ ignoreCase: true })).toEqual({ case_insensitive: true });
-    });
-
-    test("maps ignore_case → case_insensitive", () => {
-      expect(coerceParams({ ignore_case: true })).toEqual({ case_insensitive: true });
-    });
-
-    test("maps compareAgainst → compare_against", () => {
-      expect(coerceParams({ compareAgainst: "HEAD~1" })).toEqual({ compare_against: "HEAD~1" });
+    test.each<[string, string, unknown]>([
+      ["contextLines", "context_lines", 3],
+      ["maxMatches", "max_matches", 10],
+      ["max_results", "max_matches", 10],
+      ["maxResults", "max_matches", 10],
+      ["caseInsensitive", "case_insensitive", true],
+      ["ignoreCase", "case_insensitive", true],
+      ["ignore_case", "case_insensitive", true],
+      ["compareAgainst", "compare_against", "HEAD~1"],
+    ])("maps %s → %s", (alias, canonical, value) => {
+      expect(coerceParams({ [alias]: value })).toEqual({ [canonical]: value });
     });
   });
 
