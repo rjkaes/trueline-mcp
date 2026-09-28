@@ -69,6 +69,13 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   const results: FileSearchResult[] = [];
   const multiFile = filePaths.length > 1 || rejectedSections.length > 0;
 
+  async function validatePathForSearch(fp: string): Promise<string | undefined> {
+    const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
+    if (validated.ok) return validated.resolvedPath;
+    results.push(failedSearchResult(fp, validated.error.content[0].text));
+    return undefined;
+  }
+
   if (params.multiline) {
     // Multiline mode: build regex with dotAll flag, delegate to multiline engine
     const maxMatchLines = params.max_match_lines ?? 50;
@@ -85,12 +92,8 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     }
 
     for (const fp of filePaths) {
-      const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
-      if (!validated.ok) {
-        results.push(failedSearchResult(fp, validated.error.content[0].text));
-        continue;
-      }
-      const { resolvedPath } = validated;
+      const resolvedPath = await validatePathForSearch(fp);
+      if (resolvedPath === undefined) continue;
 
       const fileResult = await searchMultiline({
         resolvedPath,
@@ -118,12 +121,8 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     const matchLine = matcherResult.matcher;
 
     for (const fp of filePaths) {
-      const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
-      if (!validated.ok) {
-        results.push(failedSearchResult(fp, validated.error.content[0].text));
-        continue;
-      }
-      const { resolvedPath } = validated;
+      const resolvedPath = await validatePathForSearch(fp);
+      if (resolvedPath === undefined) continue;
 
       const fileResult = await searchLineByLine({
         resolvedPath,
