@@ -38,13 +38,13 @@ const UTF16_BE_BOM = Buffer.from([0xfe, 0xff]);
  * an issue but checking longer matches first is standard practice).
  */
 export function detectBOM(firstBytes: Buffer): BOMInfo {
-  if (firstBytes.length >= 3 && firstBytes[0] === 0xef && firstBytes[1] === 0xbb && firstBytes[2] === 0xbf) {
+  if (firstBytes.subarray(0, 3).equals(UTF8_BOM)) {
     return { encoding: "utf-8", bomLength: 3, hasBOM: true };
   }
-  if (firstBytes.length >= 2 && firstBytes[0] === 0xff && firstBytes[1] === 0xfe) {
+  if (firstBytes.subarray(0, 2).equals(UTF16_LE_BOM)) {
     return { encoding: "utf-16le", bomLength: 2, hasBOM: true };
   }
-  if (firstBytes.length >= 2 && firstBytes[0] === 0xfe && firstBytes[1] === 0xff) {
+  if (firstBytes.subarray(0, 2).equals(UTF16_BE_BOM)) {
     return { encoding: "utf-16be", bomLength: 2, hasBOM: true };
   }
   return { encoding: "utf-8", bomLength: 0, hasBOM: false };
