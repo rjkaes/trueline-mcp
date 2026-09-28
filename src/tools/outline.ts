@@ -137,8 +137,7 @@ async function outlineOneFile(
     return errorResult(`Error reading file: ${(err as Error).message}`);
   }
 
-  let totalLines = 1;
-  for (let i = 0; i < source.length; i++) if (source.charCodeAt(i) === 10) totalLines++;
+  const totalLines = source.split("\n").length;
 
   const config = getLanguageConfig(ext);
   if (!config) {

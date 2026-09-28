@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline";
 import { z } from "zod";
 import pkg from "../package.json";
 import type { ToolResult } from "./tools/types.ts";
@@ -550,32 +551,24 @@ async function dispatch(msg: JsonRpcMessage): Promise<void> {
 // Stdio transport — read newline-delimited JSON from stdin
 // =============================================================================
 
-let buffer = "";
+createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line", (line) => {
+  if (!line) return;
 
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk: string) => {
-  buffer += chunk;
-  for (let newlineIdx = buffer.indexOf("\n"); newlineIdx !== -1; newlineIdx = buffer.indexOf("\n")) {
-    const line = buffer.slice(0, newlineIdx).replace(/\r$/, "");
-    buffer = buffer.slice(newlineIdx + 1);
-    if (!line) continue;
-
-    let msg: JsonRpcMessage;
-    try {
-      msg = JSON.parse(line) as JsonRpcMessage;
-    } catch {
-      respondError(0, INVALID_REQUEST, "Invalid JSON");
-      continue;
-    }
-
-    dispatch(msg).catch((err) => {
-      const message = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[trueline-mcp] dispatch error: ${message}\n`);
-      if (isRequest(msg)) {
-        respondError(msg.id, INVALID_PARAMS, `Internal error: ${message}`);
-      }
-    });
+  let msg: JsonRpcMessage;
+  try {
+    msg = JSON.parse(line) as JsonRpcMessage;
+  } catch {
+    respondError(0, INVALID_REQUEST, "Invalid JSON");
+    return;
   }
+
+  dispatch(msg).catch((err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[trueline-mcp] dispatch error: ${message}\n`);
+    if (isRequest(msg)) {
+      respondError(msg.id, INVALID_PARAMS, `Internal error: ${message}`);
+    }
+  });
 });
 
 process.on("uncaughtException", (err) => {

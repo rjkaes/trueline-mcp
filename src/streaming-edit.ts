@@ -70,11 +70,7 @@ type StreamingEditResult =
   | { ok: false; error: string };
 
 function buffersEqual(a: Buffer[], b: Buffer[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (!a[i].equals(b[i])) return false;
-  }
-  return true;
+  return a.length === b.length && a.every((buf, i) => buf.equals(b[i]));
 }
 
 /**
@@ -108,12 +104,7 @@ export async function streamingEdit(
   // ---- Build lookup structures ----
 
   // Map from line number to list of ops starting at that line
-  const opsByStartLine = new Map<number, StreamEditOp[]>();
-  for (const op of sortedOps) {
-    const list = opsByStartLine.get(op.startLine) ?? [];
-    list.push(op);
-    opsByStartLine.set(op.startLine, list);
-  }
+  const opsByStartLine = Map.groupBy(sortedOps, (op) => op.startLine);
 
   // Per-checksum-ref accumulators (sorted by startLine from validateEdits)
   const csAccumulators = checksumRefs.map((ref) => ({
