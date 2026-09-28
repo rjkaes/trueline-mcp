@@ -2,7 +2,7 @@ import { defineCommand } from "citty";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleEdit } from "../tools/edit.ts";
 import type { EditInput } from "../tools/shared.ts";
-import { emitResult, emitUsageError, loadAtOrDashOrLiteral, parseEditsArg, UsageError } from "./io.ts";
+import { emitResult, emitUsageError, jsonFlag, loadAtOrDashOrLiteral, parseEditsArg, UsageError } from "./io.ts";
 
 export default defineCommand({
   meta: {
@@ -44,11 +44,7 @@ export default defineCommand({
       type: "string",
       description: "File encoding (utf-8, ascii, latin1)",
     },
-    json: {
-      type: "boolean",
-      description: "Output JSON envelope {ok, result}",
-      default: false,
-    },
+    json: jsonFlag,
   },
   run: async ({ args }) => {
     const paths = args._ as string[];

@@ -1,7 +1,7 @@
 import { defineCommand } from "citty";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleDiff } from "../tools/diff.ts";
-import { emitResult } from "./io.ts";
+import { emitResult, jsonFlag } from "./io.ts";
 
 export default defineCommand({
   meta: {
@@ -13,11 +13,7 @@ export default defineCommand({
       type: "string",
       description: "Git ref to compare against (default: HEAD)",
     },
-    json: {
-      type: "boolean",
-      description: "Output JSON envelope {ok, result}",
-      default: false,
-    },
+    json: jsonFlag,
   },
   run: async ({ args }) => {
     const paths = args._ as string[];

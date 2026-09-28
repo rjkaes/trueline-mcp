@@ -1,7 +1,7 @@
 import { defineCommand } from "citty";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleSearch } from "../tools/search.ts";
-import { emitResult, emitUsageError, UsageError } from "./io.ts";
+import { emitResult, emitUsageError, jsonFlag, UsageError } from "./io.ts";
 
 export default defineCommand({
   meta: {
@@ -40,11 +40,7 @@ export default defineCommand({
       type: "string",
       description: "Maximum lines a single multiline match can span",
     },
-    json: {
-      type: "boolean",
-      description: "Output JSON envelope {ok, result}",
-      default: false,
-    },
+    json: jsonFlag,
   },
   run: async ({ args }) => {
     // First positional is the pattern; remaining are paths.

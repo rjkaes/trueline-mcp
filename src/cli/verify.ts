@@ -1,7 +1,7 @@
 import { defineCommand } from "citty";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleVerify } from "../tools/verify.ts";
-import { emitResult, emitUsageError, parseRefsArg, UsageError } from "./io.ts";
+import { emitResult, emitUsageError, jsonFlag, parseRefsArg, UsageError } from "./io.ts";
 
 export default defineCommand({
   meta: {
@@ -13,11 +13,7 @@ export default defineCommand({
       type: "string",
       description: "Refs to verify: repeatable, @file, or - (stdin)",
     },
-    json: {
-      type: "boolean",
-      description: "Output JSON envelope {ok, result}",
-      default: false,
-    },
+    json: jsonFlag,
   },
   run: async ({ args, rawArgs }) => {
     const paths = args._ as string[];

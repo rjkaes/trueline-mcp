@@ -11,6 +11,16 @@ import type { EditInput } from "../tools/shared.ts";
 import type { ToolResult } from "../tools/types.ts";
 
 // ---------------------------------------------------------------------------
+// Shared citty arg definitions
+// ---------------------------------------------------------------------------
+
+export const jsonFlag = {
+  type: "boolean",
+  description: "Output JSON envelope {ok, result}",
+  default: false,
+} as const;
+
+// ---------------------------------------------------------------------------
 // User-facing errors that map to exit code 3 (usage / parse error)
 // ---------------------------------------------------------------------------
 
@@ -25,15 +35,11 @@ export class UsageError extends Error {
 // stdin helpers
 // ---------------------------------------------------------------------------
 
-export function isStdinTTY(): boolean {
-  return Boolean(process.stdin.isTTY);
-}
-
 /**
  * Read all stdin synchronously. Blocks until EOF.
  *
  * Must only be called when stdin is not a TTY; callers are responsible for
- * checking isStdinTTY() first and raising UsageError if appropriate.
+ * checking process.stdin.isTTY first and raising UsageError if appropriate.
  */
 export function readStdinSync(): string {
   // Node/Bun: fd 0 is stdin; readFileSync on fd 0 reads until EOF.
@@ -64,7 +70,7 @@ export function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): unk
       throw new UsageError(`cannot read ${filePath}: ${msg}`);
     }
   } else if (value === "-") {
-    if (isStdinTTY()) {
+    if (process.stdin.isTTY) {
       throw new UsageError("stdin is a TTY; pipe data in or use @file");
     }
     raw = readStdinSync();

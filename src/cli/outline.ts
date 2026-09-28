@@ -1,7 +1,7 @@
 import { defineCommand } from "citty";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleOutline } from "../tools/outline.ts";
-import { emitResult, UsageError, emitUsageError } from "./io.ts";
+import { emitResult, jsonFlag, UsageError, emitUsageError } from "./io.ts";
 
 export default defineCommand({
   meta: {
@@ -9,11 +9,7 @@ export default defineCommand({
     description: "Structural outline of files via tree-sitter (functions, classes, types)",
   },
   args: {
-    json: {
-      type: "boolean",
-      description: "Output JSON envelope {ok, result}",
-      default: false,
-    },
+    json: jsonFlag,
     depth: {
       type: "string",
       description: "Max nesting depth (0 = top-level only)",
