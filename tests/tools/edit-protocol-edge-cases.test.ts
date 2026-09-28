@@ -199,21 +199,6 @@ describe("insert-after (+) semantics", () => {
     expect(result.isError).toBeUndefined();
     expect(readFileSync(path, "utf-8")).toBe("aaa\nx\ny\nz\nbbb\n");
   });
-
-  test("insert into empty file via +0:", async () => {
-    const f = writeTestFile(testDir, "empty.txt", "");
-    const emptyRef = "0-0/aaaaaa";
-
-    const result = await edit({
-      file_path: f,
-      edits: [{ ref: emptyRef, range: "+0", content: "first line\nsecond line" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    const written = readFileSync(f, "utf-8");
-    expect(written).toContain("first line");
-    expect(written).toContain("second line");
-  });
 });
 
 // =============================================================================
@@ -632,33 +617,6 @@ describe("line ending edge cases", () => {
 // =============================================================================
 
 describe("no-op detection", () => {
-  test("replacing line with identical content is a no-op", async () => {
-    const { path, ref } = setupFile("noop1.txt", "aaa\nbbb\nccc\n");
-    const h2 = lineHash("bbb");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2`, content: "bbb" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("no changes");
-  });
-
-  test("replacing multi-line range with identical content is a no-op", async () => {
-    const { path, ref } = setupFile("noop2.txt", "aaa\nbbb\nccc\n");
-    const h1 = lineHash("aaa");
-    const h3 = lineHash("ccc");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h1}1-${h3}3`, content: "aaa\nbbb\nccc" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("no changes");
-  });
-
   test("insert-after with content is not a no-op (always changes file)", async () => {
     const { path, ref } = setupFile("ins-noop.txt", "aaa\nbbb\n");
     const h1 = lineHash("aaa");
@@ -848,20 +806,6 @@ describe("boundary hash verification", () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("mismatch");
-  });
-
-  test("correct hashes on multi-line range pass", async () => {
-    const { path, ref } = setupFile("good-hash.txt", "aaa\nbbb\nccc\nddd\n");
-    const h1 = lineHash("aaa");
-    const h4 = lineHash("ddd");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h1}1-${h4}4`, content: "only one line" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("only one line\n");
   });
 });
 

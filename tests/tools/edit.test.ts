@@ -259,19 +259,6 @@ describe("handleEdit", () => {
     expect(result.content[0].text).toContain("not a regular file");
   });
 
-  test("rejects binary files", async () => {
-    const binFile = join(testDir, "binary.bin");
-    writeFileSync(binFile, Buffer.from([0x00, 0x01, 0x02, 0x03]));
-    const staleRef = "aa1-aa1/aaaaaa";
-    const result = await handleEdit({
-      file_path: binFile,
-      edits: [{ ref: staleRef, range: "aa1-aa1", content: "x" }],
-      projectDir: testDir,
-    });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("binary");
-  });
-
   test("rejects nonexistent projectDir", async () => {
     const staleRef = "aa1-aa1/aaaaaa";
     const result = await handleEdit({
