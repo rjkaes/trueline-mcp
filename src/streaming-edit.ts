@@ -235,7 +235,7 @@ export async function streamingEdit(
   //
   // Fast path: when line counts differ, skip Buffer allocation entirely —
   // the content is definitely changed.
-  async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[], origEols?: Buffer[]): Promise<void> {
+  async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[], origEols: Buffer[]): Promise<void> {
     if (op.content.length !== origBytes.length) {
       contentChanged = true;
       if (op.content.length === 0) {
@@ -252,7 +252,7 @@ export async function streamingEdit(
     const replacementBufs = op.content.map((s) => Buffer.from(s, encoding));
     if (replacementBufs.every((buf, k) => buf.equals(origBytes[k]))) {
       for (let k = 0; k < origBytes.length; k++) {
-        const eol = origEols?.[k];
+        const eol = origEols[k];
         await enqueueLine(origBytes[k], undefined, eol && eol.length > 0 ? eol : undefined);
       }
       if (collector) for (const buf of origBytes) collector.context(buf.toString(encoding));
