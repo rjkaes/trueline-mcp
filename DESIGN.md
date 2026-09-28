@@ -327,7 +327,7 @@ The outline system has three layers:
    - `recurse`: container node types whose children should be inlined
      at depth+1 (e.g. `class_body` to show class members)
    - `topLevelOnly`: node types only included as direct children of the
-     root (e.g. `expression_statement` to capture `server.registerTool()`
+     root (e.g. `expression_statement` to capture top-level `registerTool()`
      calls but not nested `console.log()` inside try/catch)
 
 3. **Extraction** (`src/outline/extract.ts`) — walks the AST, applies
@@ -341,20 +341,18 @@ Every entry uses a `start-end` line range format that maps directly to
 a summary showing their line range:
 
 ```
-1-10: (10 imports)
-12-12: const VERSION = pkg.version;
-14-17: const server = new McpServer({
-25-45: async function resolveAllowedDirs(): Promise<string[]> {
-1-9: class Greeter {
-  3-3: constructor(name: string) {
-  6-8: greet(): string {
+1-1: (1 import)
+3-11: class Greeter {
+  4-4:   name: string;
+  5-7:   constructor(name: string) {
+  8-10:   greet(): string {
 
-(8 symbols, 50 source lines)
+(5 symbols, 12 source lines)
 ```
 
 Top-level declarations appear at depth 0; class/struct members appear
 indented at depth 1. The agent can pass any line range directly to
-`trueline_read(ranges: [{start: 25, end: 45}])` without transformation.
+`trueline_read(file_paths: ["src/greeter.ts:5-7"])` without transformation.
 
 ### Supported languages
 

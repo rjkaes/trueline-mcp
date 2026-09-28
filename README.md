@@ -47,21 +47,26 @@ functions, classes, declarations, and their line ranges. For a typical
 source file, that's 10-20 lines instead of hundreds.
 
 ```
-1-10: (10 imports)
-12-12: const VERSION = pkg.version;
-14-17: const server = new McpServer({
-25-45: async function resolveAllowedDirs(): Promise<string[]> {
-49-69: server.registerTool(
-71-92: server.registerTool(
+1-3: (3 imports)
+5-5: const PACKAGE_NAME = "trueline-mcp";
+6-6: const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+7-7: const CACHE_FILE = join(tmpdir(), "trueline-mcp-update-check.json");
+8-8: const REGISTRY_TIMEOUT_MS = 3000;
+10-13: interface CachedCheck {
+15-22: async function readCache(): Promise<CachedCheck | null> {
+24-26: async function writeCache(entry: CachedCheck): Promise<void> {
+28-42: async function fetchLatestVersion(): Promise<string | null> {
+51-76: export function scheduleUpdateCheck(currentVersion: string, onUpdate: (info: { current: string; latest: string }) => void,
+79-87: function compareVersions(a: string, b: string): number {
 
-(12 symbols, 139 source lines)
+(11 symbols, 88 source lines)
 ```
 
 The agent sees the full structure, then uses `trueline_read` to fetch only
 the ranges it needs. Ranges are specified inline on each path:
 
 ```
-file_paths: ["src/server.ts:25-45", "src/utils.ts:1-10,80-90"]
+file_paths: ["src/update-check.ts:28-42", "src/tools/verify.ts:1-20,35-60"]
 ```
 
 A 500-line file where the agent needs one 20-line function? It reads 20
