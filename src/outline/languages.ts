@@ -14,9 +14,9 @@ export interface LanguageConfig {
   /** Top-level node types to include */
   outline: Set<string>;
   /** Node types to skip entirely */
-  skip: Set<string>;
+  skip?: Set<string>;
   /** Node types whose children should be recursed into (one level) */
-  recurse: Set<string>;
+  recurse?: Set<string>;
   /** Node types only included when they are direct children of the root */
   topLevelOnly?: Set<string>;
   /** Whitespace normalization for semantic diffing body hashes.
@@ -88,7 +88,6 @@ const go: LanguageConfig = {
     "var_declaration",
   ]),
   skip: new Set(["package_clause", "import_declaration"]),
-  recurse: new Set([]),
 };
 
 const rust: LanguageConfig = {
@@ -132,7 +131,6 @@ const ruby: LanguageConfig = {
     "assignment",
     "call", // require, require_relative at top level
   ]),
-  skip: new Set([]),
   recurse: new Set(["body_statement"]),
 };
 
@@ -155,7 +153,6 @@ const c: LanguageConfig = {
   grammar: "c",
   outline: new Set(["function_definition", "struct_specifier", "enum_specifier", "declaration", "type_definition"]),
   skip: new Set(["preproc_include"]),
-  recurse: new Set([]),
 };
 
 const csharp: LanguageConfig = {
@@ -228,8 +225,6 @@ const scala: LanguageConfig = {
 const elixir: LanguageConfig = {
   grammar: "elixir",
   outline: new Set(["call"]), // def, defp, defmodule are all calls in elixir's grammar
-  skip: new Set([]),
-  recurse: new Set([]),
 };
 
 const lua: LanguageConfig = {
@@ -241,8 +236,6 @@ const lua: LanguageConfig = {
     "local_variable_declaration",
     "assignment_statement",
   ]),
-  skip: new Set([]),
-  recurse: new Set([]),
 };
 
 const dart: LanguageConfig = {
@@ -262,15 +255,11 @@ const dart: LanguageConfig = {
 const zig: LanguageConfig = {
   grammar: "zig",
   outline: new Set(["TopLevelDecl", "VarDecl", "FnProto"]),
-  skip: new Set([]),
-  recurse: new Set([]),
 };
 
 const bash: LanguageConfig = {
   grammar: "bash",
   outline: new Set(["function_definition", "variable_assignment"]),
-  skip: new Set([]),
-  recurse: new Set([]),
 };
 
 // Extension → language config mapping

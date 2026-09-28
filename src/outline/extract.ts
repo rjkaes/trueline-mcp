@@ -130,11 +130,11 @@ export async function extractOutline(
 
   function visit(node: SyntaxNode, depth: number, isRootChild: boolean): void {
     // Track skipped root children for collapsed summary
-    if (isRootChild && config.skip.has(node.type)) {
+    if (isRootChild && config.skip?.has(node.type)) {
       trackSkipped(node);
       return;
     }
-    if (config.skip.has(node.type)) return;
+    if (config.skip?.has(node.type)) return;
 
     const isOutline = config.outline.has(node.type);
     const isTopOnly = config.topLevelOnly?.has(node.type) ?? false;
@@ -159,7 +159,7 @@ export async function extractOutline(
       if (depth + 1 <= maxDepth) {
         for (const child of node.children) {
           if (!child.isNamed) continue;
-          if (config.recurse.has(child.type)) {
+          if (config.recurse?.has(child.type)) {
             for (const member of child.children) {
               if (!member.isNamed) continue;
               visit(member, depth + 1, false);
