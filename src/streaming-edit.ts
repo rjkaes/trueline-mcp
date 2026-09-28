@@ -69,10 +69,6 @@ type StreamingEditResult =
     }
   | { ok: false; error: string };
 
-function buffersEqual(a: Buffer[], b: Buffer[]): boolean {
-  return a.length === b.length && a.every((buf, i) => buf.equals(b[i]));
-}
-
 /**
  * Single-pass byte-level streaming edit engine.
  *
@@ -254,7 +250,7 @@ export async function streamingEdit(
     }
     // Same line count — encode and compare byte-by-byte
     const replacementBufs = op.content.map((s) => Buffer.from(s, encoding));
-    if (buffersEqual(replacementBufs, origBytes)) {
+    if (replacementBufs.every((buf, k) => buf.equals(origBytes[k]))) {
       for (let k = 0; k < origBytes.length; k++) {
         const eol = origEols?.[k];
         await enqueueLine(origBytes[k], undefined, eol && eol.length > 0 ? eol : undefined);
