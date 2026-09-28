@@ -183,14 +183,8 @@ export function encodeString(str: string, encoding: DetectedEncoding): Buffer {
   if (encoding === "utf-8") return Buffer.from(str, "utf-8");
   if (encoding === "utf-16le") return Buffer.from(str, "utf16le");
 
-  // UTF-16 BE: encode as LE then swap each byte pair
-  const le = Buffer.from(str, "utf16le");
-  for (let i = 0; i < le.length - 1; i += 2) {
-    const tmp = le[i];
-    le[i] = le[i + 1];
-    le[i + 1] = tmp;
-  }
-  return le;
+  // UTF-16 BE: encode as LE, then swap byte pairs.
+  return Buffer.from(str, "utf16le").swap16();
 }
 
 /**
