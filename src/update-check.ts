@@ -52,15 +52,13 @@ export function scheduleUpdateCheck(
   currentVersion: string,
   onUpdate: (info: { current: string; latest: string }) => void,
 ): void {
-  const notify = onUpdate;
-
   // Fire-and-forget — never delays startup or rejects into the event loop
   void (async () => {
     const cached = await readCache();
 
     if (cached && Date.now() - cached.timestamp < CHECK_INTERVAL_MS) {
       if (compareVersions(cached.latestVersion, currentVersion) > 0) {
-        notify({ current: currentVersion, latest: cached.latestVersion });
+        onUpdate({ current: currentVersion, latest: cached.latestVersion });
       }
       return;
     }
@@ -70,7 +68,7 @@ export function scheduleUpdateCheck(
 
     await writeCache({ timestamp: Date.now(), latestVersion: latest });
     if (compareVersions(latest, currentVersion) > 0) {
-      notify({ current: currentVersion, latest });
+      onUpdate({ current: currentVersion, latest });
     }
   })();
 }

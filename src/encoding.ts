@@ -18,7 +18,7 @@ import { splitChunks, type RawLine, type SplitChunksOpts } from "./line-splitter
 // BOM detection
 // ==============================================================================
 
-export type DetectedEncoding = "utf-8" | "utf-16le" | "utf-16be";
+type DetectedEncoding = "utf-8" | "utf-16le" | "utf-16be";
 
 export interface BOMInfo {
   encoding: DetectedEncoding;
@@ -54,7 +54,7 @@ export function detectBOM(firstBytes: Buffer): BOMInfo {
 // Transcoded line generator
 // ==============================================================================
 
-export interface TranscodedLinesResult {
+interface TranscodedLinesResult {
   lines: AsyncGenerator<RawLine>;
   bomInfo: BOMInfo;
 }

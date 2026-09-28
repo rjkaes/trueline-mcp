@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { routePreToolUse, isPartialRead } from "../../hooks/core/routing.js";
 import { OUTLINEABLE_EXTENSIONS } from "../../src/outline/supported-extensions.js";
-import { supportedExtensions } from "../../src/outline/languages.js";
+import { LANGUAGES } from "../../src/outline/languages.js";
 
 let tmpDir: string;
 let smallFile: string;
@@ -306,7 +306,7 @@ describe("routePreToolUse — common cases", () => {
 
 describe("OUTLINEABLE_EXTENSIONS sync", () => {
   test("contains all LANGUAGES keys from languages.ts", () => {
-    for (const ext of supportedExtensions()) {
+    for (const ext of Object.keys(LANGUAGES)) {
       expect(OUTLINEABLE_EXTENSIONS.has(ext)).toBe(true);
     }
   });

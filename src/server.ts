@@ -91,18 +91,6 @@ function registerTool(
 
 // Wrap handlers so they never throw — errors become MCP error content.
 
-// coerceParams normalizes file_path → file_paths (array) for multi-file tools.
-// Single-file tools (edit, search) need to unwrap back to file_path (string).
-function unwrapFilePath(coerced: Record<string, unknown>): void {
-  if (!coerced.file_path && Array.isArray(coerced.file_paths)) {
-    const paths = coerced.file_paths as string[];
-    if (paths.length > 1) {
-      throw new Error(`This tool accepts a single file path; received ${paths.length}. Pass one path as file_path.`);
-    }
-    coerced.file_path = paths[0];
-    delete coerced.file_paths;
-  }
-}
 function safeTool(
   handler: (params: Record<string, unknown>) => Promise<ToolResult>,
 ): (params: Record<string, unknown>) => Promise<ToolResult> {
@@ -416,7 +404,15 @@ registerTool(
   editJsonSchema,
   safeTool(async (rawParams) => {
     const coerced = coerceParams(rawParams) as Record<string, unknown>;
-    unwrapFilePath(coerced);
+    // Single-file tool: unwrap coerceParams' file_paths array back to file_path.
+    if (!coerced.file_path && Array.isArray(coerced.file_paths)) {
+      const paths = coerced.file_paths as string[];
+      if (paths.length > 1) {
+        throw new Error(`This tool accepts a single file path; received ${paths.length}. Pass one path as file_path.`);
+      }
+      coerced.file_path = paths[0];
+      delete coerced.file_paths;
+    }
     const params = editSchema.parse(coerced);
     return handleEdit({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),

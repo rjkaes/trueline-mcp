@@ -8,8 +8,6 @@
 const PLATFORM_TOOLS = {
   "claude-code": {
     readTool: "Read",
-    editTool: "Edit",
-    writeTool: "Write",
     grepAdvice: "use Grep to identify the files",
     atRefAdvice:
       "If file content was injected by an @ reference, never call Read or trueline_read just to view it again. " +
@@ -17,8 +15,6 @@ const PLATFORM_TOOLS = {
   },
   "gemini-cli": {
     readTool: "read_file",
-    editTool: "edit_file",
-    writeTool: "write_file",
     grepAdvice: "use run_shell_command with grep/rg to identify the files",
   },
 };

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getInstructions } from "../../hooks/session-start.js";
+import { getInstructions } from "../../hooks/core/instructions.js";
 
 describe("getInstructions", () => {
   test("starts with trueline heading", () => {

@@ -305,7 +305,7 @@ export function parseRanges(ranges: string[] | undefined): ReadRange[] {
 // Inline range parsing for file_paths entries (e.g. "src/foo.ts:10-25")
 // ---------------------------------------------------------------------------
 
-export interface FilePathWithRanges {
+interface FilePathWithRanges {
   path: string;
   rangeSpecs: string[] | undefined;
 }

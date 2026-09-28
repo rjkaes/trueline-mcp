@@ -263,7 +263,7 @@ const bash: LanguageConfig = {
 };
 
 // Extension → language config mapping
-const LANGUAGES: Record<string, LanguageConfig> = {
+export const LANGUAGES: Record<string, LanguageConfig> = {
   // TypeScript / JavaScript
   ".ts": typescript,
   ".tsx": tsx,
@@ -325,8 +325,4 @@ export { OUTLINEABLE_EXTENSIONS } from "./supported-extensions.js";
 
 export function getLanguageConfig(ext: string): LanguageConfig | undefined {
   return LANGUAGES[ext];
-}
-
-export function supportedExtensions(): string[] {
-  return Object.keys(LANGUAGES);
 }

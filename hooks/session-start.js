@@ -1,9 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { getInstructions } from "./core/instructions.js";
 
-// Re-export for backwards compatibility — other code may import this directly.
-export { getInstructions };
-
 // Main: detect hook event from stdin and format output accordingly.
 // SessionStart: plain stdout is added as context.
 // SubagentStart: requires JSON with hookSpecificOutput.additionalContext.
