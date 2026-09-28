@@ -73,13 +73,8 @@ export function scheduleUpdateCheck(
   })();
 }
 
-/** Simple semver comparison: returns >0 if a > b, <0 if a < b, 0 if equal. */
+// >0 if a > b. Numeric collation makes 2.10.0 > 2.9.0. Prerelease tags are
+// unsupported; npm's `latest` dist-tag is always a release.
 function compareVersions(a: string, b: string): number {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
+  return a.localeCompare(b, undefined, { numeric: true });
 }
