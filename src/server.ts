@@ -98,6 +98,13 @@ function safeTool(
     try {
       return await handler(params);
     } catch (err: unknown) {
+      // ZodError.message is a JSON dump of issues; surface the per-field messages instead.
+      if (err instanceof z.ZodError) {
+        const issues = err.issues.map((issue) =>
+          issue.path.length > 0 ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
+        );
+        return errorResult(`Invalid parameters: ${issues.join("; ")}`);
+      }
       const message = err instanceof Error ? err.message : String(err);
       process.stderr.write(`[trueline-mcp] tool error: ${message}\n`);
       return errorResult(`Internal error: ${message}`);
