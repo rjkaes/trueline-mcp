@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
-import { lineHash, rangeChecksum, issueTestRef } from "../helpers.ts";
+import { lineHash, rangeChecksum, issueTestRef, writeTestFile } from "../helpers.ts";
 
 let testDir: string;
 
@@ -18,8 +18,7 @@ afterEach(() => {
 
 // Convenience: write a file, compute ref over all lines
 function setupFile(name: string, content: string) {
-  const f = join(testDir, name);
-  writeFileSync(f, content);
+  const f = writeTestFile(testDir, name, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   // Remove trailing empty element if content ends with newline
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
@@ -520,8 +519,7 @@ describe("checksum validation", () => {
 
 describe("line ending preservation", () => {
   test("bare CR file preserves CR endings", async () => {
-    const f = join(testDir, "cr.txt");
-    writeFileSync(f, "aaa\rbbb\rccc\r");
+    const f = writeTestFile(testDir, "cr.txt", "aaa\rbbb\rccc\r");
 
     const lines = ["aaa", "bbb", "ccc"];
     const ref = issueTestRef(f, lines, 1, 3);
@@ -545,8 +543,7 @@ describe("line ending preservation", () => {
   });
 
   test("CRLF file preserves CRLF after multi-line replacement", async () => {
-    const f = join(testDir, "crlf-multi.txt");
-    writeFileSync(f, "aaa\r\nbbb\r\nccc\r\n");
+    const f = writeTestFile(testDir, "crlf-multi.txt", "aaa\r\nbbb\r\nccc\r\n");
 
     const lines = ["aaa", "bbb", "ccc"];
     const ref = issueTestRef(f, lines, 1, 3);
@@ -569,8 +566,7 @@ describe("line ending preservation", () => {
   });
 
   test("no trailing newline preserved after insert-after at last line", async () => {
-    const f = join(testDir, "no-nl-insert.txt");
-    writeFileSync(f, "aaa\nbbb");
+    const f = writeTestFile(testDir, "no-nl-insert.txt", "aaa\nbbb");
 
     const lines = ["aaa", "bbb"];
     const ref = issueTestRef(f, lines, 1, 2);
@@ -645,8 +641,7 @@ describe("unicode in edits", () => {
 
 describe("read-then-edit round-trip", () => {
   test("ref from handleRead works as handleEdit input", async () => {
-    const f = join(testDir, "roundtrip.txt");
-    writeFileSync(f, "alpha\nbeta\ngamma\n");
+    const f = writeTestFile(testDir, "roundtrip.txt", "alpha\nbeta\ngamma\n");
 
     // Read the file
     const readResult = await handleRead({ file_path: f, projectDir: testDir });
@@ -681,8 +676,7 @@ describe("read-then-edit round-trip", () => {
   });
 
   test("partial-range read ref works for edit", async () => {
-    const f = join(testDir, "partial-roundtrip.txt");
-    writeFileSync(f, "aaa\nbbb\nccc\nddd\neee\n");
+    const f = writeTestFile(testDir, "partial-roundtrip.txt", "aaa\nbbb\nccc\nddd\neee\n");
 
     // Read only lines 2-4
     const readResult = await handleRead({
@@ -716,8 +710,7 @@ describe("read-then-edit round-trip", () => {
   });
 
   test("edit returns new ref that enables a second edit", async () => {
-    const f = join(testDir, "chain.txt");
-    writeFileSync(f, "aaa\nbbb\nccc\n");
+    const f = writeTestFile(testDir, "chain.txt", "aaa\nbbb\nccc\n");
 
     // First edit
     const { ref } = setupFile("chain.txt", "aaa\nbbb\nccc\n");

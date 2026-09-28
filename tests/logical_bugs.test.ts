@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../src/tools/edit.ts";
 import { handleRead } from "../src/tools/read.ts";
-import { lineHash, issueTestRef } from "./helpers.ts";
+import { lineHash, issueTestRef, writeTestFile } from "./helpers.ts";
 
 let testDir: string;
 
@@ -65,8 +65,7 @@ describe("logical bugs and edge cases", () => {
    * happens during the stream, but prepend happens before the stream starts.
    */
   test("insertAfter at line 0 on CRLF file incorrectly uses LF (KNOWN BUG)", async () => {
-    const f = join(testDir, "prepend-crlf.txt");
-    writeFileSync(f, "existing\r\n");
+    const f = writeTestFile(testDir, "prepend-crlf.txt", "existing\r\n");
 
     const ref = issueTestRef(f, ["existing"], 1, 1);
 
@@ -90,8 +89,7 @@ describe("logical bugs and edge cases", () => {
   });
 
   test("insertAfter at line 0 on empty file with multi-line content", async () => {
-    const f = join(testDir, "empty-multi.txt");
-    writeFileSync(f, "");
+    const f = writeTestFile(testDir, "empty-multi.txt", "");
 
     const ref = "0-0/aaaaaa";
 

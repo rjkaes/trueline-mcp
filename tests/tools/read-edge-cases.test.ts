@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync, symlinkSyn
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead } from "../../src/tools/read.ts";
-import { LINE_PATTERN } from "../helpers.ts";
+import { LINE_PATTERN, writeTestFile } from "../helpers.ts";
 
 let testDir: string;
 
@@ -23,8 +23,7 @@ afterAll(() => {
 
 describe("empty and minimal files", () => {
   test("empty file returns ref for empty file", async () => {
-    const f = join(testDir, "empty.txt");
-    writeFileSync(f, "");
+    const f = writeTestFile(testDir, "empty.txt", "");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -33,8 +32,7 @@ describe("empty and minimal files", () => {
   });
 
   test("single line with trailing newline", async () => {
-    const f = join(testDir, "single-trailing.txt");
-    writeFileSync(f, "hello\n");
+    const f = writeTestFile(testDir, "single-trailing.txt", "hello\n");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -45,8 +43,7 @@ describe("empty and minimal files", () => {
   });
 
   test("single line without trailing newline", async () => {
-    const f = join(testDir, "single-no-trailing.txt");
-    writeFileSync(f, "hello");
+    const f = writeTestFile(testDir, "single-no-trailing.txt", "hello");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -57,8 +54,7 @@ describe("empty and minimal files", () => {
   });
 
   test("file with only a newline is one empty-string line", async () => {
-    const f = join(testDir, "just-newline.txt");
-    writeFileSync(f, "\n");
+    const f = writeTestFile(testDir, "just-newline.txt", "\n");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -70,8 +66,7 @@ describe("empty and minimal files", () => {
   });
 
   test("file with multiple blank lines", async () => {
-    const f = join(testDir, "blank-lines.txt");
-    writeFileSync(f, "\n\n\n");
+    const f = writeTestFile(testDir, "blank-lines.txt", "\n\n\n");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -87,8 +82,7 @@ describe("empty and minimal files", () => {
 
 describe("line endings", () => {
   test("bare CR (classic Mac) line endings", async () => {
-    const f = join(testDir, "bare-cr.txt");
-    writeFileSync(f, "aaa\rbbb\rccc\r");
+    const f = writeTestFile(testDir, "bare-cr.txt", "aaa\rbbb\rccc\r");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -101,8 +95,7 @@ describe("line endings", () => {
   });
 
   test("CRLF line endings", async () => {
-    const f = join(testDir, "crlf.txt");
-    writeFileSync(f, "aaa\r\nbbb\r\nccc\r\n");
+    const f = writeTestFile(testDir, "crlf.txt", "aaa\r\nbbb\r\nccc\r\n");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -126,8 +119,7 @@ describe("line endings", () => {
   });
 
   test("bare CR at end without trailing content", async () => {
-    const f = join(testDir, "trailing-cr.txt");
-    writeFileSync(f, "aaa\r");
+    const f = writeTestFile(testDir, "trailing-cr.txt", "aaa\r");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -143,8 +135,7 @@ describe("line endings", () => {
 
 describe("unicode content", () => {
   test("BMP characters (CJK, emoji)", async () => {
-    const f = join(testDir, "unicode-bmp.txt");
-    writeFileSync(f, "日本語\nΣΩΔ\n¡¿\n");
+    const f = writeTestFile(testDir, "unicode-bmp.txt", "日本語\nΣΩΔ\n¡¿\n");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -168,8 +159,7 @@ describe("unicode content", () => {
   });
 
   test("line with only whitespace preserves content", async () => {
-    const f = join(testDir, "whitespace.txt");
-    writeFileSync(f, "  \t  \n");
+    const f = writeTestFile(testDir, "whitespace.txt", "  \t  \n");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -179,8 +169,7 @@ describe("unicode content", () => {
   });
 
   test("line containing pipe character in content", async () => {
-    const f = join(testDir, "pipe-in-content.txt");
-    writeFileSync(f, "a|b|c\nfoo | bar\n");
+    const f = writeTestFile(testDir, "pipe-in-content.txt", "a|b|c\nfoo | bar\n");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -207,8 +196,7 @@ describe("binary detection", () => {
   });
 
   test("null byte in later line", async () => {
-    const f = join(testDir, "null-later.bin");
-    writeFileSync(f, "line1\nline2\x00oops\nline3\n");
+    const f = writeTestFile(testDir, "null-later.bin", "line1\nline2\x00oops\nline3\n");
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBe(true);
@@ -216,8 +204,7 @@ describe("binary detection", () => {
   });
 
   test("null byte beyond range start is still detected", async () => {
-    const f = join(testDir, "null-in-range.bin");
-    writeFileSync(f, "ok\nok\nbad\x00line\n");
+    const f = writeTestFile(testDir, "null-in-range.bin", "ok\nok\nbad\x00line\n");
 
     const result = await handleRead({ file_path: f, ranges: ["3-"], projectDir: testDir });
     expect(result.isError).toBe(true);
@@ -231,8 +218,7 @@ describe("binary detection", () => {
 
 describe("range parameters", () => {
   test("start = 0 is rejected", async () => {
-    const f = join(testDir, "range.txt");
-    writeFileSync(f, "aaa\nbbb\n");
+    const f = writeTestFile(testDir, "range.txt", "aaa\nbbb\n");
 
     const result = await handleRead({ file_path: f, ranges: ["0-10"], projectDir: testDir });
     expect(result.isError).toBe(true);
@@ -240,16 +226,14 @@ describe("range parameters", () => {
   });
 
   test("non-numeric range is rejected", async () => {
-    const f = join(testDir, "range-neg.txt");
-    writeFileSync(f, "aaa\nbbb\n");
+    const f = writeTestFile(testDir, "range-neg.txt", "aaa\nbbb\n");
 
     const result = await handleRead({ file_path: f, ranges: ["abc"], projectDir: testDir });
     expect(result.isError).toBe(true);
   });
 
   test("start beyond file length returns error", async () => {
-    const f = join(testDir, "range-beyond.txt");
-    writeFileSync(f, "aaa\nbbb\n");
+    const f = writeTestFile(testDir, "range-beyond.txt", "aaa\nbbb\n");
 
     const result = await handleRead({ file_path: f, ranges: ["100-"], projectDir: testDir });
     expect(result.isError).toBe(true);
@@ -257,8 +241,7 @@ describe("range parameters", () => {
   });
 
   test("start > end is rejected", async () => {
-    const f = join(testDir, "range-backwards.txt");
-    writeFileSync(f, "aaa\nbbb\nccc\n");
+    const f = writeTestFile(testDir, "range-backwards.txt", "aaa\nbbb\nccc\n");
 
     const result = await handleRead({ file_path: f, ranges: ["3-1"], projectDir: testDir });
     expect(result.isError).toBe(true);
@@ -266,8 +249,7 @@ describe("range parameters", () => {
   });
 
   test("end beyond file length silently clamps", async () => {
-    const f = join(testDir, "range-overshoot.txt");
-    writeFileSync(f, "aaa\nbbb\n");
+    const f = writeTestFile(testDir, "range-overshoot.txt", "aaa\nbbb\n");
 
     const result = await handleRead({ file_path: f, ranges: ["1-999"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -276,8 +258,7 @@ describe("range parameters", () => {
   });
 
   test("single-line range reads exactly one line", async () => {
-    const f = join(testDir, "range-single.txt");
-    writeFileSync(f, "aaa\nbbb\nccc\n");
+    const f = writeTestFile(testDir, "range-single.txt", "aaa\nbbb\nccc\n");
 
     const result = await handleRead({ file_path: f, ranges: ["2"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
@@ -346,8 +327,7 @@ describe("ref consistency", () => {
   });
 
   test("line hash is deterministic across reads", async () => {
-    const f = join(testDir, "deterministic.txt");
-    writeFileSync(f, "hello world\n");
+    const f = writeTestFile(testDir, "deterministic.txt", "hello world\n");
 
     const r1 = await handleRead({ file_path: f, projectDir: testDir });
     const r2 = await handleRead({ file_path: f, projectDir: testDir });
@@ -412,8 +392,7 @@ describe("filesystem edge cases", () => {
   test("file outside project directory is rejected", async () => {
     // Create a file in a sibling directory
     const otherDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-other-")));
-    const otherFile = join(otherDir, "secret.txt");
-    writeFileSync(otherFile, "secret\n");
+    const otherFile = writeTestFile(otherDir, "secret.txt", "secret\n");
 
     try {
       const result = await handleRead({ file_path: otherFile, projectDir: testDir });

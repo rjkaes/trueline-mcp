@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { handleEdit } from "../../src/tools/edit.ts";
 import type { EditInput } from "../../src/tools/shared.ts";
 import { coerceParams } from "../../src/coerce.ts";
-import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, getText } from "../helpers.ts";
+import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, getText, writeTestFile } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -176,8 +176,7 @@ describe("handleEdit", () => {
   });
 
   test("preserves CRLF line endings after edit", async () => {
-    const crlfFile = join(testDir, "crlf.ts");
-    writeFileSync(crlfFile, "line 1\r\nline 2\r\nline 3\r\n");
+    const crlfFile = writeTestFile(testDir, "crlf.ts", "line 1\r\nline 2\r\nline 3\r\n");
 
     const lines = ["line 1", "line 2", "line 3"];
     const ref = issueTestRef(crlfFile, lines, 1, 3);
@@ -325,8 +324,7 @@ describe("handleEdit", () => {
   });
 
   test("preserves absence of trailing newline", async () => {
-    const noTrailingFile = join(testDir, "no-trailing.ts");
-    writeFileSync(noTrailingFile, "line 1\nline 2");
+    const noTrailingFile = writeTestFile(testDir, "no-trailing.ts", "line 1\nline 2");
 
     const lines = ["line 1", "line 2"];
     const ref = issueTestRef(noTrailingFile, lines, 1, 2);
@@ -343,8 +341,7 @@ describe("handleEdit", () => {
   });
 
   test("edits an empty file via insert-after with empty-file sentinel", async () => {
-    const emptyFile = join(testDir, "empty.ts");
-    writeFileSync(emptyFile, "");
+    const emptyFile = writeTestFile(testDir, "empty.ts", "");
 
     const emptyRef = "0-0/aaaaaa";
 
@@ -366,8 +363,7 @@ describe("handleEdit", () => {
   });
 
   test("skips write and reports no changes for no-op edit", async () => {
-    const filePath = join(testDir, "noop.txt");
-    writeFileSync(filePath, "aaa\nbbb\nccc\n");
+    const filePath = writeTestFile(testDir, "noop.txt", "aaa\nbbb\nccc\n");
     const { mtimeMs: before } = statSync(filePath);
 
     const lines = ["aaa", "bbb", "ccc"];
@@ -392,8 +388,7 @@ describe("handleEdit", () => {
   });
 
   test("checksum failure suggests narrow re-read when edit-target lines are unchanged", async () => {
-    const filePath = join(testDir, "stale-broad.txt");
-    writeFileSync(filePath, "aaa\nbbb\nccc\nddd\neee\n");
+    const filePath = writeTestFile(testDir, "stale-broad.txt", "aaa\nbbb\nccc\nddd\neee\n");
 
     const original = ["aaa", "bbb", "ccc", "ddd", "eee"];
     const ref = issueTestRef(filePath, original, 1, 5);
@@ -421,8 +416,7 @@ describe("handleEdit", () => {
   });
 
   test("checksum failure with changed edit-target lines gives standard error", async () => {
-    const filePath = join(testDir, "stale-target.txt");
-    writeFileSync(filePath, "aaa\nbbb\nccc\n");
+    const filePath = writeTestFile(testDir, "stale-target.txt", "aaa\nbbb\nccc\n");
 
     const original = ["aaa", "bbb", "ccc"];
     const ref = issueTestRef(filePath, original, 1, 3);
@@ -457,8 +451,7 @@ describe("handleEdit", () => {
         permissions: { deny: ["Edit(.env)", "Edit(**/.env)"] },
       }),
     );
-    const envFile = join(testDir, ".env");
-    writeFileSync(envFile, "SECRET=x\n");
+    const envFile = writeTestFile(testDir, ".env", "SECRET=x\n");
 
     const lines = ["SECRET=x"];
     const ref = issueTestRef(envFile, lines, 1, 1);

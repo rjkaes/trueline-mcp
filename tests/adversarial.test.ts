@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { handleEdit } from "../src/tools/edit.ts";
 import { handleRead } from "../src/tools/read.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
-import { lineHash, issueTestRef } from "./helpers.ts";
+import { lineHash, issueTestRef, writeTestFile } from "./helpers.ts";
 
 let testDir: string;
 
@@ -60,8 +60,7 @@ describe("Adversarial Tests", () => {
 
   test("path traversal via symlink to outside project", async () => {
     const outsideDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-outside-")));
-    const secretFile = join(outsideDir, "secret.txt");
-    writeFileSync(secretFile, "top secret");
+    const secretFile = writeTestFile(outsideDir, "secret.txt", "top secret");
 
     const linkPath = join(testDir, "evil-link.txt");
     symlinkSync(secretFile, linkPath);

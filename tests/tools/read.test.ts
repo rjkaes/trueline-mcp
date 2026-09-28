@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead, handleReadMulti } from "../../src/tools/read.ts";
-import { LINE_PATTERN } from "../helpers.ts";
+import { LINE_PATTERN, writeTestFile } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -90,8 +90,7 @@ describe("handleRead", () => {
 
   test("reads multiple disjoint ranges with separate checksums", async () => {
     const lines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
-    const multiFile = join(testDir, "multi.txt");
-    writeFileSync(multiFile, `${lines.join("\n")}\n`);
+    const multiFile = writeTestFile(testDir, "multi.txt", `${lines.join("\n")}\n`);
 
     const result = await handleRead({
       file_path: multiFile,
@@ -117,8 +116,7 @@ describe("handleRead", () => {
   });
 
   test("reads whole file when ranges omitted", async () => {
-    const wholeFile = join(testDir, "whole.txt");
-    writeFileSync(wholeFile, "a\nb\nc\n");
+    const wholeFile = writeTestFile(testDir, "whole.txt", "a\nb\nc\n");
     const result = await handleRead({
       file_path: wholeFile,
       projectDir: testDir,
@@ -131,8 +129,7 @@ describe("handleRead", () => {
   });
 
   test("merges overlapping ranges", async () => {
-    const overlapFile = join(testDir, "overlap.txt");
-    writeFileSync(overlapFile, "a\nb\nc\nd\n");
+    const overlapFile = writeTestFile(testDir, "overlap.txt", "a\nb\nc\nd\n");
     const result = await handleRead({
       file_path: overlapFile,
       ranges: ["1-3", "2-4"],
@@ -209,8 +206,7 @@ describe("handleRead", () => {
   });
 
   test("multi-file read returns all files with headers", async () => {
-    const file2 = join(testDir, "second.ts");
-    writeFileSync(file2, "export const x = 42;\n");
+    const file2 = writeTestFile(testDir, "second.ts", "export const x = 42;\n");
     const result = await handleReadMulti({
       file_paths: [testFile, file2],
       projectDir: testDir,
@@ -242,10 +238,12 @@ describe("handleRead", () => {
   });
 
   test("inline range syntax reads specific lines per file", async () => {
-    const shortFile = join(testDir, "short.ts");
-    writeFileSync(shortFile, "line1\nline2\nline3\n");
-    const longFile = join(testDir, "long.ts");
-    writeFileSync(longFile, `${Array.from({ length: 50 }, (_, i) => `line${i + 1}`).join("\n")}\n`);
+    const shortFile = writeTestFile(testDir, "short.ts", "line1\nline2\nline3\n");
+    const longFile = writeTestFile(
+      testDir,
+      "long.ts",
+      `${Array.from({ length: 50 }, (_, i) => `line${i + 1}`).join("\n")}\n`,
+    );
 
     const result = await handleReadMulti({
       file_paths: [`${longFile}:40-45`, `${shortFile}:2-3`],
@@ -265,8 +263,11 @@ describe("handleRead", () => {
   });
 
   test("inline range with multiple ranges per file", async () => {
-    const file = join(testDir, "multi-range.ts");
-    writeFileSync(file, `${Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")}\n`);
+    const file = writeTestFile(
+      testDir,
+      "multi-range.ts",
+      `${Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")}\n`,
+    );
 
     const result = await handleReadMulti({
       file_paths: [`${file}:1-3,18-20`],
@@ -283,8 +284,11 @@ describe("handleRead", () => {
   });
 
   test("top-level ranges still work for single file", async () => {
-    const file = join(testDir, "compat.ts");
-    writeFileSync(file, `${Array.from({ length: 10 }, (_, i) => `line${i + 1}`).join("\n")}\n`);
+    const file = writeTestFile(
+      testDir,
+      "compat.ts",
+      `${Array.from({ length: 10 }, (_, i) => `line${i + 1}`).join("\n")}\n`,
+    );
 
     const result = await handleReadMulti({
       file_paths: [file],
@@ -301,8 +305,7 @@ describe("handleRead", () => {
   });
 
   test("top-level ranges with multiple files returns error", async () => {
-    const file2 = join(testDir, "second2.ts");
-    writeFileSync(file2, "x\n");
+    const file2 = writeTestFile(testDir, "second2.ts", "x\n");
 
     const result = await handleReadMulti({
       file_paths: [testFile, file2],

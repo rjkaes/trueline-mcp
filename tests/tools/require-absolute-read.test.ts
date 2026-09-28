@@ -9,7 +9,7 @@ import { handleSearch } from "../../src/tools/search.ts";
 import { handleVerify } from "../../src/tools/verify.ts";
 import { handleDiff } from "../../src/tools/diff.ts";
 import { isAbsolutePathArg } from "../../src/tools/shared.ts";
-import { getText, issueTestRef } from "../helpers.ts";
+import { getText, issueTestRef, writeTestFile } from "../helpers.ts";
 
 // Regression coverage for: extending the trueline_edit requireAbsolutePath
 // guard (see edit-relative-path.test.ts) to the read-side MCP tools
@@ -291,8 +291,7 @@ describe("trueline_changes requireAbsolutePath guard", () => {
   });
 
   test('MCP mode: wildcard "*" still works (not treated as a relative path)', async () => {
-    const file = join(diffDir, "a.ts");
-    writeFileSync(file, "function a() { return 1; }\n");
+    const file = writeTestFile(diffDir, "a.ts", "function a() { return 1; }\n");
     git("add .");
     git("commit -m init");
     writeFileSync(file, "function a() { return 2; }\n");
@@ -307,8 +306,7 @@ describe("trueline_changes requireAbsolutePath guard", () => {
   });
 
   test("MCP mode rejects an explicit relative file_path", async () => {
-    const file = join(diffDir, "b.ts");
-    writeFileSync(file, "function b() { return 1; }\n");
+    const file = writeTestFile(diffDir, "b.ts", "function b() { return 1; }\n");
     git("add .");
     git("commit -m init");
     writeFileSync(file, "function b() { return 2; }\n");
@@ -323,8 +321,7 @@ describe("trueline_changes requireAbsolutePath guard", () => {
   });
 
   test("MCP mode accepts an absolute file_path", async () => {
-    const file = join(diffDir, "c.ts");
-    writeFileSync(file, "function c() { return 1; }\n");
+    const file = writeTestFile(diffDir, "c.ts", "function c() { return 1; }\n");
     git("add .");
     git("commit -m init");
     writeFileSync(file, "function c() { return 2; }\n");
@@ -339,8 +336,7 @@ describe("trueline_changes requireAbsolutePath guard", () => {
   });
 
   test("CLI mode (flag omitted) still accepts a relative file_path", async () => {
-    const file = join(diffDir, "d.ts");
-    writeFileSync(file, "function d() { return 1; }\n");
+    const file = writeTestFile(diffDir, "d.ts", "function d() { return 1; }\n");
     git("add .");
     git("commit -m init");
     writeFileSync(file, "function d() { return 2; }\n");

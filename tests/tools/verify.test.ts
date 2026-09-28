@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead } from "../../src/tools/read.ts";
 import { handleVerify } from "../../src/tools/verify.ts";
-import { getText, issueTestRef } from "../helpers.ts";
+import { getText, issueTestRef, writeTestFile } from "../helpers.ts";
 
 let testDir: string;
 
@@ -26,8 +26,7 @@ function extractInlineRefs(text: string): string[] {
 
 describe("trueline_verify", () => {
   test("all valid — refs match immediately after read", async () => {
-    const file = join(testDir, "valid.txt");
-    writeFileSync(file, "line one\nline two\nline three\n");
+    const file = writeTestFile(testDir, "valid.txt", "line one\nline two\nline three\n");
     const readResult = await handleRead({ file_path: file, projectDir: testDir });
     const refs = extractInlineRefs(getText(readResult));
     expect(refs.length).toBeGreaterThan(0);
@@ -37,8 +36,7 @@ describe("trueline_verify", () => {
   });
 
   test("stale after external modification", async () => {
-    const file = join(testDir, "stale.txt");
-    writeFileSync(file, "original content\n");
+    const file = writeTestFile(testDir, "stale.txt", "original content\n");
     const readResult = await handleRead({ file_path: file, projectDir: testDir });
     const refs = extractInlineRefs(getText(readResult));
 
@@ -53,8 +51,7 @@ describe("trueline_verify", () => {
 
   test("mixed valid and stale with two ranges", async () => {
     const content = `${Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n")}\n`;
-    const file = join(testDir, "mixed.txt");
-    writeFileSync(file, content);
+    const file = writeTestFile(testDir, "mixed.txt", content);
 
     // Read two non-adjacent ranges
     const readResult = await handleRead({
@@ -78,8 +75,7 @@ describe("trueline_verify", () => {
   });
 
   test("invalid ref format returns error", async () => {
-    const file = join(testDir, "any.txt");
-    writeFileSync(file, "hello\n");
+    const file = writeTestFile(testDir, "any.txt", "hello\n");
     const result = await handleVerify({
       file_path: file,
       refs: ["not-a-valid-ref"],
@@ -89,8 +85,7 @@ describe("trueline_verify", () => {
   });
 
   test("empty refs array returns error", async () => {
-    const file = join(testDir, "any2.txt");
-    writeFileSync(file, "hello\n");
+    const file = writeTestFile(testDir, "any2.txt", "hello\n");
     const result = await handleVerify({
       file_path: file,
       refs: [],
@@ -101,8 +96,7 @@ describe("trueline_verify", () => {
   });
 
   test("range past EOF is stale", async () => {
-    const file = join(testDir, "short.txt");
-    writeFileSync(file, "one\ntwo\n");
+    const file = writeTestFile(testDir, "short.txt", "one\ntwo\n");
     const lines = ["one", "two"];
     // Fabricate a ref claiming lines 1-100 (file only has 2 lines)
     const ref = issueTestRef(file, lines, 1, 100);
@@ -113,8 +107,7 @@ describe("trueline_verify", () => {
   });
 
   test("empty file ref is valid", async () => {
-    const file = join(testDir, "empty.txt");
-    writeFileSync(file, "");
+    const file = writeTestFile(testDir, "empty.txt", "");
     const readResult = await handleRead({ file_path: file, projectDir: testDir });
     const refs = extractInlineRefs(getText(readResult));
 
@@ -123,16 +116,14 @@ describe("trueline_verify", () => {
   });
 
   test("empty file sentinel 0-0/aaaaaa is valid for empty file", async () => {
-    const file = join(testDir, "empty2.txt");
-    writeFileSync(file, "");
+    const file = writeTestFile(testDir, "empty2.txt", "");
 
     const result = await handleVerify({ file_path: file, refs: ["0-0/aaaaaa"], projectDir: testDir });
     expect(getText(result)).toBe("all refs valid");
   });
 
   test("empty file ref becomes stale when content is added", async () => {
-    const file = join(testDir, "empty3.txt");
-    writeFileSync(file, "");
+    const file = writeTestFile(testDir, "empty3.txt", "");
     const readResult = await handleRead({ file_path: file, projectDir: testDir });
     const refs = extractInlineRefs(getText(readResult));
 

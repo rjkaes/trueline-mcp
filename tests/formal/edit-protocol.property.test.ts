@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, statSync, utimesSync, readdir
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { arbFileContent, arbLine } from "./arbitraries.ts";
-import { rangeChecksum, lineHash, issueTestRef } from "../helpers.ts";
+import { rangeChecksum, lineHash, issueTestRef, writeTestFile } from "../helpers.ts";
 import { streamingEdit } from "../../src/streaming-edit.ts";
 import type { StreamEditOp } from "../../src/streaming-edit.ts";
 import { parseChecksum } from "../../src/parse.ts";
@@ -28,8 +28,7 @@ beforeEach(() => {});
 
 /** Write lines to a temp file inside iterDir and return {path, lines, mtime}. */
 function writeTestLines(iterDir: string, lines: string[]): { path: string; lines: string[]; mtimeMs: number } {
-  const path = join(iterDir, "test.txt");
-  writeFileSync(path, `${lines.join("\n")}\n`);
+  const path = writeTestFile(iterDir, "test.txt", `${lines.join("\n")}\n`);
   const stat = statSync(path);
   return { path, lines, mtimeMs: stat.mtimeMs };
 }
@@ -649,8 +648,7 @@ describe("Conformance: TLA+ ApplyOps model vs streamingEdit", () => {
           const expectedLines = applyOps(lines, ops);
 
           // 2. Write the file and set up streamingEdit inputs
-          const path = join(iterDir, "test.txt");
-          writeFileSync(path, `${lines.join("\n")}\n`);
+          const path = writeTestFile(iterDir, "test.txt", `${lines.join("\n")}\n`);
           const mtime = statSync(path).mtimeMs;
 
           const checksumStr = rangeChecksum(lines, 1, lines.length);

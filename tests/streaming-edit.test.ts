@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { lineHash, rangeChecksum } from "./helpers.ts";
+import { lineHash, rangeChecksum, writeTestFile } from "./helpers.ts";
 import { type EditInput, validateEdits } from "../src/tools/shared.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
 
@@ -132,8 +132,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("replaces a single line", async () => {
-    const f = join(testDir, "replace.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir, "replace.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
@@ -145,8 +144,7 @@ describe("streamingEdit", () => {
   });
 
   test("replaces a range of lines", async () => {
-    const f = join(testDir, "range.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\nline 4\n");
+    const f = writeTestFile(testDir, "range.txt", "line 1\nline 2\nline 3\nline 4\n");
     const lines = ["line 1", "line 2", "line 3", "line 4"];
     const cs = rangeChecksum(lines, 1, 4);
     const h2 = lineHash("line 2");
@@ -158,8 +156,7 @@ describe("streamingEdit", () => {
   });
 
   test("deletes lines (empty replacement)", async () => {
-    const f = join(testDir, "delete.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir, "delete.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
@@ -170,8 +167,7 @@ describe("streamingEdit", () => {
   });
 
   test("returns correct full-file checksum after edit", async () => {
-    const f = join(testDir, "checksum.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir, "checksum.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
@@ -189,8 +185,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("inserts after a line", async () => {
-    const f = join(testDir, "insert.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir, "insert.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h1 = lineHash("line 1");
@@ -201,8 +196,7 @@ describe("streamingEdit", () => {
   });
 
   test("multiple insert_after at same anchor preserves input order", async () => {
-    const f = join(testDir, "multi-insert.txt");
-    writeFileSync(f, "anchor\nnext\n");
+    const f = writeTestFile(testDir, "multi-insert.txt", "anchor\nnext\n");
     const lines = ["anchor", "next"];
     const cs = rangeChecksum(lines, 1, 2);
     const h = lineHash("anchor");
@@ -221,8 +215,7 @@ describe("streamingEdit", () => {
   });
 
   test("insert_after at line 0 (prepend to file)", async () => {
-    const f = join(testDir, "prepend.txt");
-    writeFileSync(f, "existing\n");
+    const f = writeTestFile(testDir, "prepend.txt", "existing\n");
     const lines = ["existing"];
     const cs = rangeChecksum(lines, 1, 1);
 
@@ -236,8 +229,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("handles multiple replace edits", async () => {
-    const f = join(testDir, "multi-replace.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\nline 4\n");
+    const f = writeTestFile(testDir, "multi-replace.txt", "line 1\nline 2\nline 3\nline 4\n");
     const lines = ["line 1", "line 2", "line 3", "line 4"];
     const cs = rangeChecksum(lines, 1, 4);
     const h1 = lineHash("line 1");
@@ -256,8 +248,7 @@ describe("streamingEdit", () => {
   });
 
   test("handles replace + insert_after in same batch", async () => {
-    const f = join(testDir, "mixed-ops.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir, "mixed-ops.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h1 = lineHash("line 1");
@@ -280,8 +271,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("rejects stale checksum", async () => {
-    const f = join(testDir, "stale.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir, "stale.txt", "line 1\nline 2\nline 3\n");
     const { mtimeMs } = statSync(f);
 
     const validated = validateEdits([{ ref: refFromChecksum("1-3/aaaaaa", f), range: "aa1-aa1", content: "nope" }]);
@@ -293,8 +283,7 @@ describe("streamingEdit", () => {
   });
 
   test("rejects wrong line hash at boundary", async () => {
-    const f = join(testDir, "bad-hash.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir, "bad-hash.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const { mtimeMs } = statSync(f);
@@ -308,8 +297,7 @@ describe("streamingEdit", () => {
   });
 
   test("rejects checksum range exceeding file length", async () => {
-    const f = join(testDir, "short.txt");
-    writeFileSync(f, "only\n");
+    const f = writeTestFile(testDir, "short.txt", "only\n");
     const { mtimeMs } = statSync(f);
     const h = lineHash("only");
 
@@ -326,8 +314,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("preserves CRLF line endings in replacements", async () => {
-    const f = join(testDir, "crlf.txt");
-    writeFileSync(f, "line 1\r\nline 2\r\nline 3\r\n");
+    const f = writeTestFile(testDir, "crlf.txt", "line 1\r\nline 2\r\nline 3\r\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
@@ -340,8 +327,7 @@ describe("streamingEdit", () => {
   });
 
   test("preserves absence of trailing newline", async () => {
-    const f = join(testDir, "no-trail.txt");
-    writeFileSync(f, "line 1\nline 2");
+    const f = writeTestFile(testDir, "no-trail.txt", "line 1\nline 2");
     const lines = ["line 1", "line 2"];
     const cs = rangeChecksum(lines, 1, 2);
     const h1 = lineHash("line 1");
@@ -365,8 +351,7 @@ describe("streamingEdit", () => {
   });
 
   test("handles empty file with insert_after", async () => {
-    const f = join(testDir, "empty.txt");
-    writeFileSync(f, "");
+    const f = writeTestFile(testDir, "empty.txt", "");
     const { mtimeMs } = statSync(f);
 
     const validated = validateEdits([{ ref: refFromChecksum("0-0/aaaaaa", f), range: "+0", content: "new content" }]);
@@ -378,8 +363,7 @@ describe("streamingEdit", () => {
   });
 
   test("detects no-op and skips write", async () => {
-    const f = join(testDir, "noop.txt");
-    writeFileSync(f, "aaa\nbbb\nccc\n");
+    const f = writeTestFile(testDir, "noop.txt", "aaa\nbbb\nccc\n");
     const { mtimeMs: before } = statSync(f);
     const lines = ["aaa", "bbb", "ccc"];
     const cs = rangeChecksum(lines, 1, 3);
@@ -391,8 +375,7 @@ describe("streamingEdit", () => {
   });
 
   test("detects concurrent modification via mtime", async () => {
-    const f = join(testDir, "mtime.txt");
-    writeFileSync(f, "line 1\nline 2\n");
+    const f = writeTestFile(testDir, "mtime.txt", "line 1\nline 2\n");
     const { mtimeMs: oldMtime } = statSync(f);
 
     await new Promise((r) => setTimeout(r, 50));
@@ -413,8 +396,7 @@ describe("streamingEdit", () => {
   });
 
   test("error messages include file path", async () => {
-    const f = join(testDir, "path-in-error.txt");
-    writeFileSync(f, "line 1\nline 2\n");
+    const f = writeTestFile(testDir, "path-in-error.txt", "line 1\nline 2\n");
     const { mtimeMs } = statSync(f);
 
     // Wrong checksum to trigger a mismatch error

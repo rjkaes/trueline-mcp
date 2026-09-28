@@ -1,9 +1,9 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
-import { lineHash, issueTestRef } from "../helpers.ts";
+import { lineHash, issueTestRef, writeTestFile } from "../helpers.ts";
 
 let testDir: string;
 
@@ -16,8 +16,7 @@ afterEach(() => {
 });
 
 function setupFile(name: string, content: string) {
-  const f = join(testDir, name);
-  writeFileSync(f, content);
+  const f = writeTestFile(testDir, name, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0/aaaaaa";

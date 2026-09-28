@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { run } from "./helpers.ts";
 import { execFileSync } from "node:child_process";
+import { writeTestFile } from "../helpers.ts";
 
 const CLI = join(import.meta.dir, "..", "..", "src", "cli.ts");
 
@@ -36,8 +37,7 @@ function readRef(range: string): { ref: string; hashRange: string } {
 describe("edit subcommand", () => {
   test("golden path via @file: edits file content", () => {
     const { ref, hashRange } = readRef("2-2");
-    const editsFile = join(tmpDir, "edits.json");
-    writeFileSync(editsFile, JSON.stringify([{ ref, range: hashRange, content: "BETA" }]));
+    const editsFile = writeTestFile(tmpDir, "edits.json", JSON.stringify([{ ref, range: hashRange, content: "BETA" }]));
 
     const { exitCode } = run(tmpDir, "edit", testFile, "--edits", `@${editsFile}`);
     expect(exitCode).toBe(0);
@@ -46,8 +46,11 @@ describe("edit subcommand", () => {
 
   test("--dry-run: produces diff, does not modify file", () => {
     const { ref, hashRange } = readRef("1-1");
-    const editsFile = join(tmpDir, "edits-dry.json");
-    writeFileSync(editsFile, JSON.stringify([{ ref, range: hashRange, content: "ALPHA_NEW" }]));
+    const editsFile = writeTestFile(
+      tmpDir,
+      "edits-dry.json",
+      JSON.stringify([{ ref, range: hashRange, content: "ALPHA_NEW" }]),
+    );
 
     const { stdout, exitCode } = run(tmpDir, "edit", testFile, "--edits", `@${editsFile}`, "--dry-run");
     expect(exitCode).toBe(0);
@@ -112,8 +115,11 @@ describe("edit subcommand", () => {
 
   test("--json shape: {ok, result}", () => {
     const { ref, hashRange } = readRef("2-2");
-    const editsFile = join(tmpDir, "edits-json.json");
-    writeFileSync(editsFile, JSON.stringify([{ ref, range: hashRange, content: "BETA_JSON", action: "replace" }]));
+    const editsFile = writeTestFile(
+      tmpDir,
+      "edits-json.json",
+      JSON.stringify([{ ref, range: hashRange, content: "BETA_JSON", action: "replace" }]),
+    );
 
     const { stdout, exitCode } = run(tmpDir, "edit", testFile, "--edits", `@${editsFile}`, "--json");
     expect(exitCode).toBe(0);

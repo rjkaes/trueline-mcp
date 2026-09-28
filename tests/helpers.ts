@@ -62,26 +62,6 @@ export function lineHash(line: string): string {
 }
 
 /**
- * Compute a read-range checksum over raw byte buffers.
- *
- * Use this for non-UTF-8 test files where the raw bytes differ from
- * the UTF-8 encoding of the decoded string.
- */
-export function rawRangeChecksum(bufs: Buffer[], startLine: number, endLine: number): string {
-  let hash = FNV_OFFSET_BASIS;
-  let firstLetters = "";
-  let lastLetters = "";
-  for (let i = 0; i < bufs.length; i++) {
-    const h = fnv1aHashBytes(bufs[i], 0, bufs[i].length);
-    const letters = hashToLetters(h);
-    if (i === 0) firstLetters = letters;
-    lastLetters = letters;
-    hash = foldHash(hash, h);
-  }
-  return formatChecksumWithLetters(startLine, endLine, hash, firstLetters, lastLetters);
-}
-
-/**
  * Compute 2-letter content hash from raw bytes.
  */
 export function rawLineHash(buf: Buffer): string {

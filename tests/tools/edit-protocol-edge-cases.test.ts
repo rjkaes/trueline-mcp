@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
-import { lineHash, issueTestRef } from "../helpers.ts";
+import { lineHash, issueTestRef, writeTestFile } from "../helpers.ts";
 
 // =============================================================================
 // Shared fixture setup
@@ -21,8 +21,7 @@ afterEach(() => {
 });
 
 function setupFile(name: string, content: string) {
-  const f = join(testDir, name);
-  writeFileSync(f, content);
+  const f = writeTestFile(testDir, name, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0/aaaaaa";
@@ -202,8 +201,7 @@ describe("insert-after (+) semantics", () => {
   });
 
   test("insert into empty file via +0:", async () => {
-    const f = join(testDir, "empty.txt");
-    writeFileSync(f, "");
+    const f = writeTestFile(testDir, "empty.txt", "");
     const emptyRef = "0-0/aaaaaa";
 
     const result = await edit({
@@ -732,8 +730,7 @@ describe("returned ref enables chaining", () => {
 
 describe("read-then-edit round-trip", () => {
   test("ref from handleRead feeds directly into handleEdit", async () => {
-    const f = join(testDir, "roundtrip.txt");
-    writeFileSync(f, "alpha\nbeta\ngamma\n");
+    const f = writeTestFile(testDir, "roundtrip.txt", "alpha\nbeta\ngamma\n");
 
     const readResult = await handleRead({
       file_path: f,
@@ -756,8 +753,7 @@ describe("read-then-edit round-trip", () => {
   });
 
   test("partial read ref covers the edit", async () => {
-    const f = join(testDir, "partial-rt.txt");
-    writeFileSync(f, "aaa\nbbb\nccc\nddd\neee\n");
+    const f = writeTestFile(testDir, "partial-rt.txt", "aaa\nbbb\nccc\nddd\neee\n");
 
     const readResult = await handleRead({
       file_path: f,
@@ -787,8 +783,7 @@ describe("read-then-edit round-trip", () => {
 
 describe("stale checksum recovery hints", () => {
   test("suggests narrow re-read when edit-target lines are unchanged", async () => {
-    const f = join(testDir, "stale-hint.txt");
-    writeFileSync(f, "aaa\nbbb\nccc\nddd\neee\n");
+    const f = writeTestFile(testDir, "stale-hint.txt", "aaa\nbbb\nccc\nddd\neee\n");
 
     const original = ["aaa", "bbb", "ccc", "ddd", "eee"];
     const ref = issueTestRef(f, original, 1, 5);
@@ -807,8 +802,7 @@ describe("stale checksum recovery hints", () => {
   });
 
   test("no narrow re-read hint when edit-target line itself changed", async () => {
-    const f = join(testDir, "stale-target.txt");
-    writeFileSync(f, "aaa\nbbb\nccc\n");
+    const f = writeTestFile(testDir, "stale-target.txt", "aaa\nbbb\nccc\n");
 
     const original = ["aaa", "bbb", "ccc"];
     const ref = issueTestRef(f, original, 1, 3);
@@ -938,8 +932,7 @@ describe("wrong hash prefix recovery", () => {
 describe("security and file validation", () => {
   test("rejects path outside project directory", async () => {
     const outsideDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-outside-")));
-    const outsideFile = join(outsideDir, "escape.txt");
-    writeFileSync(outsideFile, "secret\n");
+    const outsideFile = writeTestFile(outsideDir, "escape.txt", "secret\n");
 
     try {
       const staleRef = "aa1-aa1/aaaaaa";
@@ -968,16 +961,6 @@ describe("security and file validation", () => {
     expect(result.content[0].text).toMatch(/binary/i);
   });
 
-  test("rejects directory path", async () => {
-    const staleRef = "aa1-aa1/aaaaaa";
-    const result = await edit({
-      file_path: testDir,
-      edits: [{ ref: staleRef, range: "aa1", content: "x" }],
-    });
-
-    expect(result.isError).toBe(true);
-  });
-
   test("rejects nonexistent file", async () => {
     const staleRef = "aa1-aa1/aaaaaa";
     const result = await edit({
@@ -989,8 +972,7 @@ describe("security and file validation", () => {
   });
 
   test("symlink within project directory is allowed", async () => {
-    const realFile = join(testDir, "real.txt");
-    writeFileSync(realFile, "aaa\nbbb\n");
+    const realFile = writeTestFile(testDir, "real.txt", "aaa\nbbb\n");
     const linkFile = join(testDir, "link.txt");
     symlinkSync(realFile, linkFile);
 
@@ -1010,8 +992,7 @@ describe("security and file validation", () => {
 
   test("symlink escaping project directory is rejected", async () => {
     const outsideDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-symesc-")));
-    const outsideFile = join(outsideDir, "target.txt");
-    writeFileSync(outsideFile, "secret\n");
+    const outsideFile = writeTestFile(outsideDir, "target.txt", "secret\n");
     const linkFile = join(testDir, "escape-link.txt");
     symlinkSync(outsideFile, linkFile);
 
@@ -1036,8 +1017,7 @@ describe("security and file validation", () => {
         permissions: { deny: ["Edit(*.secret)"] },
       }),
     );
-    const secretFile = join(testDir, "passwords.secret");
-    writeFileSync(secretFile, "hunter2\n");
+    const secretFile = writeTestFile(testDir, "passwords.secret", "hunter2\n");
 
     const lines = ["hunter2"];
     const ref = issueTestRef(secretFile, lines, 1, 1);

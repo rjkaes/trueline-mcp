@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { processHookEvent } from "../../hooks/pretooluse.js";
 import { clearCaches } from "../../src/security.js";
+import { writeTestFile } from "../helpers.ts";
 
 let projectDir: string;
 let smallFile: string;
@@ -128,8 +129,7 @@ describe("PreToolUse hook — Edit routing", () => {
     const claudeDir = join(projectDir, ".claude");
     mkdirSync(claudeDir, { recursive: true });
     const settingsPath = join(claudeDir, "settings.json");
-    const secretFile = join(projectDir, "data.secret");
-    writeFileSync(secretFile, "secret data\n".repeat(200));
+    const secretFile = writeTestFile(projectDir, "data.secret", "secret data\n".repeat(200));
     writeFileSync(settingsPath, JSON.stringify({ permissions: { deny: ["Read(**/*.secret)"] } }));
 
     try {
@@ -149,8 +149,7 @@ describe("PreToolUse hook — Edit routing", () => {
     const claudeDir = join(projectDir, ".claude");
     mkdirSync(claudeDir, { recursive: true });
     const settingsPath = join(claudeDir, "settings.json");
-    const lockedFile = join(projectDir, "locked.cfg");
-    writeFileSync(lockedFile, "config\n".repeat(200));
+    const lockedFile = writeTestFile(projectDir, "locked.cfg", "config\n".repeat(200));
     writeFileSync(settingsPath, JSON.stringify({ permissions: { deny: ["Edit(**/*.cfg)"] } }));
 
     try {

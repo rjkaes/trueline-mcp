@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { writeTestFile } from "./helpers.ts";
 
 const CLI = join(import.meta.dir, "..", "src", "cli.ts");
 
@@ -45,8 +46,7 @@ beforeAll(
     tmpDir = mkdtempSync(join(tmpdir(), "trueline-cli-"));
     testFile = join(tmpDir, "test.txt");
     writeFileSync(testFile, "line one\nline two\nline three\n");
-    const tsFile = join(tmpDir, "example.ts");
-    writeFileSync(tsFile, "export function hello(): string { return 'hi'; }\n");
+    const tsFile = writeTestFile(tmpDir, "example.ts", "export function hello(): string { return 'hi'; }\n");
     outlineResult = run("outline", tsFile);
   },
   { timeout: 30_000 },

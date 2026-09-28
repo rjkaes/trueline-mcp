@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { handleDiff } from "../../src/tools/diff.ts";
+import { writeTestFile } from "../helpers.ts";
 
 let testDir: string;
 
@@ -28,8 +29,7 @@ afterEach(() => {
 
 describe("semantic trueline_changes", () => {
   test("detects added function", async () => {
-    const file = join(testDir, "test.ts");
-    writeFileSync(file, "function foo() { return 1; }\n");
+    const file = writeTestFile(testDir, "test.ts", "function foo() { return 1; }\n");
     git("add test.ts");
     git("commit -m init");
     writeFileSync(file, "function foo() { return 1; }\nfunction bar() { return 2; }\n");
@@ -46,8 +46,7 @@ describe("semantic trueline_changes", () => {
   });
 
   test("detects removed function", async () => {
-    const file = join(testDir, "test.ts");
-    writeFileSync(file, "function foo() { return 1; }\nfunction bar() { return 2; }\n");
+    const file = writeTestFile(testDir, "test.ts", "function foo() { return 1; }\nfunction bar() { return 2; }\n");
     git("add test.ts");
     git("commit -m init");
     writeFileSync(file, "function foo() { return 1; }\n");
@@ -64,8 +63,7 @@ describe("semantic trueline_changes", () => {
   });
 
   test("detects logic modification", async () => {
-    const file = join(testDir, "test.ts");
-    writeFileSync(file, "function foo() {\n  return 1;\n}\n");
+    const file = writeTestFile(testDir, "test.ts", "function foo() {\n  return 1;\n}\n");
     git("add test.ts");
     git("commit -m init");
     writeFileSync(file, "function foo() {\n  return 2;\n}\n");
@@ -82,8 +80,7 @@ describe("semantic trueline_changes", () => {
   });
 
   test("detects rename via body hash", async () => {
-    const file = join(testDir, "test.ts");
-    writeFileSync(file, "function oldName() {\n  return 42;\n}\n");
+    const file = writeTestFile(testDir, "test.ts", "function oldName() {\n  return 42;\n}\n");
     git("add test.ts");
     git("commit -m init");
     writeFileSync(file, "function newName() {\n  return 42;\n}\n");
@@ -101,8 +98,7 @@ describe("semantic trueline_changes", () => {
   });
 
   test("handles untracked file (all symbols are Added)", async () => {
-    const file = join(testDir, "new.ts");
-    writeFileSync(file, "function fresh() { return 1; }\n");
+    const file = writeTestFile(testDir, "new.ts", "function fresh() { return 1; }\n");
 
     const result = await handleDiff({
       file_paths: [file],
@@ -116,8 +112,7 @@ describe("semantic trueline_changes", () => {
   });
 
   test("reports unsupported file type", async () => {
-    const file = join(testDir, "data.json");
-    writeFileSync(file, '{"key": "value"}\n');
+    const file = writeTestFile(testDir, "data.json", '{"key": "value"}\n');
     git("add data.json");
     git("commit -m init");
     writeFileSync(file, '{"key": "changed"}\n');
@@ -154,8 +149,7 @@ describe("semantic trueline_changes", () => {
   });
 
   test("no structural changes returns appropriate message", async () => {
-    const file = join(testDir, "test.ts");
-    writeFileSync(file, "function foo() {\n  return 1;\n}\n");
+    const file = writeTestFile(testDir, "test.ts", "function foo() {\n  return 1;\n}\n");
     git("add test.ts");
     git("commit -m init");
     // Only whitespace change (collapse mode)
