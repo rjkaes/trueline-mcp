@@ -1,4 +1,3 @@
-import { realpath } from "node:fs/promises";
 import { z } from "zod";
 import pkg from "../package.json";
 import type { ToolResult } from "./tools/types.ts";
@@ -11,7 +10,7 @@ import { handleSearch } from "./tools/search.ts";
 import { handleVerify } from "./tools/verify.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
 import { coerceParams } from "./coerce.ts";
-import { resolveAllowedDirs } from "./allowed-dirs.ts";
+import { resolveProjectDirs } from "./allowed-dirs.ts";
 
 // =============================================================================
 // JSON-RPC types
@@ -133,10 +132,7 @@ const INVALID_PARAMS = -32602;
 // Project directory and allowed paths
 // =============================================================================
 
-const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
-const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
-
-const allowedDirs = await resolveAllowedDirs();
+const { projectDir, allowedDirs } = await resolveProjectDirs();
 
 // =============================================================================
 // Zod schemas — used only for validation inside handlers, never serialized

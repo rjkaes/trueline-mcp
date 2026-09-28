@@ -37,3 +37,15 @@ export async function resolveAllowedDirs(): Promise<string[]> {
 
   return dirs;
 }
+
+/**
+ * Resolve projectDir (from CLAUDE_PROJECT_DIR or cwd, realpath'd) and the
+ * allowed-dirs list. Shared by the MCP server and every CLI subcommand so
+ * they agree on the same project root and security boundary.
+ */
+export async function resolveProjectDirs(): Promise<{ projectDir: string; allowedDirs: string[] }> {
+  const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+  const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
+  const allowedDirs = await resolveAllowedDirs();
+  return { projectDir, allowedDirs };
+}

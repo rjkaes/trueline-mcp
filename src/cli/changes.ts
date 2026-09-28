@@ -1,6 +1,5 @@
 import { defineCommand } from "citty";
-import { realpath } from "node:fs/promises";
-import { resolveAllowedDirs } from "../allowed-dirs.ts";
+import { resolveProjectDirs } from "../allowed-dirs.ts";
 import { handleDiff } from "../tools/diff.ts";
 import { emitResult } from "./io.ts";
 
@@ -25,9 +24,7 @@ export default defineCommand({
     // No paths → diff all changed files (handler treats "*" as sentinel)
     const filePaths = paths.length > 0 ? paths : ["*"];
 
-    const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
-    const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
-    const allowedDirs = await resolveAllowedDirs();
+    const { projectDir, allowedDirs } = await resolveProjectDirs();
 
     const result = await handleDiff({
       file_paths: filePaths,

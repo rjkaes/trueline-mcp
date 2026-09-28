@@ -1,6 +1,5 @@
 import { defineCommand } from "citty";
-import { realpath } from "node:fs/promises";
-import { resolveAllowedDirs } from "../allowed-dirs.ts";
+import { resolveProjectDirs } from "../allowed-dirs.ts";
 import { handleReadMulti } from "../tools/read.ts";
 import { emitResult, emitUsageError, UsageError, validateRangesConflict } from "./io.ts";
 
@@ -46,9 +45,7 @@ export default defineCommand({
       return;
     }
 
-    const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
-    const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
-    const allowedDirs = await resolveAllowedDirs();
+    const { projectDir, allowedDirs } = await resolveProjectDirs();
 
     const result = await handleReadMulti({
       file_paths: paths,

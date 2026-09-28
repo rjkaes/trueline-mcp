@@ -1,6 +1,5 @@
 import { defineCommand } from "citty";
-import { realpath } from "node:fs/promises";
-import { resolveAllowedDirs } from "../allowed-dirs.ts";
+import { resolveProjectDirs } from "../allowed-dirs.ts";
 import { handleSearch } from "../tools/search.ts";
 import { emitResult, emitUsageError, UsageError } from "./io.ts";
 
@@ -67,9 +66,7 @@ export default defineCommand({
     const maxMatchLines =
       args["max-match-lines"] !== undefined ? Number.parseInt(args["max-match-lines"], 10) : undefined;
 
-    const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
-    const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
-    const allowedDirs = await resolveAllowedDirs();
+    const { projectDir, allowedDirs } = await resolveProjectDirs();
 
     const result = await handleSearch({
       pattern,

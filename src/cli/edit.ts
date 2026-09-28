@@ -1,6 +1,5 @@
 import { defineCommand } from "citty";
-import { realpath } from "node:fs/promises";
-import { resolveAllowedDirs } from "../allowed-dirs.ts";
+import { resolveProjectDirs } from "../allowed-dirs.ts";
 import { handleEdit } from "../tools/edit.ts";
 import type { EditInput } from "../tools/shared.ts";
 import { emitResult, emitUsageError, loadAtOrDashOrLiteral, parseEditsArg, UsageError } from "./io.ts";
@@ -117,9 +116,7 @@ export default defineCommand({
 
     const contextLines = args["context-lines"] !== undefined ? Number.parseInt(args["context-lines"], 10) : undefined;
 
-    const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
-    const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
-    const allowedDirs = await resolveAllowedDirs();
+    const { projectDir, allowedDirs } = await resolveProjectDirs();
 
     const result = await handleEdit({
       file_path: filePath,
