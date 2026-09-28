@@ -14,9 +14,11 @@ import { delimiter, join } from "node:path";
  * Always returns an empty array — callers are expected to prepend projectDir
  * themselves (so the server can pass it separately from the allow-list).
  * The ~/.claude/ entry is added only when running under Claude Code.
+ * @returns {Promise<string[]>}
  */
-async function resolveAllowedDirs(): Promise<string[]> {
-  const dirs: string[] = [];
+export async function resolveAllowedDirs() {
+  /** @type {string[]} */
+  const dirs = [];
 
   // ~/.claude/ — only relevant for Claude Code
   if (process.env.CLAUDE_CODE_ENTRYPOINT) {
@@ -42,8 +44,9 @@ async function resolveAllowedDirs(): Promise<string[]> {
  * Resolve projectDir (from CLAUDE_PROJECT_DIR or cwd, realpath'd) and the
  * allowed-dirs list. Shared by the MCP server and every CLI subcommand so
  * they agree on the same project root and security boundary.
+ * @returns {Promise<{ projectDir: string; allowedDirs: string[] }>}
  */
-export async function resolveProjectDirs(): Promise<{ projectDir: string; allowedDirs: string[] }> {
+export async function resolveProjectDirs() {
   const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
   const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
   const allowedDirs = await resolveAllowedDirs();

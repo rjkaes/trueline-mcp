@@ -32,6 +32,7 @@
     "scripts/resolve-binary.cjs",
     "hooks/",
     "configs/",
+    "src/allowed-dirs.js",
     "src/security.js",
     "README.md",
     "INSTALL.md",

@@ -6,9 +6,9 @@
 // serve a given file path. Mirrors the containment + deny-pattern checks in
 // src/tools/shared.ts. Platform-agnostic: caller passes the project directory.
 
-import { resolve, sep, delimiter } from "node:path";
-import { homedir } from "node:os";
+import { resolve, sep } from "node:path";
 import { realpath } from "node:fs/promises";
+import { resolveAllowedDirs } from "../../src/allowed-dirs.js";
 import { readToolDenyPatterns, evaluateFilePath } from "../../src/security.js";
 
 /**
@@ -28,24 +28,8 @@ export async function createAccessChecker(projectDir) {
     return async () => false;
   }
 
-  // Build allowed dirs list (same logic as server.ts).
-  const allowedBases = [realBase];
-
-  // ~/.claude/ — only relevant when running under Claude Code.
-  if (process.env.CLAUDE_PROJECT_DIR) {
-    try {
-      allowedBases.push(await realpath(resolve(homedir(), ".claude")));
-    } catch {}
-  }
-
-  const extraDirs = process.env.TRUELINE_ALLOWED_DIRS;
-  if (extraDirs) {
-    for (const raw of extraDirs.split(delimiter).filter(Boolean)) {
-      try {
-        allowedBases.push(await realpath(raw));
-      } catch {}
-    }
-  }
+  // Reuse the server/CLI allow-list resolver so the hook doesn't drift.
+  const allowedBases = [realBase, ...(await resolveAllowedDirs())];
 
   /**
    * @param {string} filePath

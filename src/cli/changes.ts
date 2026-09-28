@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { resolveProjectDirs } from "../allowed-dirs.ts";
+import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleDiff } from "../tools/diff.ts";
 import { emitResult } from "./io.ts";
 

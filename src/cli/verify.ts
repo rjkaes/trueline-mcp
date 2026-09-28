@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { resolveProjectDirs } from "../allowed-dirs.ts";
+import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleVerify } from "../tools/verify.ts";
 import { emitResult, emitUsageError, parseRefsArg, UsageError } from "./io.ts";
 

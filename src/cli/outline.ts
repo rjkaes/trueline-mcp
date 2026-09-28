@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { resolveProjectDirs } from "../allowed-dirs.ts";
+import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleOutline } from "../tools/outline.ts";
 import { emitResult, UsageError, emitUsageError } from "./io.ts";
 

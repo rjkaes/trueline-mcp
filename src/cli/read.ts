@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { resolveProjectDirs } from "../allowed-dirs.ts";
+import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleReadMulti } from "../tools/read.ts";
 import { emitResult, emitUsageError, UsageError, validateRangesConflict } from "./io.ts";
 

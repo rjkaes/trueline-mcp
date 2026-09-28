@@ -11,7 +11,7 @@ import { handleSearch } from "./tools/search.ts";
 import { handleVerify } from "./tools/verify.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
 import { coerceParams } from "./coerce.ts";
-import { resolveProjectDirs } from "./allowed-dirs.ts";
+import { resolveProjectDirs } from "./allowed-dirs.js";
 
 // =============================================================================
 // JSON-RPC types

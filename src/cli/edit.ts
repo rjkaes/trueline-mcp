@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { resolveProjectDirs } from "../allowed-dirs.ts";
+import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleEdit } from "../tools/edit.ts";
 import type { EditInput } from "../tools/shared.ts";
 import { emitResult, emitUsageError, loadAtOrDashOrLiteral, parseEditsArg, UsageError } from "./io.ts";
