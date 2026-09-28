@@ -95,14 +95,10 @@ export function filterAbsolutePaths(
 // Path validation: resolution, deny check, stat
 // ==============================================================================
 
-type ValidatePathOk = {
-  ok: true;
-  resolvedPath: string;
-  size: number;
-  mtimeMs: number;
-};
-type ValidatePathErr = { ok: false; error: ToolResult };
-type ValidatePathResult = ValidatePathOk | ValidatePathErr;
+// Shared ok/error result shape for validatePath and validateEdits.
+type Result<T> = ({ ok: true } & T) | { ok: false; error: ToolResult };
+
+type ValidatePathResult = Result<{ resolvedPath: string; size: number; mtimeMs: number }>;
 
 /**
  * Validate and resolve a file path without reading its content.
@@ -227,14 +223,7 @@ export function binaryFileError(filePath: string): ToolResult {
 
 import type { StreamEditOp } from "../streaming-edit.ts";
 
-type ValidateEditsOk = {
-  ok: true;
-  ops: StreamEditOp[];
-  checksumRefs: ChecksumRef[];
-  warnings: string[];
-};
-type ValidateEditsErr = { ok: false; error: ToolResult };
-type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
+type ValidateEditsResult = Result<{ ops: StreamEditOp[]; checksumRefs: ChecksumRef[]; warnings: string[] }>;
 
 /**
  * Validate edit inputs without reading file content.
