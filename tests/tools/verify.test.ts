@@ -135,6 +135,15 @@ describe("trueline_verify", () => {
     expect(text).toContain("- ");
   });
 
+  test("empty file sentinel against a multi-line file does not misreport the line count", async () => {
+    const file = writeTestFile(testDir, "sentinel-stale.txt", "one\ntwo\nthree\nfour\nfive\n");
+
+    const result = await handleVerify({ file_path: file, refs: ["0-0/aaaaaa"], projectDir: testDir });
+    const text = getText(result);
+    expect(text).not.toContain("1 lines");
+    expect(text).toContain("no longer empty");
+  });
+
   test("multiple refs in one call — all valid", async () => {
     const file = join(testDir, "multi.txt");
     const content = `${Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n")}\n`;

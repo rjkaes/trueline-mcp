@@ -86,7 +86,8 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
         results.push(`+ ${entry.rawRef}`);
       } else {
         allValid = false;
-        results.push(`- ${entry.rawRef} (file now has ${totalLines} lines)`);
+        // No line count: the scan stops after line 1 when only sentinel refs remain.
+        results.push(`- ${entry.rawRef} (file is no longer empty)`);
       }
       continue;
     }
