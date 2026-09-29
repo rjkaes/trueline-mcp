@@ -8,7 +8,7 @@
 
 import { splitLines } from "../line-splitter.ts";
 import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash } from "../hash.ts";
-import { parseChecksum } from "../parse.ts";
+import { type ChecksumRef, parseChecksum } from "../parse.ts";
 import {
   binaryFileError,
   isAbsolutePathArg,
@@ -22,14 +22,6 @@ import { errorResult, textResult, type ToolResult } from "./types.ts";
 interface VerifyParams extends ToolContext {
   file_path: string;
   refs: string[];
-}
-
-interface RefAcc {
-  rawRef: string;
-  startLine: number;
-  endLine: number;
-  expected: string;
-  hash: number;
 }
 
 export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
@@ -46,21 +38,11 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
-  const accs: RefAcc[] = [];
-  for (const rawRef of refs) {
-    let parsed: ReturnType<typeof parseChecksum>;
-    try {
-      parsed = parseChecksum(rawRef);
-    } catch (err: unknown) {
-      return errorResult((err as Error).message);
-    }
-    accs.push({
-      rawRef,
-      startLine: parsed.startLine,
-      endLine: parsed.endLine,
-      expected: parsed.hash,
-      hash: FNV_OFFSET_BASIS,
-    });
+  let accs: Array<ChecksumRef & { rawRef: string; acc: number }>;
+  try {
+    accs = refs.map((rawRef) => ({ rawRef, ...parseChecksum(rawRef), acc: FNV_OFFSET_BASIS }));
+  } catch (err: unknown) {
+    return errorResult((err as Error).message);
   }
 
   accs.sort((a, b) => a.startLine - b.startLine);
@@ -71,24 +53,24 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
 
   try {
     let accIdx = 0;
+    // Skip empty-file sentinel refs (startLine 0 sorts first)
+    while (accIdx < accs.length && accs[accIdx].startLine === 0) accIdx++;
     for await (const { lineBytes, lineNumber } of splitLines(validated.resolvedPath, { detectBinary: true })) {
       totalLines = lineNumber;
 
-      // Skip empty-file sentinel refs
-      while (accIdx < accs.length && accs[accIdx].startLine === 0) accIdx++;
       if (accIdx >= accs.length) break;
 
       if (lineNumber < accs[accIdx].startLine) continue;
 
-      while (accIdx < accs.length && accs[accIdx].startLine > 0 && lineNumber > accs[accIdx].endLine) accIdx++;
+      while (accIdx < accs.length && lineNumber > accs[accIdx].endLine) accIdx++;
       if (accIdx >= accs.length) break;
-      if (accs[accIdx].startLine > 0 && lineNumber < accs[accIdx].startLine) continue;
+      if (lineNumber < accs[accIdx].startLine) continue;
 
       const h = fnv1aHashBytes(lineBytes);
 
       for (let i = accIdx; i < accs.length && accs[i].startLine <= lineNumber; i++) {
-        if (accs[i].startLine > 0 && lineNumber <= accs[i].endLine) {
-          accs[i].hash = foldHash(accs[i].hash, h);
+        if (lineNumber <= accs[i].endLine) {
+          accs[i].acc = foldHash(accs[i].acc, h);
         }
       }
     }
@@ -97,31 +79,31 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
     throw err;
   }
 
-  for (const acc of accs) {
+  for (const entry of accs) {
     // Empty-file sentinel
-    if (acc.startLine === 0 && acc.endLine === 0) {
-      if (totalLines === 0 && acc.expected === "aaaaaa") {
-        results.push(`+ ${acc.rawRef}`);
+    if (entry.startLine === 0 && entry.endLine === 0) {
+      if (totalLines === 0 && entry.hash === "aaaaaa") {
+        results.push(`+ ${entry.rawRef}`);
       } else {
         allValid = false;
-        results.push(`- ${acc.rawRef} (file now has ${totalLines} lines)`);
+        results.push(`- ${entry.rawRef} (file now has ${totalLines} lines)`);
       }
       continue;
     }
 
     // Range extends past EOF
-    if (acc.startLine > totalLines || acc.endLine > totalLines) {
+    if (entry.startLine > totalLines || entry.endLine > totalLines) {
       allValid = false;
-      results.push(`- ${acc.rawRef} (range past EOF, file has ${totalLines} lines)`);
+      results.push(`- ${entry.rawRef} (range past EOF, file has ${totalLines} lines)`);
       continue;
     }
 
-    const actual = checksumToLetters(acc.hash);
-    if (actual === acc.expected) {
-      results.push(`+ ${acc.rawRef}`);
+    const actual = checksumToLetters(entry.acc);
+    if (actual === entry.hash) {
+      results.push(`+ ${entry.rawRef}`);
     } else {
       allValid = false;
-      results.push(`- ${acc.rawRef} (checksum mismatch)`);
+      results.push(`- ${entry.rawRef} (checksum mismatch)`);
     }
   }
 
