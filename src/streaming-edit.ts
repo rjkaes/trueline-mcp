@@ -78,12 +78,12 @@ export async function streamingEdit(
   // Map from line number to list of ops starting at that line
   const opsByStartLine = Map.groupBy(ops, (op) => op.startLine);
 
-  // Per-checksum-ref accumulators (sorted by startLine from validateEdits)
+  // Per-checksum-ref accumulators (sorted by startLine from validateEdits, which
+  // also fixes the order stale refs are reported in after the stream)
   const csAccumulators = checksumRefs.map((ref) => ({
     ref,
     hash: FNV_OFFSET_BASIS,
   }));
-  let csIdx = 0;
 
   // ---- Temp file setup ----
   const dir = dirname(resolvedPath);
@@ -276,17 +276,12 @@ export async function streamingEdit(
       const lineH = fnv1aHashBytes(lineBytes);
       const letters = hashToLetters(lineH);
 
-      // Feed into checksum accumulators. Overlapping ranges are supported:
-      // advance csIdx past fully consumed accumulators, then fold lineH into
-      // every accumulator whose range covers this line.
-      while (csIdx < csAccumulators.length && csAccumulators[csIdx].ref.endLine < lineNumber) {
-        csIdx++;
-      }
-      for (let ci = csIdx; ci < csAccumulators.length; ci++) {
-        const acc = csAccumulators[ci];
-        if (lineNumber < acc.ref.startLine) break;
-        if (lineNumber > acc.ref.endLine) continue;
-        acc.hash = foldHash(acc.hash, lineH);
+      // Fold lineH into every accumulator whose range covers this line.
+      // Ranges may overlap.
+      for (const acc of csAccumulators) {
+        if (lineNumber >= acc.ref.startLine && lineNumber <= acc.ref.endLine) {
+          acc.hash = foldHash(acc.hash, lineH);
+        }
       }
 
       // Check if we're inside an active replace range (skipping lines)
