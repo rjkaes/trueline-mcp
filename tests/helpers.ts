@@ -9,24 +9,9 @@ import {
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 
-function formatChecksumWithLetters(
-  startLine: number,
-  endLine: number,
-  hash: number,
-  startLetters: string,
-  endLetters: string,
-): string {
-  return `${startLetters}${startLine}-${endLetters}${endLine}/${checksumToLetters(hash)}`;
-}
-
-/**
- * Compute a read-range checksum over a slice of file lines.
- *
- * Test-only helper — production code computes checksums inline during
- * streaming reads. Tests need a standalone version to fabricate valid
- * checksum strings for `handleEdit` / `handleDiff` inputs.
- */
-export function rangeChecksum(lines: string[], startLine: number, endLine: number): string {
+// Fold loop shared by rangeChecksum (prints the clamped end line) and
+// issueTestRef (prints endLine as passed).
+function foldRange(lines: string[], startLine: number, endLine: number) {
   let hash = FNV_OFFSET_BASIS;
   const effectiveEnd = Math.min(endLine, lines.length);
   let firstLetters = "";
@@ -38,7 +23,19 @@ export function rangeChecksum(lines: string[], startLine: number, endLine: numbe
     lastLetters = letters;
     hash = foldHash(hash, h);
   }
-  return formatChecksumWithLetters(startLine, effectiveEnd, hash, firstLetters, lastLetters);
+  return { hash, firstLetters, lastLetters, effectiveEnd };
+}
+
+/**
+ * Compute a read-range checksum over a slice of file lines.
+ *
+ * Test-only helper — production code computes checksums inline during
+ * streaming reads. Tests need a standalone version to fabricate valid
+ * checksum strings for `handleEdit` / `handleDiff` inputs.
+ */
+export function rangeChecksum(lines: string[], startLine: number, endLine: number): string {
+  const { hash, firstLetters, lastLetters, effectiveEnd } = foldRange(lines, startLine, endLine);
+  return `${firstLetters}${startLine}-${lastLetters}${effectiveEnd}/${checksumToLetters(hash)}`;
 }
 
 /**
@@ -94,25 +91,15 @@ export function writeTestFile(testDir: string, name: string, content: string): s
  * Compute an inline ref string for a test file range.
  * Returns "ab.N-cd.M:efghij" format used by trueline_read/trueline_search.
  */
-export function issueTestRef(_filePath: string, lines: string[], startLine: number, endLine: number): string {
-  let hash = FNV_OFFSET_BASIS;
-  const effectiveEnd = Math.min(endLine, lines.length);
-  let firstLetters = "";
-  let lastLetters = "";
-  for (let i = startLine - 1; i < effectiveEnd; i++) {
-    const h = fnv1aHash(lines[i]);
-    if (i === startLine - 1) firstLetters = hashToLetters(h);
-    lastLetters = hashToLetters(h);
-    hash = foldHash(hash, h);
-  }
-  const ck = checksumToLetters(hash);
-  return `${firstLetters}${startLine}-${lastLetters}${endLine}/${ck}`;
+export function issueTestRef(lines: string[], startLine: number, endLine: number): string {
+  const { hash, firstLetters, lastLetters } = foldRange(lines, startLine, endLine);
+  return `${firstLetters}${startLine}-${lastLetters}${endLine}/${checksumToLetters(hash)}`;
 }
 
 /**
  * Compute an inline ref string for a raw byte buffer range.
  */
-export function issueTestRefRaw(_filePath: string, bufs: Buffer[], startLine: number, endLine: number): string {
+export function issueTestRefRaw(bufs: Buffer[], startLine: number, endLine: number): string {
   let hash = FNV_OFFSET_BASIS;
   let firstLetters = "";
   let lastLetters = "";

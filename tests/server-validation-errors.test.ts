@@ -59,7 +59,7 @@ describe("tool param validation errors", () => {
       retryConfigPath = join(fixtureDir, "retry-config.ts");
       const lines = ["export const maxRetries = 3;", "export const backoffMs = 250;"];
       writeFileSync(retryConfigPath, `${lines.join("\n")}\n`);
-      retryConfigRef = issueTestRef(retryConfigPath, lines, 1, 2);
+      retryConfigRef = issueTestRef(lines, 1, 2);
     });
 
     afterAll(() => {

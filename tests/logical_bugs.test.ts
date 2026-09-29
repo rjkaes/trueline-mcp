@@ -28,7 +28,7 @@ describe("logical bugs and edge cases", () => {
     writeFileSync(f, content);
 
     const lines = ["line1", "line2", "line3", "line4", "line5"];
-    const ref = issueTestRef(f, lines, 1, 5);
+    const ref = issueTestRef(lines, 1, 5);
 
     // Edit 1: change line 1 (to trigger a diff)
     // Edit 2: no-op change line 3
@@ -67,7 +67,7 @@ describe("logical bugs and edge cases", () => {
   test("insertAfter at line 0 on CRLF file incorrectly uses LF (KNOWN BUG)", async () => {
     const f = writeTestFile(testDir, "prepend-crlf.txt", "existing\r\n");
 
-    const ref = issueTestRef(f, ["existing"], 1, 1);
+    const ref = issueTestRef(["existing"], 1, 1);
 
     await handleEdit({
       file_path: f,
@@ -133,7 +133,7 @@ describe("logical bugs and edge cases", () => {
     writeFileSync(f, content);
 
     const lines = ["line1", "line2", "line3", "line4", "line5"];
-    const ref = issueTestRef(f, lines, 1, 5);
+    const ref = issueTestRef(lines, 1, 5);
 
     // Modify file externally but keep line 4 unchanged
     writeFileSync(f, "line1\nline2\nCHANGED\nline4\nline5\n");

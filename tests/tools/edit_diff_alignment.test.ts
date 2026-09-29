@@ -28,7 +28,7 @@ describe("unified diff alignment", () => {
   test("keeps a retained line as context when a line is added beside it", async () => {
     writeFileSync(testFile, "class Tenants {\n  const a = 70;\n  return a;\n}\n");
     const lines = ["class Tenants {", "  const a = 70;", "  return a;", "}"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("  const a = 70;");
 
     const result = await handleEdit({
@@ -49,7 +49,7 @@ describe("unified diff alignment", () => {
   test("keeps a retained trailing line as context when a line is added above it", async () => {
     writeFileSync(testFile, "alpha\nomega\n");
     const lines = ["alpha", "omega"];
-    const ref = issueTestRef(testFile, lines, 1, 2);
+    const ref = issueTestRef(lines, 1, 2);
     const h2 = lineHash("omega");
 
     const result = await handleEdit({
@@ -69,7 +69,7 @@ describe("unified diff alignment", () => {
   test("shows unchanged interior lines of a replaced block as context", async () => {
     writeFileSync(testFile, "alpha\nbravo\ncharlie\ndelta\necho\n");
     const lines = ["alpha", "bravo", "charlie", "delta", "echo"];
-    const ref = issueTestRef(testFile, lines, 1, 5);
+    const ref = issueTestRef(lines, 1, 5);
     const h1 = lineHash("alpha");
     const h5 = lineHash("echo");
 
@@ -96,7 +96,7 @@ describe("unified diff alignment", () => {
   test("still reports a pure replacement as delete then insert", async () => {
     writeFileSync(testFile, "alpha\nbravo\n");
     const lines = ["alpha", "bravo"];
-    const ref = issueTestRef(testFile, lines, 1, 2);
+    const ref = issueTestRef(lines, 1, 2);
     const h1 = lineHash("alpha");
     const h2 = lineHash("bravo");
 

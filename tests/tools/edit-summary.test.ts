@@ -19,7 +19,7 @@ function setupFile(name: string, content: string) {
   const f = writeTestFile(testDir, name, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0/aaaaaa";
+  const ref = lines.length > 0 ? issueTestRef(lines, 1, lines.length) : "0-0/aaaaaa";
   return { path: f, lines, ref };
 }
 

@@ -23,7 +23,7 @@ function setupFile(name: string, content: string | Buffer) {
   const contentStr = typeof content === "string" ? content : content.toString("utf-8");
   const lines = contentStr.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : issueTestRef(f, [], 0, 0);
+  const ref = lines.length > 0 ? issueTestRef(lines, 1, lines.length) : issueTestRef([], 0, 0);
   return { path: f, lines, ref };
 }
 
@@ -238,9 +238,9 @@ describe("Adversarial Tests", () => {
   test("overlapping ref ranges (later ends earlier)", async () => {
     const { path, lines } = setupFile("overlap-cs.txt", "1\n2\n3\n4\n5\n");
     // ref1: lines 1-5
-    const ref1 = issueTestRef(path, lines, 1, 5);
+    const ref1 = issueTestRef(lines, 1, 5);
     // ref2: lines 2-4
-    const ref2 = issueTestRef(path, lines, 2, 4);
+    const ref2 = issueTestRef(lines, 2, 4);
 
     const result = await handleEdit({
       file_path: path,

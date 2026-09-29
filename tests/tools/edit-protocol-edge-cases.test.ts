@@ -24,7 +24,7 @@ function setupFile(name: string, content: string) {
   const f = writeTestFile(testDir, name, content);
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0/aaaaaa";
+  const ref = lines.length > 0 ? issueTestRef(lines, 1, lines.length) : "0-0/aaaaaa";
   return { path: f, lines, ref };
 }
 
@@ -317,7 +317,7 @@ describe("multi-edit batches", () => {
 describe("checksum coverage", () => {
   test("narrow checksum covering only the edited line works", async () => {
     const { path, lines } = setupFile("narrow.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    const narrowRef = issueTestRef(path, lines, 2, 4);
+    const narrowRef = issueTestRef(lines, 2, 4);
     const h3 = lineHash("ccc");
 
     const result = await edit({
@@ -332,7 +332,7 @@ describe("checksum coverage", () => {
   test("checksum range must cover all edits in batch", async () => {
     const { path, lines } = setupFile("partial.txt", "aaa\nbbb\nccc\nddd\neee\n");
     // Ref covers lines 1-3 but edit targets line 5
-    const narrowRef = issueTestRef(path, lines, 1, 3);
+    const narrowRef = issueTestRef(lines, 1, 3);
     const h5 = lineHash("eee");
 
     const result = await edit({
@@ -347,7 +347,7 @@ describe("checksum coverage", () => {
   test("checksum from partial read covers insert-after anchor line", async () => {
     const { path, lines } = setupFile("partial-ins.txt", "aaa\nbbb\nccc\n");
     // Only cover lines 1-2
-    const narrowRef = issueTestRef(path, lines, 1, 2);
+    const narrowRef = issueTestRef(lines, 1, 2);
     const h2 = lineHash("bbb");
 
     const result = await edit({
@@ -744,7 +744,7 @@ describe("stale checksum recovery hints", () => {
     const f = writeTestFile(testDir, "stale-hint.txt", "aaa\nbbb\nccc\nddd\neee\n");
 
     const original = ["aaa", "bbb", "ccc", "ddd", "eee"];
-    const ref = issueTestRef(f, original, 1, 5);
+    const ref = issueTestRef(original, 1, 5);
 
     // External modification of line 5, outside edit target
     writeFileSync(f, "aaa\nbbb\nccc\nddd\nEEE\n");
@@ -764,7 +764,7 @@ describe("stale checksum recovery hints", () => {
     const f = writeTestFile(testDir, "stale-target.txt", "aaa\nbbb\nccc\n");
 
     const original = ["aaa", "bbb", "ccc"];
-    const ref = issueTestRef(f, original, 1, 3);
+    const ref = issueTestRef(original, 1, 3);
 
     // External modification of line 2, which IS the edit target
     writeFileSync(f, "aaa\nBBB\nccc\n");
@@ -923,7 +923,7 @@ describe("security and file validation", () => {
 
     const lines = ["aaa", "bbb"];
     // Use realFile for the ref since symlinks resolve to the real path
-    const ref = issueTestRef(realFile, lines, 1, 2);
+    const ref = issueTestRef(lines, 1, 2);
     const h1 = lineHash("aaa");
 
     const result = await edit({
@@ -965,7 +965,7 @@ describe("security and file validation", () => {
     const secretFile = writeTestFile(testDir, "passwords.secret", "hunter2\n");
 
     const lines = ["hunter2"];
-    const ref = issueTestRef(secretFile, lines, 1, 1);
+    const ref = issueTestRef(lines, 1, 1);
     const h = lineHash("hunter2");
 
     const result = await edit({
@@ -993,7 +993,7 @@ describe("large file edits", () => {
 
     const target = "line 500";
     const h500 = lineHash(target);
-    const narrowRef = issueTestRef(path, lines, 498, 502);
+    const narrowRef = issueTestRef(lines, 498, 502);
 
     const result = await edit({
       file_path: path,
@@ -1013,7 +1013,7 @@ describe("large file edits", () => {
     const content = `${lines.join("\n")}\n`;
     const { path } = setupFile("scatter.txt", content);
 
-    const ref = issueTestRef(path, lines, 1, 500);
+    const ref = issueTestRef(lines, 1, 500);
 
     const result = await edit({
       file_path: path,

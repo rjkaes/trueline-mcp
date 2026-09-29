@@ -236,7 +236,7 @@ describe("trueline_search requireAbsolutePath guard", () => {
 
 describe("trueline_verify requireAbsolutePath guard", () => {
   test("MCP mode rejects a relative file_path", async () => {
-    const ref = issueTestRef(testFile, LINES, 1, 3);
+    const ref = issueTestRef(LINES, 1, 3);
     const result = await handleVerify({
       file_path: "target.ts",
       refs: [ref],
@@ -248,7 +248,7 @@ describe("trueline_verify requireAbsolutePath guard", () => {
   });
 
   test("MCP mode accepts an absolute file_path", async () => {
-    const ref = issueTestRef(testFile, LINES, 1, 3);
+    const ref = issueTestRef(LINES, 1, 3);
     const result = await handleVerify({
       file_path: testFile,
       refs: [ref],
@@ -260,7 +260,7 @@ describe("trueline_verify requireAbsolutePath guard", () => {
   });
 
   test("CLI mode (flag omitted) still accepts a relative file_path", async () => {
-    const ref = issueTestRef(testFile, LINES, 1, 3);
+    const ref = issueTestRef(LINES, 1, 3);
     const result = await handleVerify({
       file_path: "target.ts",
       refs: [ref],

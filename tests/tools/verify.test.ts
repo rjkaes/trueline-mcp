@@ -99,7 +99,7 @@ describe("trueline_verify", () => {
     const file = writeTestFile(testDir, "short.txt", "one\ntwo\n");
     const lines = ["one", "two"];
     // Fabricate a ref claiming lines 1-100 (file only has 2 lines)
-    const ref = issueTestRef(file, lines, 1, 100);
+    const ref = issueTestRef(lines, 1, 100);
 
     const result = await handleVerify({ file_path: file, refs: [ref], projectDir: testDir });
     const text = getText(result);

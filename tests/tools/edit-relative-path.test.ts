@@ -33,7 +33,7 @@ afterEach(() => {
 describe("handleEdit requireAbsolutePath guard", () => {
   test("MCP edit rejects a relative file_path", async () => {
     const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(testFile, lines, 1, 3);
+    const ref = issueTestRef(lines, 1, 3);
     const range = `${lineHash("line 1")}1`;
 
     const result = await handleEdit({
@@ -52,7 +52,7 @@ describe("handleEdit requireAbsolutePath guard", () => {
 
   test("MCP edit accepts an absolute file_path", async () => {
     const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(testFile, lines, 1, 3);
+    const ref = issueTestRef(lines, 1, 3);
     const range = `${lineHash("line 1")}1`;
 
     const result = await handleEdit({
@@ -79,7 +79,7 @@ describe("handleEdit requireAbsolutePath guard", () => {
       writeFileSync(worktreeFile, "AAA\nBBB\n");
 
       const lines = ["AAA", "BBB"];
-      const ref = issueTestRef(mainFile, lines, 1, 2);
+      const ref = issueTestRef(lines, 1, 2);
       const range = `${lineHash("AAA")}1`;
       const call = {
         file_path: "app.ts",

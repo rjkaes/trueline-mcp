@@ -22,7 +22,7 @@ function setupFile(name: string, content: string) {
   const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   // Remove trailing empty element if content ends with newline
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(f, lines, 1, lines.length) : "0-0/aaaaaa";
+  const ref = lines.length > 0 ? issueTestRef(lines, 1, lines.length) : "0-0/aaaaaa";
   return { path: f, lines, ref };
 }
 
@@ -427,7 +427,7 @@ describe("no-op detection", () => {
 describe("checksum validation", () => {
   test("narrow checksum covering only the edit range works", async () => {
     const { path, lines } = setupFile("narrow.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    const narrowRef = issueTestRef(path, lines, 2, 4);
+    const narrowRef = issueTestRef(lines, 2, 4);
 
     const result = await handleEdit({
       file_path: path,
@@ -447,7 +447,7 @@ describe("checksum validation", () => {
 
   test("checksum range must cover edit range — too narrow fails", async () => {
     const { path, lines } = setupFile("too-narrow.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    const narrowRef = issueTestRef(path, lines, 2, 3);
+    const narrowRef = issueTestRef(lines, 2, 3);
 
     const result = await handleEdit({
       file_path: path,
@@ -522,7 +522,7 @@ describe("line ending preservation", () => {
     const f = writeTestFile(testDir, "cr.txt", "aaa\rbbb\rccc\r");
 
     const lines = ["aaa", "bbb", "ccc"];
-    const ref = issueTestRef(f, lines, 1, 3);
+    const ref = issueTestRef(lines, 1, 3);
 
     const result = await handleEdit({
       file_path: f,
@@ -546,7 +546,7 @@ describe("line ending preservation", () => {
     const f = writeTestFile(testDir, "crlf-multi.txt", "aaa\r\nbbb\r\nccc\r\n");
 
     const lines = ["aaa", "bbb", "ccc"];
-    const ref = issueTestRef(f, lines, 1, 3);
+    const ref = issueTestRef(lines, 1, 3);
 
     const result = await handleEdit({
       file_path: f,
@@ -569,7 +569,7 @@ describe("line ending preservation", () => {
     const f = writeTestFile(testDir, "no-nl-insert.txt", "aaa\nbbb");
 
     const lines = ["aaa", "bbb"];
-    const ref = issueTestRef(f, lines, 1, 2);
+    const ref = issueTestRef(lines, 1, 2);
 
     const result = await handleEdit({
       file_path: f,

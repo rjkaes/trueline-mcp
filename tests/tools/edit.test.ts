@@ -25,7 +25,7 @@ afterEach(() => {
 describe("handleEdit", () => {
   test("replaces a range of lines", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
     const h3 = lineHash("line 3");
 
@@ -48,7 +48,7 @@ describe("handleEdit", () => {
 
   test("inserts after a line", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h1 = lineHash("line 1");
 
     const result = await handleEdit({
@@ -70,7 +70,7 @@ describe("handleEdit", () => {
 
   test("action insert_after inserts without + prefix", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h1 = lineHash("line 1");
 
     const result = await handleEdit({
@@ -93,7 +93,7 @@ describe("handleEdit", () => {
 
   test("action replace overrides + prefix", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h1 = lineHash("line 1");
 
     const result = await handleEdit({
@@ -116,7 +116,7 @@ describe("handleEdit", () => {
 
   test("action insert_after rejects multi-line range", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h1 = lineHash("line 1");
     const h2 = lineHash("line 2");
 
@@ -138,7 +138,7 @@ describe("handleEdit", () => {
 
   test("rejects stale checksum", async () => {
     // Issue a ref with wrong content to simulate stale checksum
-    const staleRef = issueTestRef(testFile, ["wrong", "content", "here", "now"], 1, 4);
+    const staleRef = issueTestRef(["wrong", "content", "here", "now"], 1, 4);
     const result = await handleEdit({
       file_path: testFile,
       edits: [
@@ -157,7 +157,7 @@ describe("handleEdit", () => {
 
   test("rejects wrong line hash", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
 
     const result = await handleEdit({
       file_path: testFile,
@@ -179,7 +179,7 @@ describe("handleEdit", () => {
     const crlfFile = writeTestFile(testDir, "crlf.ts", "line 1\r\nline 2\r\nline 3\r\n");
 
     const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(crlfFile, lines, 1, 3);
+    const ref = issueTestRef(lines, 1, 3);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
@@ -200,7 +200,7 @@ describe("handleEdit", () => {
     writeFileSync(mixedFile, "line 1\nline 2\r\nline 3\n");
 
     const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(mixedFile, lines, 1, 3);
+    const ref = issueTestRef(lines, 1, 3);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
@@ -220,7 +220,7 @@ describe("handleEdit", () => {
     writeFileSync(mixedFile, "line 1\r\nline 2\nline 3\r\n");
 
     const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(mixedFile, lines, 1, 3);
+    const ref = issueTestRef(lines, 1, 3);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
@@ -236,7 +236,7 @@ describe("handleEdit", () => {
 
   test("preserves LF line endings after edit (no CRLF introduced)", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
 
     await handleEdit({
@@ -273,7 +273,7 @@ describe("handleEdit", () => {
 
   test("rejects overlapping ranges", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h1 = lineHash("line 1");
     const h2 = lineHash("line 2");
 
@@ -291,7 +291,7 @@ describe("handleEdit", () => {
 
   test("rejects checksum that does not cover edit range", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const partialRef = issueTestRef(testFile, lines, 1, 2);
+    const partialRef = issueTestRef(lines, 1, 2);
     const h4 = lineHash("line 4");
 
     const result = await handleEdit({
@@ -314,7 +314,7 @@ describe("handleEdit", () => {
     const noTrailingFile = writeTestFile(testDir, "no-trailing.ts", "line 1\nline 2");
 
     const lines = ["line 1", "line 2"];
-    const ref = issueTestRef(noTrailingFile, lines, 1, 2);
+    const ref = issueTestRef(lines, 1, 2);
     const h1 = lineHash("line 1");
 
     const result = await handleEdit({
@@ -354,7 +354,7 @@ describe("handleEdit", () => {
     const { mtimeMs: before } = statSync(filePath);
 
     const lines = ["aaa", "bbb", "ccc"];
-    const ref = issueTestRef(filePath, lines, 1, 3);
+    const ref = issueTestRef(lines, 1, 3);
 
     const result = await handleEdit({
       file_path: filePath,
@@ -378,7 +378,7 @@ describe("handleEdit", () => {
     const filePath = writeTestFile(testDir, "stale-broad.txt", "aaa\nbbb\nccc\nddd\neee\n");
 
     const original = ["aaa", "bbb", "ccc", "ddd", "eee"];
-    const ref = issueTestRef(filePath, original, 1, 5);
+    const ref = issueTestRef(original, 1, 5);
 
     // Externally modify line 4, outside our edit target
     writeFileSync(filePath, "aaa\nbbb\nccc\nDDD\neee\n");
@@ -406,7 +406,7 @@ describe("handleEdit", () => {
     const filePath = writeTestFile(testDir, "stale-target.txt", "aaa\nbbb\nccc\n");
 
     const original = ["aaa", "bbb", "ccc"];
-    const ref = issueTestRef(filePath, original, 1, 3);
+    const ref = issueTestRef(original, 1, 3);
 
     // Externally modify line 2, which IS our edit target
     writeFileSync(filePath, "aaa\nBBB\nccc\n");
@@ -441,7 +441,7 @@ describe("handleEdit", () => {
     const envFile = writeTestFile(testDir, ".env", "SECRET=x\n");
 
     const lines = ["SECRET=x"];
-    const ref = issueTestRef(envFile, lines, 1, 1);
+    const ref = issueTestRef(lines, 1, 1);
     const h = lineHash("SECRET=x");
 
     const result = await handleEdit({
@@ -462,7 +462,7 @@ describe("handleEdit", () => {
     const latin1File = join(testDir, "latin1.txt");
     writeFileSync(latin1File, fileBytes);
 
-    const ref = issueTestRefRaw(latin1File, [line1, line2], 1, 2);
+    const ref = issueTestRefRaw([line1, line2], 1, 2);
     const h1 = rawLineHash(line1);
 
     const result = await handleEdit({
@@ -489,7 +489,7 @@ describe("handleEdit", () => {
     test("returns unified diff without modifying file", async () => {
       writeFileSync(testFile, "line 1\nline 2\nline 3\n");
       const lines = ["line 1", "line 2", "line 3"];
-      const ref = issueTestRef(testFile, lines, 1, 3);
+      const ref = issueTestRef(lines, 1, 3);
       const h2 = lineHash("line 2");
 
       const result = await handleEdit({
@@ -513,7 +513,7 @@ describe("handleEdit", () => {
     test("returns no-changes marker when edit is identity", async () => {
       writeFileSync(testFile, "line 1\nline 2\nline 3\n");
       const lines = ["line 1", "line 2", "line 3"];
-      const ref = issueTestRef(testFile, lines, 1, 3);
+      const ref = issueTestRef(lines, 1, 3);
       const h2 = lineHash("line 2");
 
       const result = await handleEdit({
@@ -527,7 +527,7 @@ describe("handleEdit", () => {
     });
 
     test("rejects stale checksum same as non-dry-run", async () => {
-      const staleRef = issueTestRef(testFile, ["wrong", "content", "here", "now"], 1, 4);
+      const staleRef = issueTestRef(["wrong", "content", "here", "now"], 1, 4);
       const result = await handleEdit({
         file_path: testFile,
         dry_run: true,
@@ -545,7 +545,7 @@ describe("handleEdit", () => {
 
   test("explicit range narrows edit within wider checksum", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
     const h3 = lineHash("line 3");
 
@@ -572,7 +572,7 @@ describe("handleEdit", () => {
     ["replace", [""], "line 1\n\nline 3\nline 4\n"],
     ["replace", ["replaced 2", ""], "line 1\nreplaced 2\n\nline 3\nline 4\n"],
   ])("%s line 2 with content %j", async (action, content, expected) => {
-    const ref = issueTestRef(testFile, ["line 1", "line 2", "line 3", "line 4"], 1, 4);
+    const ref = issueTestRef(["line 1", "line 2", "line 3", "line 4"], 1, 4);
     const coerced = coerceParams({
       edits: [{ ref, range: `${lineHash("line 2")}2`, content, action }],
     }) as { edits: EditInput[] };
@@ -585,7 +585,7 @@ describe("handleEdit", () => {
 
   test("dry_run: insert_after with empty content shows blank line in diff", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
@@ -607,7 +607,7 @@ describe("handleEdit", () => {
 
   test("warns when content contains hashLine identifiers", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
@@ -627,7 +627,7 @@ describe("handleEdit", () => {
 
   test("warns on multi-line content with embedded hashLine identifiers", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
     const h3 = lineHash("line 3");
 
@@ -645,7 +645,7 @@ describe("handleEdit", () => {
 
   test("allows content that resembles hashLine but has additional text", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
@@ -661,7 +661,7 @@ describe("handleEdit", () => {
 
   test("context_lines returns hashLine context around edit", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
@@ -679,7 +679,7 @@ describe("handleEdit", () => {
 
   test("context_lines collapses large insertions", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
     const inserted = Array.from({ length: 20 }, (_, i) => `new ${i + 1}`).join("\n");
 
@@ -698,7 +698,7 @@ describe("handleEdit", () => {
 
   test("context_lines 0 produces no context", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
@@ -714,7 +714,7 @@ describe("handleEdit", () => {
 
   test("context_lines with multiple edits shows separate blocks", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h1 = lineHash("line 1");
     const h4 = lineHash("line 4");
 
@@ -736,7 +736,7 @@ describe("handleEdit", () => {
 
   test("context_lines at file boundaries does not overflow", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h1 = lineHash("line 1");
 
     const result = await handleEdit({
@@ -754,7 +754,7 @@ describe("handleEdit", () => {
   test("auto context_lines when multiple edits and context_lines omitted", async () => {
     writeFileSync(testFile, "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n");
     const lines = ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"];
-    const ref = issueTestRef(testFile, lines, 1, 6);
+    const ref = issueTestRef(lines, 1, 6);
     const h2 = lineHash("line 2");
     const h5 = lineHash("line 5");
 
@@ -776,7 +776,7 @@ describe("handleEdit", () => {
 
   test("auto context_lines does not activate for single edit", async () => {
     const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(testFile, lines, 1, 3);
+    const ref = issueTestRef(lines, 1, 3);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
@@ -793,7 +793,7 @@ describe("handleEdit", () => {
   test("explicit context_lines=0 suppresses auto context_lines", async () => {
     writeFileSync(testFile, "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n");
     const lines = ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"];
-    const ref = issueTestRef(testFile, lines, 1, 6);
+    const ref = issueTestRef(lines, 1, 6);
     const h2 = lineHash("line 2");
     const h5 = lineHash("line 5");
 
@@ -813,7 +813,7 @@ describe("handleEdit", () => {
 
   test("writes diff to temp file after successful edit", async () => {
     const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(testFile, lines, 1, 4);
+    const ref = issueTestRef(lines, 1, 4);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
