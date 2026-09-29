@@ -3,7 +3,6 @@
     "target": "ES2024",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
     "allowJs": true,
@@ -17,6 +16,5 @@
     "types": ["bun-types"],
     "resolveJsonModule": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "build", "tests", "bin"]
+  "include": ["src/**/*"]
 }
