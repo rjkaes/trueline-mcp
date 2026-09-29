@@ -21,33 +21,16 @@ type DetectedEncoding = "utf-8" | "utf-16le" | "utf-16be";
 
 export interface BOMInfo {
   encoding: DetectedEncoding;
-  bomLength: number;
-  hasBOM: boolean;
+  /** Empty when the file has no BOM. */
+  bom: Buffer;
 }
 
-const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
-const UTF16_LE_BOM = Buffer.from([0xff, 0xfe]);
-const UTF16_BE_BOM = Buffer.from([0xfe, 0xff]);
-
-/**
- * Detect BOM from the first bytes of a file.
- *
- * Detection order: UTF-8 BOM (3 bytes) first to avoid ambiguity with
- * UTF-16 LE BOM (2 bytes, prefix of some UTF-8 BOM sequences is not
- * an issue but checking longer matches first is standard practice).
- */
-function detectBOM(firstBytes: Buffer): BOMInfo {
-  if (firstBytes.subarray(0, 3).equals(UTF8_BOM)) {
-    return { encoding: "utf-8", bomLength: 3, hasBOM: true };
-  }
-  if (firstBytes.subarray(0, 2).equals(UTF16_LE_BOM)) {
-    return { encoding: "utf-16le", bomLength: 2, hasBOM: true };
-  }
-  if (firstBytes.subarray(0, 2).equals(UTF16_BE_BOM)) {
-    return { encoding: "utf-16be", bomLength: 2, hasBOM: true };
-  }
-  return { encoding: "utf-8", bomLength: 0, hasBOM: false };
-}
+// Checked in order, longest BOM first.
+const BOMS: BOMInfo[] = [
+  { encoding: "utf-8", bom: Buffer.from([0xef, 0xbb, 0xbf]) },
+  { encoding: "utf-16le", bom: Buffer.from([0xff, 0xfe]) },
+  { encoding: "utf-16be", bom: Buffer.from([0xfe, 0xff]) },
+];
 
 // ==============================================================================
 // Transcoded line generator
@@ -82,7 +65,10 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
   const { bytesRead: firstBytesRead } = await fd.read(readBuf, 0, READ_BUF_SIZE);
 
   const firstChunk = Buffer.from(readBuf.subarray(0, firstBytesRead));
-  const bomInfo = detectBOM(firstChunk);
+  const bomInfo: BOMInfo = BOMS.find(({ bom }) => firstChunk.subarray(0, bom.length).equals(bom)) ?? {
+    encoding: "utf-8",
+    bom: Buffer.alloc(0),
+  };
 
   if (bomInfo.encoding === "utf-16le" || bomInfo.encoding === "utf-16be") {
     // UTF-16: transcode all chunks to UTF-8 before line splitting.
@@ -92,7 +78,7 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
     async function* utf16Chunks(): AsyncGenerator<Buffer> {
       const decoder = new TextDecoder(bomInfo.encoding);
 
-      for await (const chunk of readFdChunks(fd, readBuf, firstChunk.subarray(bomInfo.bomLength))) {
+      for await (const chunk of readFdChunks(fd, readBuf, firstChunk.subarray(bomInfo.bom.length))) {
         const decoded = decoder.decode(chunk, { stream: true });
         if (decoded.length > 0) yield Buffer.from(decoded, "utf-8");
       }
@@ -106,28 +92,13 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
   }
 
   // UTF-8 (with or without BOM): strip BOM if present, then split directly.
-  const afterBom = bomInfo.hasBOM ? firstChunk.subarray(bomInfo.bomLength) : firstChunk;
+  const afterBom = bomInfo.bom.length > 0 ? firstChunk.subarray(bomInfo.bom.length) : firstChunk;
   return { lines: splitChunks(readFdChunks(fd, readBuf, afterBom), opts), bomInfo };
 }
 
 // ==============================================================================
 // Write-path encoding helpers
 // ==============================================================================
-
-/**
- * Get the BOM bytes for a given encoding. Returns an empty buffer if no BOM.
- */
-export function bomBytes(bomInfo: BOMInfo): Buffer {
-  if (!bomInfo.hasBOM) return Buffer.alloc(0);
-  switch (bomInfo.encoding) {
-    case "utf-8":
-      return UTF8_BOM;
-    case "utf-16le":
-      return UTF16_LE_BOM;
-    case "utf-16be":
-      return UTF16_BE_BOM;
-  }
-}
 
 /**
  * Encode a UTF-8 Buffer to the target encoding.

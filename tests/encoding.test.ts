@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { transcodedLines, bomBytes, encodeBuffer } from "../src/encoding.ts";
+import { transcodedLines, encodeBuffer } from "../src/encoding.ts";
 import { handleRead } from "../src/tools/read.ts";
 import { handleEdit } from "../src/tools/edit.ts";
 import { getText } from "./helpers.ts";
@@ -72,41 +72,37 @@ describe("BOM detection", () => {
   test("detects UTF-8 BOM", async () => {
     const info = await sniffBOM("bom-utf8.txt", Buffer.from([0xef, 0xbb, 0xbf, 0x68, 0x69]));
     expect(info.encoding).toBe("utf-8");
-    expect(info.bomLength).toBe(3);
-    expect(info.hasBOM).toBe(true);
+    expect(info.bom).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
   });
 
   test("detects UTF-16 LE BOM", async () => {
     const info = await sniffBOM("bom-utf16le.txt", Buffer.from([0xff, 0xfe, 0x68, 0x00]));
     expect(info.encoding).toBe("utf-16le");
-    expect(info.bomLength).toBe(2);
-    expect(info.hasBOM).toBe(true);
+    expect(info.bom).toEqual(Buffer.from([0xff, 0xfe]));
   });
 
   test("detects UTF-16 BE BOM", async () => {
     const info = await sniffBOM("bom-utf16be.txt", Buffer.from([0xfe, 0xff, 0x00, 0x68]));
     expect(info.encoding).toBe("utf-16be");
-    expect(info.bomLength).toBe(2);
-    expect(info.hasBOM).toBe(true);
+    expect(info.bom).toEqual(Buffer.from([0xfe, 0xff]));
   });
 
   test("returns utf-8 with no BOM for plain text", async () => {
     const info = await sniffBOM("bom-none.txt", Buffer.from("hello"));
     expect(info.encoding).toBe("utf-8");
-    expect(info.bomLength).toBe(0);
-    expect(info.hasBOM).toBe(false);
+    expect(info.bom.length).toBe(0);
   });
 
   test("handles empty file", async () => {
     const info = await sniffBOM("bom-empty.txt", Buffer.alloc(0));
     expect(info.encoding).toBe("utf-8");
-    expect(info.hasBOM).toBe(false);
+    expect(info.bom.length).toBe(0);
   });
 
   test("handles single-byte file", async () => {
     const info = await sniffBOM("bom-single.txt", Buffer.from([0xff]));
     expect(info.encoding).toBe("utf-8");
-    expect(info.hasBOM).toBe(false);
+    expect(info.bom.length).toBe(0);
   });
 });
 
@@ -119,7 +115,7 @@ describe("transcodedLines — UTF-16 LE", () => {
     const p = writeFile("utf16le.txt", utf16leFile("hello", "world"));
     const { lines, bomInfo } = await transcodedLines(p);
     expect(bomInfo.encoding).toBe("utf-16le");
-    expect(bomInfo.hasBOM).toBe(true);
+    expect(bomInfo.bom).toEqual(Buffer.from([0xff, 0xfe]));
 
     const collected = [];
     for await (const line of lines) {
@@ -161,7 +157,7 @@ describe("transcodedLines — UTF-16 BE", () => {
     const p = writeFile("utf16be.txt", utf16beFile("hello", "world"));
     const { lines, bomInfo } = await transcodedLines(p);
     expect(bomInfo.encoding).toBe("utf-16be");
-    expect(bomInfo.hasBOM).toBe(true);
+    expect(bomInfo.bom).toEqual(Buffer.from([0xfe, 0xff]));
 
     const collected = [];
     for await (const line of lines) {
@@ -180,8 +176,7 @@ describe("transcodedLines — UTF-8 BOM", () => {
     const p = writeFile("utf8bom.txt", utf8bomFile("hello", "world"));
     const { lines, bomInfo } = await transcodedLines(p);
     expect(bomInfo.encoding).toBe("utf-8");
-    expect(bomInfo.hasBOM).toBe(true);
-    expect(bomInfo.bomLength).toBe(3);
+    expect(bomInfo.bom).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
 
     const collected = [];
     for await (const line of lines) {
@@ -214,7 +209,7 @@ describe("transcodedLines — plain UTF-8", () => {
   test("passes through plain UTF-8 unchanged", async () => {
     const p = writeFile("plain.txt", Buffer.from("hello\nworld\n"));
     const { lines, bomInfo } = await transcodedLines(p);
-    expect(bomInfo.hasBOM).toBe(false);
+    expect(bomInfo.bom.length).toBe(0);
     expect(bomInfo.encoding).toBe("utf-8");
 
     const collected = [];
@@ -227,7 +222,7 @@ describe("transcodedLines — plain UTF-8", () => {
   test("handles empty file", async () => {
     const p = writeFile("empty.txt", Buffer.alloc(0));
     const { lines, bomInfo } = await transcodedLines(p);
-    expect(bomInfo.hasBOM).toBe(false);
+    expect(bomInfo.bom.length).toBe(0);
 
     const collected = [];
     for await (const line of lines) {
@@ -301,28 +296,6 @@ describe("encodeBuffer", () => {
     const buf = Buffer.from("hi", "utf-8");
     const result = encodeBuffer(buf, "utf-16le");
     expect(result).toEqual(Buffer.from("hi", "utf16le"));
-  });
-});
-
-// ==============================================================================
-// bomBytes
-// ==============================================================================
-
-describe("bomBytes", () => {
-  test("UTF-8 BOM", () => {
-    expect(bomBytes({ encoding: "utf-8", bomLength: 3, hasBOM: true })).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
-  });
-
-  test("UTF-16 LE BOM", () => {
-    expect(bomBytes({ encoding: "utf-16le", bomLength: 2, hasBOM: true })).toEqual(Buffer.from([0xff, 0xfe]));
-  });
-
-  test("UTF-16 BE BOM", () => {
-    expect(bomBytes({ encoding: "utf-16be", bomLength: 2, hasBOM: true })).toEqual(Buffer.from([0xfe, 0xff]));
-  });
-
-  test("no BOM returns empty buffer", () => {
-    expect(bomBytes({ encoding: "utf-8", bomLength: 0, hasBOM: false })).toEqual(Buffer.alloc(0));
   });
 });
 

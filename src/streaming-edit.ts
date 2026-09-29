@@ -23,7 +23,7 @@ import { chmod, open, rename, stat, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { FNV_OFFSET_BASIS, checksumToLetters, fnv1aHashBytes, foldHash, hashToLetters } from "./hash.ts";
 import { EMPTY_BUF, LF_BUF } from "./line-splitter.ts";
-import { transcodedLines, bomBytes, encodeBuffer } from "./encoding.ts";
+import { transcodedLines, encodeBuffer } from "./encoding.ts";
 import type { DiffCollector } from "./diff-collector.ts";
 import { BARE_LINE_HASH, type ChecksumRef } from "./parse.ts";
 
@@ -105,8 +105,8 @@ export async function streamingEdit(
   let writeBufPos = 0;
 
   // Write BOM if the original file had one
-  if (transcoded.bomInfo.hasBOM) {
-    const bom = bomBytes(transcoded.bomInfo);
+  const { bom } = transcoded.bomInfo;
+  if (bom.length > 0) {
     await fd.write(bom, 0, bom.length);
   }
 

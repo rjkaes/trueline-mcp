@@ -191,7 +191,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   }
 
   // Include encoding metadata when non-default, so trueline_edit can round-trip
-  if (bomInfo.hasBOM) {
+  if (bomInfo.bom.length > 0) {
     const encLabel = bomInfo.encoding === "utf-8" ? "utf-8-bom" : bomInfo.encoding;
     append(`\nencoding: ${encLabel}`);
   }
