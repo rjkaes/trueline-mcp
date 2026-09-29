@@ -17,7 +17,7 @@ export const jsonFlag = {
   default: false,
 } as const;
 
-/** A registered `trueline <name>` subcommand: name is the dispatch key in cli/index.ts. */
+/** A registered `trueline <name>` subcommand: name is the dispatch key in cli.ts. */
 export interface CliSubcommand {
   /** Printed for `trueline <name> --help`. */
   usage: string;
@@ -124,7 +124,7 @@ export interface FormatOptions {
  *   0   success
  *   1   search: valid pattern but zero matches
  *   2   tool error (result.isError) or runtime failure
- *   3   usage / parse error (thrown as UsageError, handled in cli/index.ts)
+ *   3   usage / parse error (thrown as UsageError, handled in cli.ts)
  *
  * Errors (exit 2) go to stderr unless --json; everything else goes to stdout.
  */
