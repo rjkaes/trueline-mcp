@@ -73,10 +73,6 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     sections.push(formatDiffSection(relPath, diff, compare_against));
   }
 
-  if (sections.length === 0) {
-    return textResult("No structural changes detected.");
-  }
-
   return textResult(sections.join("\n\n"));
 }
 
@@ -190,8 +186,5 @@ export function computeMiniDiff(oldBody?: string, newBody?: string): string | nu
   const totalDiffLines = removed.length + added.length;
   if (totalDiffLines === 0 || totalDiffLines > INLINE_DIFF_THRESHOLD) return null;
 
-  const lines: string[] = [];
-  for (const r of removed) lines.push(`-${r.trim()}`);
-  for (const a of added) lines.push(`+${a.trim()}`);
-  return lines.join("\n");
+  return [...removed.map((r) => `-${r.trim()}`), ...added.map((a) => `+${a.trim()}`)].join("\n");
 }
