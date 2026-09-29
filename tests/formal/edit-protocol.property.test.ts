@@ -3,7 +3,6 @@ import fc from "fast-check";
 import { mkdtempSync, writeFileSync, readFileSync, statSync, utimesSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { arbFileContent, arbLine } from "./arbitraries.ts";
 import { rangeChecksum, lineHash, issueTestRef, writeTestFile } from "../helpers.ts";
 import { streamingEdit } from "../../src/streaming-edit.ts";
 import type { StreamEditOp } from "../../src/streaming-edit.ts";
@@ -15,6 +14,14 @@ import { parseChecksum } from "../../src/parse.ts";
 // the 30 s test budget on Windows runners where Defender briefly holds handles.
 process.env.TRUELINE_RENAME_DELAYS_MS = "0,0,0,0,0";
 const NUM_RUNS = 500;
+
+// --- File content ---
+
+/** A single realistic line: 1-120 chars, no newlines. */
+const arbLine = fc.stringMatching(/^[^\n\r]{1,120}$/).filter((s) => s.length >= 1);
+
+/** A file as an array of lines (1-20 lines). */
+const arbFileContent = fc.array(arbLine, { minLength: 1, maxLength: 20 });
 
 // Each property callback creates and cleans up its own temp dir to avoid
 // shared-state races across fast-check iterations (which run concurrently
