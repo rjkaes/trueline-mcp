@@ -35,14 +35,14 @@ describe("Binary file security", () => {
     expect(result.content[0].text).toContain("binary");
   });
 
-  test("trueline_changes should reject binary files", async () => {
+  test("trueline_changes skips binary files instead of diffing them", async () => {
     const result = await handleDiff({
       file_paths: [binaryFile],
       projectDir: testDir,
     });
 
-    // FAIL: Currently returns a valid diff
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("binary");
+    // A per-file note, not an error: one binary file must not fail a batch.
+    expect(result.isError).toBeFalsy();
+    expect(result.content[0].text).toContain("Binary file, not diffed.");
   });
 });

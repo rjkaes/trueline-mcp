@@ -146,6 +146,28 @@ describe("semantic trueline_changes", () => {
     expect(text).toContain("## logo.png\n\nFile type not supported");
     expect(text).toContain("tax");
   });
+
+  test("binary file of a supported type does not abort other files", async () => {
+    const firmware = join(testDir, "firmware.ts");
+    const source = writeTestFile(testDir, "invoice.ts", "function total() { return 1; }\n");
+    writeFileSync(firmware, Buffer.from("const header = 1;\n\x00\x01\x02\n"));
+    git("add .");
+    git("commit -m init");
+    writeFileSync(firmware, Buffer.from("const header = 2;\n\x00\x01\x03\n"));
+    writeFileSync(source, "function total() { return 1; }\nfunction tax() { return 2; }\n");
+
+    const result = await handleDiff({
+      file_paths: [firmware, source],
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+
+    expect(result.isError).toBeFalsy();
+    const text = result.content[0].text;
+    expect(text).toContain("## firmware.ts\n\nBinary file");
+    expect(text).toContain("tax");
+  });
+
   test("star expands to all unstaged changed files", async () => {
     const f1 = join(testDir, "a.ts");
     const f2 = join(testDir, "b.ts");
