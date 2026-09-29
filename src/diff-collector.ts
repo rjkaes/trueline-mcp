@@ -25,6 +25,8 @@ const MAX_ALIGN_CELLS = 250_000;
 // Lines of unchanged context shown around each hunk in the unified diff.
 const CONTEXT_LINES = 3;
 
+const LINE_PREFIX: Record<DiffEntry["type"], string> = { ctx: " ", del: "-", ins: "+" };
+
 /** Rewrite every run of del/ins entries as a minimal edit script. */
 function realign(entries: DiffEntry[]): DiffEntry[] {
   const out: DiffEntry[] = [];
@@ -206,21 +208,9 @@ export class DiffCollector {
 
       for (let i = hStart; i <= hEnd; i++) {
         const e = entries[i];
-        switch (e.type) {
-          case "ctx":
-            lines.push(` ${e.text}`);
-            oldCount++;
-            newCount++;
-            break;
-          case "del":
-            lines.push(`-${e.text}`);
-            oldCount++;
-            break;
-          case "ins":
-            lines.push(`+${e.text}`);
-            newCount++;
-            break;
-        }
+        lines.push(LINE_PREFIX[e.type] + e.text);
+        if (e.type !== "ins") oldCount++;
+        if (e.type !== "del") newCount++;
       }
 
       const oldRange = oldCount === 1 ? `${oldLine}` : `${oldLine},${oldCount}`;
