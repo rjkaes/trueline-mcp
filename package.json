@@ -44,6 +44,7 @@
     "lint": "bunx biome ci .",
     "lint:fix": "bunx biome check --write .",
     "benchmark": "bun run benchmarks/perf-benchmark.ts",
+    "perf": "bun test ./benchmarks/*.perf.ts",
     "version": "jq --arg v \"$npm_package_version\" '.version = $v' .claude-plugin/plugin.json > .claude-plugin/plugin.json.tmp && mv .claude-plugin/plugin.json.tmp .claude-plugin/plugin.json && git add .claude-plugin/plugin.json"
   },
   "dependencies": {
