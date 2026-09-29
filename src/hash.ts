@@ -14,7 +14,7 @@ const FNV_PRIME = 16777619;
  */
 export function fnv1aHash(line: string): number {
   const buf = Buffer.from(line);
-  return fnv1aHashBytes(buf, 0, buf.length);
+  return fnv1aHashBytes(buf);
 }
 
 /**
@@ -25,9 +25,9 @@ export function fnv1aHash(line: string): number {
  * hash function — both read and edit paths use it to hash raw file bytes,
  * making hashes encoding-independent.
  */
-export function fnv1aHashBytes(buf: Buffer, start: number, end: number): number {
+export function fnv1aHashBytes(buf: Buffer): number {
   let hash = FNV_OFFSET_BASIS;
-  for (let i = start; i < end; i++) {
+  for (let i = 0; i < buf.length; i++) {
     hash = Math.imul(hash ^ buf[i], FNV_PRIME) >>> 0;
   }
   return hash;

@@ -35,7 +35,7 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
       continue;
     }
 
-    const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
+    const h = fnv1aHashBytes(lineBytes);
     const text = lineBytes.toString("utf-8");
     const isMatch = matchLine(text);
     const decoded: DecodedLine = { lineNumber, text, hash: h, isMatch };

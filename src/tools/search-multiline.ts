@@ -63,7 +63,7 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
     const windowLines: DecodedLine[] = [];
     for (let i = ctxStart; i <= ctxEnd; i++) {
       const l = lines[i];
-      const h = fnv1aHashBytes(l.bytes, 0, l.bytes.length);
+      const h = fnv1aHashBytes(l.bytes);
       windowLines.push({
         lineNumber: l.lineNumber,
         text: l.text,

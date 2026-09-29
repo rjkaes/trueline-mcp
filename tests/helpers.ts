@@ -54,7 +54,7 @@ export function lineHash(line: string): string {
  * Compute 2-letter content hash from raw bytes.
  */
 export function rawLineHash(buf: Buffer): string {
-  const h = fnv1aHashBytes(buf, 0, buf.length);
+  const h = fnv1aHashBytes(buf);
   return hashToLetters(h);
 }
 
@@ -117,7 +117,7 @@ export function issueTestRefRaw(_filePath: string, bufs: Buffer[], startLine: nu
   let firstLetters = "";
   let lastLetters = "";
   for (let i = 0; i < bufs.length; i++) {
-    const h = fnv1aHashBytes(bufs[i], 0, bufs[i].length);
+    const h = fnv1aHashBytes(bufs[i]);
     if (i === 0) firstLetters = hashToLetters(h);
     lastLetters = hashToLetters(h);
     hash = foldHash(hash, h);

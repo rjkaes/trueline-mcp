@@ -46,8 +46,8 @@ test("streamingEdit should preserve original EOL in a no-op replace when other c
   ];
 
   let acc = FNV_OFFSET_BASIS;
-  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line1"), 0, 5));
-  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line2"), 0, 5));
+  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line1")));
+  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line2")));
 
   const result = await streamingEdit(
     testFile,

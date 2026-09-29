@@ -84,7 +84,7 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
       if (accIdx >= accs.length) break;
       if (accs[accIdx].startLine > 0 && lineNumber < accs[accIdx].startLine) continue;
 
-      const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
+      const h = fnv1aHashBytes(lineBytes);
 
       for (let i = accIdx; i < accs.length && accs[i].startLine <= lineNumber; i++) {
         if (accs[i].startLine > 0 && lineNumber <= accs[i].endLine) {

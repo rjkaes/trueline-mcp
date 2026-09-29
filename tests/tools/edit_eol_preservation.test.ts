@@ -36,9 +36,9 @@ test("streamingEdit should preserve EOLs of unchanged lines", async () => {
   ];
 
   let acc = FNV_OFFSET_BASIS;
-  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line1"), 0, 5));
-  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line2"), 0, 5));
-  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line3"), 0, 5));
+  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line1")));
+  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line2")));
+  acc = foldHash(acc, fnv1aHashBytes(Buffer.from("line3")));
 
   const result = await streamingEdit(
     testFile,

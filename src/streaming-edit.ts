@@ -163,7 +163,7 @@ export async function streamingEdit(
     await flushPending();
     pendingWrite = buf;
     pendingEol = eol ?? detectedEol;
-    const lineH = precomputedHash ?? fnv1aHashBytes(buf, 0, buf.length);
+    const lineH = precomputedHash ?? fnv1aHashBytes(buf);
     if (outputLineCount === 0) outputFirstLineHash = lineH;
     outputLastLineHash = lineH;
     outputChecksumAcc = foldHash(outputChecksumAcc, lineH);
@@ -262,7 +262,7 @@ export async function streamingEdit(
       }
 
       // Compute line hash for checksum accumulators and boundary verification
-      const lineH = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
+      const lineH = fnv1aHashBytes(lineBytes);
       const letters = hashToLetters(lineH);
 
       // Feed into checksum accumulators. Overlapping ranges are supported:

@@ -22,7 +22,7 @@ test("streamingEdit should handle overlapping checksum ranges", async () => {
   const fileStat = await (await import("node:fs/promises")).stat(testFile);
   const mtimeMs = fileStat.mtimeMs;
 
-  const h = (s: string) => fnv1aHashBytes(Buffer.from(s), 0, s.length);
+  const h = (s: string) => fnv1aHashBytes(Buffer.from(s));
 
   let acc1 = FNV_OFFSET_BASIS;
   acc1 = foldHash(acc1, h("line1"));

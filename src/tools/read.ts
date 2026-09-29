@@ -132,7 +132,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       }
 
       // Within current range — hash and output
-      const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
+      const h = fnv1aHashBytes(lineBytes);
       const letters = hashToLetters(h);
       if (rangeFirstLine === 0) {
         rangeFirstLine = lineNumber;

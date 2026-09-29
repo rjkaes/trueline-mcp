@@ -201,7 +201,7 @@ async function readEditContext(
     if (lineNumber > maxLine) break;
     for (const range of collectRanges) {
       if (lineNumber >= range.from && lineNumber <= range.to) {
-        const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
+        const h = fnv1aHashBytes(lineBytes);
         const letters = hashToLetters(h);
         collected.set(lineNumber, `${letters}${lineNumber}\t${lineBytes.toString(encoding)}`);
         break;
