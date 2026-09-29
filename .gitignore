@@ -4,6 +4,7 @@ dist/
 *.tgz
 .DS_Store
 .worktrees/
+.perf-baseline/
 .claude/settings.local.json
 SESSION.md
 docs/plans/
