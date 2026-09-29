@@ -68,13 +68,6 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   const results: FileSearchResult[] = [];
   const multiFile = filePaths.length > 1 || rejectedSections.length > 0;
 
-  async function validatePathForSearch(fp: string): Promise<string | undefined> {
-    const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
-    if (validated.ok) return validated.resolvedPath;
-    results.push(failedSearchResult(fp, validated.error.content[0].text));
-    return undefined;
-  }
-
   let searchFile: (resolvedPath: string, maxMatches: number) => Promise<FileSearchResult>;
   // Multiline windows count once each; line-mode windows count every marked line.
   let countCaptured: (result: FileSearchResult) => number;
@@ -115,8 +108,12 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   }
 
   for (const fp of filePaths) {
-    const resolvedPath = await validatePathForSearch(fp);
-    if (resolvedPath === undefined) continue;
+    const validated = await validatePath(fp, "Read", projectDir, allowedDirs);
+    if (!validated.ok) {
+      results.push(failedSearchResult(fp, validated.error.content[0].text));
+      continue;
+    }
+    const { resolvedPath } = validated;
 
     let fileResult: FileSearchResult;
     try {
