@@ -149,7 +149,8 @@ describe("Adversarial Tests", () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("appear unchanged");
-    expect(result.content[0].text).toContain("Re-read with trueline_read(ranges=[{start: 3, end: 3}])");
+    expect(result.content[0].text).toMatch(/Re-read with trueline_read\(file_paths=\["[^"]+mismatch\.txt:3-3"\]\)/);
+    expect(result.content[0].text).not.toContain("{start");
   });
 
   test("insert-after at the end line of a multi-line replace", async () => {

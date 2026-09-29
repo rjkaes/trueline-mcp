@@ -756,7 +756,8 @@ describe("stale checksum recovery hints", () => {
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    expect(text).toContain("ranges=");
+    expect(text).toMatch(/trueline_read\(file_paths=\["[^"]+:2-2"\]\)/);
+    expect(text).not.toContain("{start");
   });
 
   test("no narrow re-read hint when edit-target line itself changed", async () => {
@@ -775,7 +776,7 @@ describe("stale checksum recovery hints", () => {
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    expect(text).not.toContain("ranges=");
+    expect(text).not.toContain("appear unchanged");
   });
 });
 

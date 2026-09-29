@@ -476,7 +476,7 @@ export async function streamingEdit(
             base +
             `\n\n` +
             `However, lines ${minLine}\u2013${maxLine} appear unchanged. ` +
-            `Re-read with trueline_read(ranges=[{start: ${minLine}, end: ${maxLine}}]) ` +
+            `Re-read with trueline_read(file_paths=["${resolvedPath}:${minLine}-${maxLine}"]) ` +
             `to get a narrow checksum, then retry the edit.`,
         };
       }

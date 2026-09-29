@@ -398,8 +398,8 @@ describe("handleEdit", () => {
 
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
-    expect(text).toContain("ranges="); // suggests narrow re-read
-    expect(text).toContain("end:");
+    expect(text).toMatch(/trueline_read\(file_paths=\["[^"]+:2-2"\]\)/); // suggests narrow re-read
+    expect(text).not.toContain("{start");
   });
 
   test("checksum failure with changed edit-target lines gives standard error", async () => {
@@ -426,7 +426,7 @@ describe("handleEdit", () => {
     expect(result.isError).toBe(true);
     const text = result.content[0].text;
     // Should NOT suggest narrow re-read since target lines changed too
-    expect(text).not.toContain("ranges=");
+    expect(text).not.toContain("appear unchanged");
   });
 
   test("denies editing .env file", async () => {
