@@ -58,22 +58,19 @@ export async function extractXmlOutline(
   // Line where the current tag/comment/PI started
   let tokenStartLine = 0;
 
+  function addElement(startLine: number, endLine: number, depth: number, text: string): void {
+    if (depth <= maxDepth) {
+      entries.push({ startLine, endLine, depth, nodeType: "element", text });
+    }
+  }
+
   /** Process a complete tag (everything between < and >, exclusive). */
   function handleTag(content: string, endLine: number): void {
     // Self-closing: <foo attr="val" />
     if (content.endsWith("/")) {
       const trimmed = content.slice(0, -1).trim();
       const tagName = extractTagName(trimmed);
-      const depth = stack.length;
-      if (depth <= maxDepth) {
-        entries.push({
-          startLine: tokenStartLine,
-          endLine,
-          depth,
-          nodeType: "element",
-          text: formatSelfClosingSignature(tagName, trimmed),
-        });
-      }
+      addElement(tokenStartLine, endLine, stack.length, formatSignature(tagName, trimmed, true));
       return;
     }
 
@@ -81,24 +78,13 @@ export async function extractXmlOutline(
     if (content.startsWith("/")) {
       const tagName = extractTagName(content.slice(1));
       // Pop the stack back to the matching open tag (tolerates mild mismatches)
-      for (let i = stack.length - 1; i >= 0; i--) {
-        if (stack[i].tagName === tagName) {
-          const frame = stack[i];
-          // Pop everything from i onward (handles mismatched nesting gracefully)
-          stack.length = i;
-          if (frame.depth <= maxDepth) {
-            entries.push({
-              startLine: frame.startLine,
-              endLine,
-              depth: frame.depth,
-              nodeType: "element",
-              text: frame.signature,
-            });
-          }
-          return;
-        }
-      }
+      const i = stack.findLastIndex((f) => f.tagName === tagName);
       // No matching open tag found; ignore the close tag
+      if (i === -1) return;
+      const frame = stack[i];
+      // Pop everything from i onward (handles mismatched nesting gracefully)
+      stack.length = i;
+      addElement(frame.startLine, endLine, frame.depth, frame.signature);
       return;
     }
 
@@ -143,28 +129,24 @@ export async function extractXmlOutline(
       switch (state) {
         case State.Text:
           if (ch === "<") {
+            buf = "";
             // Peek ahead to identify the token type
             const rest = line.slice(i + 1);
             if (rest.startsWith("!--")) {
               state = State.Comment;
-              buf = "";
               i += 3; // skip '!--'
             } else if (rest.startsWith("![CDATA[")) {
               state = State.CData;
-              buf = "";
               i += 8; // skip '![CDATA['
             } else if (rest.startsWith("!DOCTYPE") || rest.startsWith("!doctype")) {
               state = State.DocType;
-              buf = "";
               i += 8; // skip '!DOCTYPE'
             } else if (rest.startsWith("?")) {
               state = State.PI;
-              buf = "";
               tokenStartLine = lineNumber;
               i += 1; // skip '?'
             } else {
               state = State.TagOpen;
-              buf = "";
               tokenStartLine = lineNumber;
             }
           }
@@ -231,15 +213,7 @@ export async function extractXmlOutline(
   // Any unclosed elements on the stack get entries ending at EOF
   while (stack.length > 0) {
     const frame = stack.pop()!;
-    if (frame.depth <= maxDepth) {
-      entries.push({
-        startLine: frame.startLine,
-        endLine: totalLines,
-        depth: frame.depth,
-        nodeType: "element",
-        text: frame.signature,
-      });
-    }
+    addElement(frame.startLine, totalLines, frame.depth, frame.signature);
   }
 
   // Sort by startLine (close-tag entries from the stack are appended out of order)
@@ -259,16 +233,10 @@ function extractTagName(content: string): string {
   return end === -1 ? trimmed : trimmed.slice(0, end);
 }
 
-/** Format a compact signature from tag name and full tag content (open tag). */
-function formatSignature(tagName: string, content: string): string {
+/** Format a compact signature from tag name and full tag content (open or self-closing tag). */
+function formatSignature(tagName: string, content: string, selfClosing = false): string {
   const trimmed = content.trim().replace(/\s+/g, " ");
-  const sig = `<${trimmed}>`;
-  return sig.length > 200 ? `<${tagName} ...>` : sig;
-}
-
-/** Format a compact signature for a self-closing tag. */
-function formatSelfClosingSignature(tagName: string, content: string): string {
-  const trimmed = content.trim().replace(/\s+/g, " ");
-  const sig = `<${trimmed} />`;
-  return sig.length > 200 ? `<${tagName} ... />` : sig;
+  const close = selfClosing ? " />" : ">";
+  const sig = `<${trimmed}${close}`;
+  return sig.length > 200 ? `<${tagName} ...${close}` : sig;
 }
