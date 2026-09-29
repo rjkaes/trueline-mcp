@@ -369,15 +369,10 @@ const FALLBACK_EXCLUDE_DIRS = new Set([
  */
 export async function expandGlobs(filePaths: string[], projectDir: string | undefined): Promise<string[]> {
   const baseDir = projectDir ?? process.cwd();
-  const result: string[] = [];
-  const seen = new Set<string>();
+  const paths = new Set<string>();
 
   function add(rawPath: string): void {
-    const path = rawPath.replaceAll("\\", "/");
-    if (!seen.has(path)) {
-      seen.add(path);
-      result.push(path);
-    }
+    paths.add(rawPath.replaceAll("\\", "/"));
   }
 
   for (const entry of filePaths) {
@@ -410,8 +405,7 @@ export async function expandGlobs(filePaths: string[], projectDir: string | unde
     }
   }
 
-  result.sort();
-  return result;
+  return [...paths].sort();
 }
 
 const execFileAsync = promisify(execFile);
