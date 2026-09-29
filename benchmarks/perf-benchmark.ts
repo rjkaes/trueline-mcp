@@ -5,10 +5,9 @@
  * Run: bun run benchmark
  */
 import { execSync } from "node:child_process";
-import { dirname, join } from "node:path";
-import { mkdtempSync, realpathSync, writeFileSync, rmSync, statSync, readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { mkdtempSync, realpathSync, writeFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
 import { handleRead } from "../src/tools/read.ts";
 import { handleSearch } from "../src/tools/search.ts";
 import { handleDiff } from "../src/tools/diff.ts";
@@ -37,7 +36,7 @@ function p95(arr: number[]): number {
   return sorted[Math.min(Math.floor(sorted.length * 0.95), sorted.length - 1)];
 }
 
-async function bench(name: string, iterations: number, fn: () => Promise<void>): Promise<BenchResult> {
+async function bench(name: string, iterations: number, fn: () => void | Promise<void>): Promise<BenchResult> {
   // Warm up
   for (let i = 0; i < Math.min(3, iterations); i++) await fn();
 
@@ -50,89 +49,19 @@ async function bench(name: string, iterations: number, fn: () => Promise<void>):
   return { name, iterations, medianMs: median(times), p95Ms: p95(times) };
 }
 
-function benchSync(name: string, iterations: number, fn: () => void): BenchResult {
-  // Warm up
-  for (let i = 0; i < Math.min(3, iterations); i++) fn();
-
-  const times: number[] = [];
-  for (let i = 0; i < iterations; i++) {
-    const start = performance.now();
-    fn();
-    times.push(performance.now() - start);
-  }
-  return { name, iterations, medianMs: median(times), p95Ms: p95(times) };
-}
-
-// ===========================================================================
-// Baseline persistence and comparison
-// ===========================================================================
-
-const BENCH_DIR = dirname(fileURLToPath(import.meta.url));
-const BASELINE_PATH = join(BENCH_DIR, "baseline.json");
-
-// Regression threshold: flag if median is more than this fraction slower.
-const REGRESSION_THRESHOLD = 0.2;
-
-interface BaselineEntry {
-  medianMs: number;
-  p95Ms: number;
-}
-
-type Baseline = Record<string, BaselineEntry>;
-
-function loadBaseline(): Baseline | null {
-  if (!existsSync(BASELINE_PATH)) return null;
-  try {
-    return JSON.parse(readFileSync(BASELINE_PATH, "utf-8"));
-  } catch {
-    return null;
-  }
-}
-
-function saveBaseline(results: BenchResult[]): void {
-  const data: Baseline = {};
-  for (const r of results) {
-    data[r.name] = { medianMs: r.medianMs, p95Ms: r.p95Ms };
-  }
-  writeFileSync(BASELINE_PATH, `${JSON.stringify(data, null, 2)}\n`);
-}
-
 function formatDuration(ms: number): string {
   return ms < 1 ? `${(ms * 1000).toFixed(1)}µs` : `${ms.toFixed(2)}ms`;
 }
 
-function formatDelta(current: number, baseline: number): string {
-  const pct = ((current - baseline) / baseline) * 100;
-  const sign = pct >= 0 ? "+" : "";
-  const flag = pct > REGRESSION_THRESHOLD * 100 ? " ⚠" : "";
-  return `${sign}${pct.toFixed(0)}%${flag}`;
-}
-
-function printResults(results: BenchResult[], baseline: Baseline | null): void {
-  const hasBaseline = baseline !== null;
-  const deltaCol = hasBaseline ? " | Δ Median" : "";
-  const header = `${"Benchmark".padEnd(30)} | ${"Iters".padStart(7)} | ${"Median".padStart(10)} | ${"P95".padStart(10)}${deltaCol}`;
+function printResults(results: BenchResult[]): void {
+  const header = `${"Benchmark".padEnd(30)} | ${"Iters".padStart(7)} | ${"Median".padStart(10)} | ${"P95".padStart(10)}`;
   console.log(header);
   console.log("-".repeat(header.length));
 
-  let regressions = 0;
   for (const r of results) {
     const med = formatDuration(r.medianMs);
     const p = formatDuration(r.p95Ms);
-    let delta = "";
-    if (hasBaseline && baseline[r.name]) {
-      delta = ` | ${formatDelta(r.medianMs, baseline[r.name].medianMs).padStart(9)}`;
-      if (r.medianMs > baseline[r.name].medianMs * (1 + REGRESSION_THRESHOLD)) {
-        regressions++;
-      }
-    }
-    console.log(
-      `${r.name.padEnd(30)} | ${String(r.iterations).padStart(7)} | ${med.padStart(10)} | ${p.padStart(10)}${delta}`,
-    );
-  }
-
-  if (regressions > 0) {
-    console.log(`\n⚠ ${regressions} benchmark(s) regressed by more than ${REGRESSION_THRESHOLD * 100}%`);
+    console.log(`${r.name.padEnd(30)} | ${String(r.iterations).padStart(7)} | ${med.padStart(10)} | ${p.padStart(10)}`);
   }
 }
 
@@ -186,7 +115,7 @@ async function benchReadRanged(): Promise<BenchResult> {
 async function benchSearchFewMatches(): Promise<BenchResult> {
   return bench("search-large-file", 30, async () => {
     await handleSearch({
-      file_path: LARGE_FILE,
+      file_paths: [LARGE_FILE],
       pattern: "MARKER",
       max_matches: 10,
       projectDir: tmpDir,
@@ -198,7 +127,7 @@ async function benchSearchFewMatches(): Promise<BenchResult> {
 async function benchSearchManyMatches(): Promise<BenchResult> {
   return bench("search-many-matches", 30, async () => {
     await handleSearch({
-      file_path: LARGE_FILE,
+      file_paths: [LARGE_FILE],
       pattern: "const line_",
       max_matches: 500,
       projectDir: tmpDir,
@@ -292,20 +221,20 @@ async function benchEditMultiLine(): Promise<BenchResult> {
   });
 }
 
-function benchHashBytes(): BenchResult {
+async function benchHashBytes(): Promise<BenchResult> {
   const buf = Buffer.alloc(10240);
   for (let i = 0; i < buf.length; i++) buf[i] = (i * 7 + 13) & 0xff;
 
-  return benchSync("hash-bytes", 10_000, () => {
-    fnv1aHashBytes(buf, 0, buf.length);
+  return bench("hash-bytes", 10_000, () => {
+    fnv1aHashBytes(buf);
   });
 }
 
-function benchHashToLetters(): BenchResult {
+async function benchHashToLetters(): Promise<BenchResult> {
   const hashes = new Uint32Array(1000);
   for (let i = 0; i < hashes.length; i++) hashes[i] = (i * 2654435761) >>> 0;
 
-  return benchSync("hash-to-letters", 1000, () => {
+  return bench("hash-to-letters", 1000, () => {
     for (let i = 0; i < hashes.length; i++) hashToLetters(hashes[i]);
   });
 }
@@ -398,20 +327,15 @@ async function main(): Promise<void> {
   results.push(await benchSearchManyMatches());
   results.push(await benchEditSingleLine());
   results.push(await benchEditMultiLine());
-  results.push(benchHashBytes());
-  results.push(benchHashToLetters());
+  results.push(await benchHashBytes());
+  results.push(await benchHashToLetters());
   results.push(await benchSemanticDiff());
 
   // Cleanup temp dir before printing (semantic-diff already cleans its own)
   rmSync(tmpDir, { recursive: true, force: true });
 
-  const baseline = loadBaseline();
   console.log();
-  printResults(results, baseline);
-
-  // Save current results as the new baseline
-  saveBaseline(results);
-  console.log(`\nBaseline saved to ${BASELINE_PATH}`);
+  printResults(results);
 }
 
 main().catch((err) => {
