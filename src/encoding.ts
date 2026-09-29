@@ -39,6 +39,8 @@ const BOMS: BOMInfo[] = [
 interface TranscodedLinesResult {
   lines: AsyncGenerator<RawLine>;
   bomInfo: BOMInfo;
+  /** Closes the source fd when `lines` was never started (return() on an unstarted generator skips its finally). */
+  close: () => Promise<void>;
 }
 
 const READ_BUF_SIZE = 65536;
@@ -88,12 +90,12 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
       if (final.length > 0) yield Buffer.from(final, "utf-8");
     }
 
-    return { lines: splitChunks(utf16Chunks(), optsWithoutBinary), bomInfo };
+    return { lines: splitChunks(utf16Chunks(), optsWithoutBinary), bomInfo, close: () => fd.close() };
   }
 
   // UTF-8 (with or without BOM): strip BOM if present, then split directly.
   const afterBom = bomInfo.bom.length > 0 ? firstChunk.subarray(bomInfo.bom.length) : firstChunk;
-  return { lines: splitChunks(readFdChunks(fd, readBuf, afterBom), opts), bomInfo };
+  return { lines: splitChunks(readFdChunks(fd, readBuf, afterBom), opts), bomInfo, close: () => fd.close() };
 }
 
 // ==============================================================================

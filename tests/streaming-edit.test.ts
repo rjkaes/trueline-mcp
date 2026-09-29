@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
   mkdtempSync,
   readdirSync,
@@ -451,5 +452,71 @@ describe("streamingEdit", () => {
       code: "ELOOP",
     });
     expect(readdirSync(testDir).filter((name) => name.startsWith(".trueline-tmp-"))).toEqual([]);
+  });
+});
+
+// Writes before the source stream starts (BOM, line-0 prepend) only fail for real
+// under a file-size limit. RLIMIT_FSIZE is per process, so the edit runs in a child
+// started with `ulimit -f 0`, where any write to a regular file fails with EFBIG.
+const EDIT_IN_CHILD = `
+import { readdirSync } from "node:fs";
+const { streamingEdit } = await import(process.env.STREAMING_EDIT_URL);
+const job = JSON.parse(process.env.EDIT_JOB);
+const fdCount = () => readdirSync("/dev/fd").length;
+const before = fdCount();
+let outcome;
+try {
+  const result = await streamingEdit(job.file, job.ops, job.checksumRefs, job.mtimeMs);
+  outcome = { resolved: result.ok };
+} catch (err) {
+  outcome = { threw: err.code };
+}
+console.log(JSON.stringify({ ...outcome, leakedFds: fdCount() - before }));
+`;
+
+describe.skipIf(process.platform === "win32")("streamingEdit — write failure before the source stream starts", () => {
+  function editWithZeroFileSizeLimit(file: string, edits: Omit<EditInput, "ref">[], checksum: string) {
+    const { mtimeMs } = statSync(file);
+    const validated = validateEdits(edits.map((e) => ({ ref: checksum, ...e })));
+    if (!validated.ok) throw new Error(`validateEdits failed: ${validated.error.content[0].text}`);
+
+    const job = { file, ops: validated.ops, checksumRefs: validated.checksumRefs, mtimeMs };
+    const child = spawnSync("sh", ["-c", 'ulimit -f 0 && exec "$0" -e "$1"', process.execPath, EDIT_IN_CHILD], {
+      env: {
+        ...process.env,
+        STREAMING_EDIT_URL: new URL("../src/streaming-edit.ts", import.meta.url).href,
+        EDIT_JOB: JSON.stringify(job),
+      },
+      encoding: "utf-8",
+    });
+    if (child.status !== 0) throw new Error(`child exited ${child.status}: ${child.stderr}`);
+    return JSON.parse(child.stdout) as { threw?: string; resolved?: boolean; leakedFds: number };
+  }
+
+  const leftoverTempFiles = () => readdirSync(testDir).filter((name) => name.startsWith(".trueline-tmp-"));
+
+  test("closes both fds and removes the temp file when the BOM write fails", () => {
+    const f = join(testDir, "bom.txt");
+    writeFileSync(f, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("line 1\nline 2\n")]));
+    const cs = rangeChecksum(["line 1", "line 2"], 1, 2);
+
+    const outcome = editWithZeroFileSizeLimit(f, [{ range: `${lineHash("line 1")}1`, content: "changed" }], cs);
+
+    expect(outcome.threw).toBe("EFBIG");
+    expect(outcome.leakedFds).toBe(0);
+    expect(leftoverTempFiles()).toEqual([]);
+  });
+
+  test("closes both fds and removes the temp file when the line-0 prepend write fails", () => {
+    const f = writeTestFile(testDir, "prepend.txt", "existing\n");
+    const cs = rangeChecksum(["existing"], 1, 1);
+    // The first line exceeds the 64KB write buffer, so enqueueing the second writes it out.
+    const content = `${"x".repeat(70_000)}\ntail`;
+
+    const outcome = editWithZeroFileSizeLimit(f, [{ range: "+0", content }], cs);
+
+    expect(outcome.threw).toBe("EFBIG");
+    expect(outcome.leakedFds).toBe(0);
+    expect(leftoverTempFiles()).toEqual([]);
   });
 });

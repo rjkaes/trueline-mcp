@@ -113,7 +113,7 @@ export async function streamingEdit(
   // Write BOM if the original file had one
   const { bom } = transcoded.bomInfo;
   if (bom.length > 0) {
-    await fd.write(bom, 0, bom.length);
+    await fd.write(bom, 0, bom.length).catch(abortBeforeStream);
   }
 
   async function flushWriteBuf(): Promise<void> {
@@ -194,6 +194,15 @@ export async function streamingEdit(
     return { ok: false, error: `${resolvedPath}: ${error}` };
   }
 
+  // Pre-stream writes fail before `transcoded.lines` starts, so its finally never
+  // closes the source fd. Rethrows: like open failures, these throw rather than
+  // returning { ok: false }.
+  async function abortBeforeStream(err: unknown): Promise<never> {
+    await cleanupTmp();
+    await transcoded.close();
+    throw err;
+  }
+
   async function writeContentLines(content: string[]): Promise<void> {
     for (const line of content) {
       await enqueueLine(Buffer.from(line, encoding));
@@ -254,8 +263,12 @@ export async function streamingEdit(
   // ---- Handle line-0 insert_after (prepend) before streaming ----
   const line0Ops = opsByStartLine.get(0);
   if (line0Ops) {
-    for (const op of line0Ops) {
-      await writeContentLines(op.content);
+    try {
+      for (const op of line0Ops) {
+        await writeContentLines(op.content);
+      }
+    } catch (err) {
+      await abortBeforeStream(err);
     }
     contentChanged = true;
   }
