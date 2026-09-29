@@ -52,7 +52,7 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.12",
+    "@biomejs/biome": "2.5.14",
     "bun-types": "^1.3.10",
     "fast-check": "^4.6.0",
     "lefthook": "^2.1.2",

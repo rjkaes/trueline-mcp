@@ -110,18 +110,16 @@ describe("CLI integration", () => {
   });
 
   // Names that exist on Object.prototype must not resolve to a subcommand loader.
-  test.each([
-    "constructor",
-    "toString",
-    "hasOwnProperty",
-    "__proto__",
-  ])("%s is reported as an unknown command", (name) => {
-    const unknown = run("nosuchcmd");
-    const { stdout, stderr, exitCode } = run(name);
-    expect(stderr).toBe(`Unknown command ${name}\n`);
-    expect(stdout).toBe(unknown.stdout);
-    expect(exitCode).toBe(unknown.exitCode);
-  });
+  test.each(["constructor", "toString", "hasOwnProperty", "__proto__"])(
+    "%s is reported as an unknown command",
+    (name) => {
+      const unknown = run("nosuchcmd");
+      const { stdout, stderr, exitCode } = run(name);
+      expect(stderr).toBe(`Unknown command ${name}\n`);
+      expect(stdout).toBe(unknown.stdout);
+      expect(exitCode).toBe(unknown.exitCode);
+    },
+  );
 
   test("constructor --help falls back to root usage", () => {
     const { stdout, exitCode } = run("constructor", "--help");
