@@ -151,23 +151,18 @@ export function coerceParams(val: unknown): unknown {
     }
   }
 
-  // Push top-level ref into edits that are missing one.
-  // Models sometimes pass {ref: "R1", edits: [{range, content}]}
-  // instead of {edits: [{range, content, ref: "R1"}]}.
-  if (typeof result.ref === "string" && Array.isArray(result.edits)) {
-    for (const edit of result.edits) {
-      if (typeof edit === "object" && edit !== null && !("ref" in edit)) {
-        (edit as Record<string, unknown>).ref = result.ref;
-      }
-    }
-    delete result.ref;
-  }
-
   // Coerce edit sub-objects: normalize refs, ranges, and content.
   if (Array.isArray(result.edits)) {
     for (const edit of result.edits) {
       if (typeof edit === "object" && edit !== null) {
         const e = edit as Record<string, unknown>;
+
+        // Push top-level ref into edits that are missing one.
+        // Models sometimes pass {ref: "R1", edits: [{range, content}]}
+        // instead of {edits: [{range, content, ref: "R1"}]}.
+        if (typeof result.ref === "string" && !("ref" in e)) {
+          e.ref = result.ref;
+        }
 
         // Detect built-in Edit tool shape (old_string/new_string instead of
         // range/ref/content). Can't recover, but give a helpful error.
@@ -198,6 +193,7 @@ export function coerceParams(val: unknown): unknown {
         }
       }
     }
+    if (typeof result.ref === "string") delete result.ref;
   }
 
   return result;

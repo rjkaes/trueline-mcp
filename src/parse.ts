@@ -149,7 +149,7 @@ export function parseChecksum(checksum: string): ChecksumRef {
 
   // Step 3: Find the dash separating start from end. The first "-" that is
   // immediately preceded by a digit (not a letter) is the range separator.
-  const dashIdx = findRangeDash(rangePart);
+  const dashIdx = rangePart.search(/(?<=\d)-/);
 
   let startRef: string;
   let endRef: string;
@@ -163,11 +163,8 @@ export function parseChecksum(checksum: string): ChecksumRef {
     endRef = rangePart.slice(dashIdx + 1);
   }
 
-  const start = extractLineNumber(startRef, checksum, "start");
-  const end = extractLineNumber(endRef, checksum, "end");
-
-  const startLine = start.line;
-  const endLine = end.line;
+  const startLine = extractLineNumber(startRef, checksum, "start");
+  const endLine = extractLineNumber(endRef, checksum, "end");
 
   // 0-0 is the empty-file sentinel; any other use of 0 is invalid.
   if (startLine === 0 && endLine !== 0) {
@@ -180,33 +177,14 @@ export function parseChecksum(checksum: string): ChecksumRef {
     throw new Error(`Invalid checksum "${checksum}" — empty-file sentinel must have hash aaaaaa`);
   }
 
-  const result: ChecksumRef = { startLine, endLine, hash };
-  return result;
-}
-
-/**
- * Find the index of the "-" that separates the start ref from the end ref.
- *
- * Strategy: scan for the first "-" that is immediately preceded by a digit.
- * In "aj9-na10" the separator is at index 3 (after "9").
- * In "9-10" it's at index 1 (after "9").
- * Returns -1 if no range dash is found (single-line reference).
- */
-function findRangeDash(rangePart: string): number {
-  for (let i = 1; i < rangePart.length; i++) {
-    const c = rangePart.charCodeAt(i - 1);
-    if (rangePart[i] === "-" && c >= 48 && c <= 57) {
-      return i;
-    }
-  }
-  return -1;
+  return { startLine, endLine, hash };
 }
 
 /**
  * Parse a single side of a checksum range — either "aj9" or "9" format.
  * Returns the line number.
  */
-function extractLineNumber(ref: string, originalInput: string, which: "start" | "end"): { line: number } {
+function extractLineNumber(ref: string, originalInput: string, which: "start" | "end"): number {
   if (!DECIMAL_INT.test(ref)) {
     // hashLine format: "aj9"
     const hashPrefix = ref.slice(0, 2).toLowerCase();
@@ -221,11 +199,11 @@ function extractLineNumber(ref: string, originalInput: string, which: "start" | 
         `Invalid checksum "${originalInput}" — ${which} line must be a decimal integer, got "${lineStr}"`,
       );
     }
-    return { line: Number(lineStr) };
+    return Number(lineStr);
   }
 
   // Decimal format: "9"
-  return { line: Number(ref) };
+  return Number(ref);
 }
 
 export interface ReadRange {
@@ -322,18 +300,8 @@ interface FilePathWithRanges {
  * ambiguity with Windows drive letters (C:\...) or other colons in paths.
  */
 export function parseFilePathWithRanges(entry: string): FilePathWithRanges {
-  // Find the last ':' followed by a digit
-  for (let i = entry.length - 1; i >= 0; i--) {
-    if (entry[i] === ":" && i + 1 < entry.length && /\d/.test(entry[i + 1])) {
-      const path = entry.slice(0, i);
-      const rangeStr = entry.slice(i + 1);
-      // Don't split if the path would be empty or a single letter (drive letter)
-      if (path.length <= 1) continue;
-      return {
-        path,
-        rangeSpecs: rangeStr.split(",").map((r) => r.trim()),
-      };
-    }
-  }
-  return { path: entry, rangeSpecs: undefined };
+  // Path needs 2+ chars so a drive letter ("C:1") is never split off.
+  const match = /^(.{2,}):(\d.*)$/s.exec(entry);
+  if (!match) return { path: entry, rangeSpecs: undefined };
+  return { path: match[1], rangeSpecs: match[2].split(",").map((r) => r.trim()) };
 }
