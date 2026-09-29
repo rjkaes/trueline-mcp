@@ -1,7 +1,6 @@
-import { parseArgs } from "node:util";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleOutline } from "../tools/outline.ts";
-import { asString, type CliSubcommand, emitResult, emitUsageError, jsonFlag, UsageError } from "./io.ts";
+import { type CliSubcommand, emitResult, jsonFlag, parseCliArgs, UsageError } from "./io.ts";
 
 const OPTIONS = {
   json: jsonFlag,
@@ -20,22 +19,14 @@ Options:
 export default {
   usage: USAGE,
   async run(argv: string[]): Promise<void> {
-    const { values: args, positionals: paths } = parseArgs({
-      args: argv,
-      options: OPTIONS,
-      allowPositionals: true,
-      strict: false,
-    });
+    const { values: args, positionals: paths } = parseCliArgs(argv, OPTIONS);
     if (paths.length === 0) {
-      emitUsageError(new UsageError("outline requires at least one file path"));
-      return;
+      throw new UsageError("outline requires at least one file path");
     }
 
-    const depthArg = asString(args.depth);
-    const depthVal = depthArg !== undefined ? Number.parseInt(depthArg, 10) : undefined;
+    const depthVal = args.depth !== undefined ? Number.parseInt(args.depth, 10) : undefined;
     if (depthVal !== undefined && Number.isNaN(depthVal)) {
-      emitUsageError(new UsageError("--depth must be a number"));
-      return;
+      throw new UsageError("--depth must be a number");
     }
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();

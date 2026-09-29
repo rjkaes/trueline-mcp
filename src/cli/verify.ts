@@ -1,7 +1,6 @@
-import { parseArgs } from "node:util";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleVerify } from "../tools/verify.ts";
-import { type CliSubcommand, emitResult, emitUsageError, jsonFlag, loadAtOrDashOrLiteral, UsageError } from "./io.ts";
+import { type CliSubcommand, emitResult, jsonFlag, loadAtOrDashOrLiteral, parseCliArgs, UsageError } from "./io.ts";
 
 const OPTIONS = {
   refs: { type: "string", multiple: true },
@@ -16,11 +15,6 @@ Options:
   --refs <ref>   Refs to verify: repeatable, @file, or - (stdin)
   --json         Output JSON envelope {ok, result}
 `;
-
-/** Narrow a parseArgs multiple:true string-option value. */
-function asStringArray(value: Array<string | boolean> | undefined): string[] {
-  return value === undefined ? [] : value.filter((v): v is string => typeof v === "string");
-}
 
 /**
  * Parse the --refs argument array which supports three forms:
@@ -58,25 +52,13 @@ function parseRefsArg(refsArray: string[]): string[] {
 export default {
   usage: USAGE,
   async run(argv: string[]): Promise<void> {
-    const { values: args, positionals: paths } = parseArgs({
-      args: argv,
-      options: OPTIONS,
-      allowPositionals: true,
-      strict: false,
-    });
+    const { values: args, positionals: paths } = parseCliArgs(argv, OPTIONS);
     if (paths.length === 0) {
-      emitUsageError(new UsageError("verify requires a file path"));
-      return;
+      throw new UsageError("verify requires a file path");
     }
     const filePath = paths[0];
 
-    let refs: string[];
-    try {
-      refs = parseRefsArg(asStringArray(args.refs));
-    } catch (err) {
-      emitUsageError(err as UsageError);
-      return;
-    }
+    const refs = parseRefsArg(args.refs ?? []);
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 

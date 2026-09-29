@@ -1,16 +1,7 @@
-import { parseArgs } from "node:util";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleEdit } from "../tools/edit.ts";
 import type { EditInput } from "../tools/shared.ts";
-import {
-  asString,
-  type CliSubcommand,
-  emitResult,
-  emitUsageError,
-  jsonFlag,
-  loadAtOrDashOrLiteral,
-  UsageError,
-} from "./io.ts";
+import { type CliSubcommand, emitResult, jsonFlag, loadAtOrDashOrLiteral, parseCliArgs, UsageError } from "./io.ts";
 
 const OPTIONS = {
   edits: { type: "string" },
@@ -42,7 +33,7 @@ Options:
 `;
 
 /**
- * Validate and return an EditInput array from a parsed --edits value.
+ * Validate and return an EditInput array from parsed edit input (an --edits value or the flat-flag shorthand).
  *
  * Accepts an array of objects with required keys: ref, range, content.
  * Optional key: action.
@@ -70,81 +61,44 @@ function parseEditsArg(raw: unknown): EditInput[] {
 export default {
   usage: USAGE,
   async run(argv: string[]): Promise<void> {
-    const { values: args, positionals: paths } = parseArgs({
-      args: argv,
-      options: OPTIONS,
-      allowPositionals: true,
-      strict: false,
-    });
+    const { values: args, positionals: paths } = parseCliArgs(argv, OPTIONS);
     if (paths.length === 0) {
-      emitUsageError(new UsageError("edit requires a file path"));
-      return;
+      throw new UsageError("edit requires a file path");
     }
     const filePath = paths[0];
 
-    const editsArg = asString(args.edits);
-    const refArg = asString(args.ref);
-    const rangeArg = asString(args.range);
-    const contentArg = asString(args.content);
-
-    const hasFlatFlags = refArg !== undefined || rangeArg !== undefined || contentArg !== undefined;
-    const hasEditsFlag = editsArg !== undefined;
+    const hasFlatFlags = args.ref !== undefined || args.range !== undefined || args.content !== undefined;
 
     // Mutually exclusive: --edits vs flat flags
-    if (hasEditsFlag && hasFlatFlags) {
-      emitUsageError(new UsageError("--edits and --ref/--range/--content are mutually exclusive"));
-      return;
+    if (args.edits !== undefined && hasFlatFlags) {
+      throw new UsageError("--edits and --ref/--range/--content are mutually exclusive");
     }
 
     // Both --edits - and --content - would consume stdin
-    if (editsArg === "-" && contentArg === "-") {
-      emitUsageError(new UsageError("--edits - and --content - cannot both consume stdin"));
-      return;
+    if (args.edits === "-" && args.content === "-") {
+      throw new UsageError("--edits - and --content - cannot both consume stdin");
     }
 
-    let edits: EditInput[];
-
-    if (hasEditsFlag) {
+    let raw: unknown;
+    if (args.edits !== undefined) {
       // Load via @file, stdin, or literal JSON string
-      let raw: unknown;
-      try {
-        raw = loadAtOrDashOrLiteral(editsArg!, "json");
-      } catch (err) {
-        emitUsageError(err as UsageError);
-        return;
-      }
-      try {
-        edits = parseEditsArg(raw);
-      } catch (err) {
-        emitUsageError(err as UsageError);
-        return;
-      }
+      raw = loadAtOrDashOrLiteral(args.edits, "json");
     } else if (hasFlatFlags) {
-      // Flat single-edit shorthand: --ref, --range, --content required
-      if (!refArg || !rangeArg || contentArg === undefined) {
-        emitUsageError(new UsageError("single-edit shorthand requires --ref, --range, and --content"));
-        return;
-      }
-      let contentValue: string;
-      try {
-        contentValue = loadAtOrDashOrLiteral(contentArg, "text") as string;
-      } catch (err) {
-        emitUsageError(err as UsageError);
-        return;
-      }
-      const action = asString(args.action) as EditInput["action"] | undefined;
-      if (action !== undefined && action !== "replace" && action !== "insert_after") {
-        emitUsageError(new UsageError('--action must be "replace" or "insert_after"'));
-        return;
-      }
-      edits = [{ ref: refArg, range: rangeArg, content: contentValue, action }];
+      // Single-edit shorthand; parseEditsArg reports any missing field
+      raw = [
+        {
+          ref: args.ref,
+          range: args.range,
+          content: args.content === undefined ? undefined : loadAtOrDashOrLiteral(args.content, "text"),
+          action: args.action,
+        },
+      ];
     } else {
-      emitUsageError(new UsageError("provide either --edits or the flat --ref/--range/--content flags"));
-      return;
+      throw new UsageError("provide either --edits or the flat --ref/--range/--content flags");
     }
+    const edits = parseEditsArg(raw);
 
-    const contextLinesArg = asString(args["context-lines"]);
-    const contextLines = contextLinesArg !== undefined ? Number.parseInt(contextLinesArg, 10) : undefined;
+    const contextLines = args["context-lines"] !== undefined ? Number.parseInt(args["context-lines"], 10) : undefined;
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 
@@ -153,7 +107,7 @@ export default {
       edits,
       dry_run: Boolean(args["dry-run"]),
       context_lines: contextLines,
-      encoding: asString(args.encoding),
+      encoding: args.encoding,
       projectDir,
       allowedDirs,
     });

@@ -45,12 +45,6 @@ describe("read subcommand", () => {
     expect(stdout).toContain("line two");
   });
 
-  test("inline range + --ranges exits 3 (ambiguous)", () => {
-    const { exitCode, stderr } = run(tmpDir, "read", `${testFile}:1-10`, "--ranges", "20-30");
-    expect(exitCode).toBe(3);
-    expect(stderr).toContain("ambiguous ranges");
-  });
-
   test("nonexistent file exits 2", () => {
     const { exitCode } = run(tmpDir, "read", join(tmpDir, "missing.txt"));
     expect(exitCode).toBe(2);

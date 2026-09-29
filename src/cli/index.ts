@@ -4,7 +4,7 @@
 // regardless of which subcommand is invoked.
 
 import pkg from "../../package.json";
-import type { CliSubcommand } from "./io.ts";
+import { type CliSubcommand, UsageError } from "./io.ts";
 
 const SUBCOMMAND_LOADERS: Record<string, () => Promise<{ default: CliSubcommand }>> = {
   outline: () => import("./outline.ts"),
@@ -13,7 +13,6 @@ const SUBCOMMAND_LOADERS: Record<string, () => Promise<{ default: CliSubcommand 
   edit: () => import("./edit.ts"),
   verify: () => import("./verify.ts"),
   changes: () => import("./changes.ts"),
-  diff: () => import("./changes.ts"), // "diff" alias: same handler as "changes"
 };
 
 function rootUsage(): string {
@@ -28,7 +27,6 @@ Commands:
   edit      Apply hash-verified edits to a file
   verify    Check if held refs are still valid against current file content
   changes   Semantic AST-based diff of structural changes vs a git ref
-  diff      Semantic AST-based diff of structural changes vs a git ref (alias for changes)
 
 Run "trueline <command> --help" for command-specific options.
 `;
@@ -64,5 +62,14 @@ export default async function main(argv: string[]): Promise<void> {
   }
 
   const mod = await load();
-  await mod.default.run(rest);
+  try {
+    await mod.default.run(rest);
+  } catch (err) {
+    if (err instanceof UsageError) {
+      process.stderr.write(`trueline: ${err.message}\n`);
+      process.exitCode = 3;
+      return;
+    }
+    throw err;
+  }
 }

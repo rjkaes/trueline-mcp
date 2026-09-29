@@ -120,13 +120,6 @@ describe("CLI integration", () => {
     expect(stdout + stderr).toContain("Invalid checksum");
   });
 
-  // Precedence error: inline range + --ranges (exit 3)
-  test("read with inline range and --ranges exits 3", () => {
-    const { exitCode, stderr } = run("read", `${testFile}:1-10`, "--ranges", "20-30");
-    expect(exitCode).toBe(3);
-    expect(stderr).toContain("ambiguous ranges");
-  });
-
   // Precedence error: --edits + flat flags (exit 3)
   test("edit --edits and flat flags exits 3", () => {
     const { exitCode, stderr } = run(

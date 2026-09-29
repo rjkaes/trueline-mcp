@@ -1,7 +1,6 @@
-import { parseArgs } from "node:util";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleSearch } from "../tools/search.ts";
-import { asString, type CliSubcommand, emitResult, emitUsageError, jsonFlag, UsageError } from "./io.ts";
+import { type CliSubcommand, emitResult, jsonFlag, parseCliArgs, UsageError } from "./io.ts";
 
 const OPTIONS = {
   "ignore-case": { type: "boolean", short: "i", default: false },
@@ -30,31 +29,22 @@ Options:
 export default {
   usage: USAGE,
   async run(argv: string[]): Promise<void> {
-    const { values: args, positionals: rest } = parseArgs({
-      args: argv,
-      options: OPTIONS,
-      allowPositionals: true,
-      strict: false,
-    });
+    const { values: args, positionals: rest } = parseCliArgs(argv, OPTIONS);
     // First positional is the pattern; remaining are paths.
     if (rest.length === 0) {
-      emitUsageError(new UsageError("search requires a pattern and at least one path"));
-      return;
+      throw new UsageError("search requires a pattern and at least one path");
     }
 
     const [pattern, ...paths] = rest;
 
     if (paths.length === 0) {
-      emitUsageError(new UsageError("paths required"));
-      return;
+      throw new UsageError("paths required");
     }
 
-    const contextArg = asString(args.context);
-    const maxArg = asString(args.max);
-    const maxMatchLinesArg = asString(args["max-match-lines"]);
-    const contextLines = contextArg !== undefined ? Number.parseInt(contextArg, 10) : undefined;
-    const maxMatches = maxArg !== undefined ? Number.parseInt(maxArg, 10) : undefined;
-    const maxMatchLines = maxMatchLinesArg !== undefined ? Number.parseInt(maxMatchLinesArg, 10) : undefined;
+    const contextLines = args.context !== undefined ? Number.parseInt(args.context, 10) : undefined;
+    const maxMatches = args.max !== undefined ? Number.parseInt(args.max, 10) : undefined;
+    const maxMatchLines =
+      args["max-match-lines"] !== undefined ? Number.parseInt(args["max-match-lines"], 10) : undefined;
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 

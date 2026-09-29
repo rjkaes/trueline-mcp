@@ -10,16 +10,11 @@ beforeAll(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "trueline-cli-changes-"));
 });
 
-describe("changes subcommand (alias: diff)", () => {
+describe("changes subcommand", () => {
   test("no paths: defaults to * (runs without usage error)", () => {
     // Point CLAUDE_PROJECT_DIR at an empty non-git dir so getChangedFiles
     // returns [] immediately — avoids scanning the whole working tree.
     const { exitCode } = run(tmpDir, { CLAUDE_PROJECT_DIR: tmpDir }, "changes");
-    expect(exitCode).not.toBe(3);
-  });
-
-  test("diff alias: same behavior as changes", () => {
-    const { exitCode } = run(tmpDir, { CLAUDE_PROJECT_DIR: tmpDir }, "diff");
     expect(exitCode).not.toBe(3);
   });
 

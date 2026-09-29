@@ -11,7 +11,7 @@ overwrites.
 - **trueline edit** — Apply hash-verified edits. Each edit needs a ref from a prior read or search.
 - **trueline outline** — Compact structural outline (functions, classes, types with line ranges).
 - **trueline search** — Search a file for a string or regex. Returns matching lines with hashes, ready for editing.
-- **trueline diff** — Semantic AST-based diff vs a git ref.
+- **trueline changes** — Semantic AST-based diff vs a git ref.
 - **trueline verify** — Check if held refs are still valid.
 
 Run `trueline --help` or `trueline <command> --help` for full usage.

@@ -1,15 +1,15 @@
 // Shared I/O helpers for the trueline CLI subcommands.
 //
-// Three concerns live here:
-//   1. stdin reading (sync, TTY detection)
-//   2. @file / - / literal value dispatch
-//   3. Result formatting (human-readable vs --json envelope)
+// Two concerns live here:
+//   1. @file / - / literal value dispatch (including stdin)
+//   2. Result formatting (human-readable vs --json envelope)
 
 import { readFileSync } from "node:fs";
+import { type ParseArgsConfig, type ParseArgsOptionsConfig, parseArgs } from "node:util";
 import type { ToolResult } from "../tools/types.ts";
 
 // ---------------------------------------------------------------------------
-// Shared CLI arg definitions and parseArgs value narrowing
+// Shared CLI arg definitions
 // ---------------------------------------------------------------------------
 
 export const jsonFlag = {
@@ -24,16 +24,6 @@ export interface CliSubcommand {
   run(argv: string[]): Promise<void>;
 }
 
-// parseArgs runs with strict:false so unrecognized flags are tolerated (matching
-// the prior citty-based parser) instead of throwing. That tolerance means even a
-// declared `type: "string"` option can come back typed as `boolean` (e.g. a flag
-// given with no following value) — these narrow it back to what each subcommand wants.
-
-/** Narrow a parseArgs string-option value, discarding a stray boolean. */
-export function asString(value: string | boolean | undefined): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
 // ---------------------------------------------------------------------------
 // User-facing errors that map to exit code 3 (usage / parse error)
 // ---------------------------------------------------------------------------
@@ -46,18 +36,33 @@ export class UsageError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// stdin helpers
+// Arg parsing
 // ---------------------------------------------------------------------------
 
+type ParsedArgs<T extends ParseArgsOptionsConfig> = ReturnType<
+  typeof parseArgs<{ options: T; allowPositionals: true }>
+>;
+
 /**
- * Read all stdin synchronously. Blocks until EOF.
- *
- * Must only be called when stdin is not a TTY; callers are responsible for
- * checking process.stdin.isTTY first and raising UsageError if appropriate.
+ * parseArgs with unknown options rejected. Not strict:true, because strict also rejects
+ * option values that start with '-' (--content "- item") as ambiguous. Instead parse
+ * loosely and check the tokens here; the checks make the loose result match strict typing.
  */
-export function readStdinSync(): string {
-  // Node/Bun: fd 0 is stdin; readFileSync on fd 0 reads until EOF.
-  return readFileSync(0, "utf-8");
+export function parseCliArgs<T extends ParseArgsOptionsConfig>(argv: string[], options: T) {
+  const config: ParseArgsConfig = { args: argv, options, allowPositionals: true, strict: false, tokens: true };
+  const { values, positionals, tokens = [] } = parseArgs(config);
+  for (const token of tokens) {
+    if (token.kind !== "option") continue;
+    const option = Object.hasOwn(options, token.name) ? options[token.name] : undefined;
+    if (!option) throw new UsageError(`unknown option ${token.rawName}`);
+    if (option.type === "string" && token.value === undefined) {
+      throw new UsageError(`option ${token.rawName} requires a value`);
+    }
+    if (option.type === "boolean" && token.value !== undefined) {
+      throw new UsageError(`option ${token.rawName} does not take a value`);
+    }
+  }
+  return { values: values as unknown as ParsedArgs<T>["values"], positionals };
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +92,7 @@ export function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): unk
     if (process.stdin.isTTY) {
       throw new UsageError("stdin is a TTY; pipe data in or use @file");
     }
-    raw = readStdinSync();
+    raw = readFileSync(0, "utf-8");
   } else {
     raw = value;
   }
@@ -112,62 +117,34 @@ export interface FormatOptions {
   search?: boolean;
 }
 
-export interface FormatResult {
-  exitCode: number;
-  stdout: string;
-}
-
 /**
- * Convert a ToolResult into a formatted string and an appropriate exit code.
+ * Write a ToolResult to the appropriate stream and set process.exitCode.
  *
  * Exit code scheme:
  *   0   success
  *   1   search: valid pattern but zero matches
  *   2   tool error (result.isError) or runtime failure
- *   3   usage / parse error (handled by callers, not here)
- */
-export function formatResult(result: ToolResult, opts: FormatOptions): FormatResult {
-  const text = result.content.map((c) => c.text).join("");
-
-  if (opts.json) {
-    const ok = !result.isError;
-    const envelope = JSON.stringify({ ok, result }, null, 2);
-    return { exitCode: ok ? 0 : 2, stdout: envelope };
-  }
-
-  if (result.isError) {
-    return { exitCode: 2, stdout: text };
-  }
-
-  // Search zero-match: handler returns success but text says "No matches"
-  if (opts.search && text.startsWith("No matches")) {
-    return { exitCode: 1, stdout: text };
-  }
-
-  return { exitCode: 0, stdout: text };
-}
-
-/**
- * Write formatted output to the appropriate stream and set process.exitCode.
+ *   3   usage / parse error (thrown as UsageError, handled in cli/index.ts)
  *
- * Errors (exit 2) go to stderr; everything else goes to stdout.
+ * Errors (exit 2) go to stderr unless --json; everything else goes to stdout.
  */
 export function emitResult(result: ToolResult, opts: FormatOptions): void {
-  const { exitCode, stdout } = formatResult(result, opts);
-  const trailing = stdout.endsWith("\n") ? "" : "\n";
+  const text = result.content.map((c) => c.text).join("");
+  let output = text;
+  let exitCode = 0;
+  let stream: NodeJS.WriteStream = process.stdout;
 
-  if (exitCode === 2 && !opts.json) {
-    process.stderr.write(stdout + trailing);
-  } else {
-    process.stdout.write(stdout + trailing);
+  if (opts.json) {
+    output = JSON.stringify({ ok: !result.isError, result }, null, 2);
+    if (result.isError) exitCode = 2;
+  } else if (result.isError) {
+    exitCode = 2;
+    stream = process.stderr;
+  } else if (opts.search && text.startsWith("No matches")) {
+    // Handler returns success but text says "No matches"
+    exitCode = 1;
   }
-  process.exitCode = exitCode;
-}
 
-/**
- * Handle a UsageError (exit 3): print to stderr and set exitCode.
- */
-export function emitUsageError(err: UsageError): void {
-  process.stderr.write(`trueline: ${err.message}\n`);
-  process.exitCode = 3;
+  stream.write(output.endsWith("\n") ? output : `${output}\n`);
+  process.exitCode = exitCode;
 }

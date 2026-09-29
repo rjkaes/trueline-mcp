@@ -1,8 +1,6 @@
-import { parseArgs } from "node:util";
 import { resolveProjectDirs } from "../allowed-dirs.js";
-import { parseFilePathWithRanges } from "../parse.ts";
 import { handleReadMulti } from "../tools/read.ts";
-import { asString, type CliSubcommand, emitResult, emitUsageError, jsonFlag, UsageError } from "./io.ts";
+import { type CliSubcommand, emitResult, jsonFlag, parseCliArgs, UsageError } from "./io.ts";
 
 const OPTIONS = {
   ranges: { type: "string" },
@@ -21,57 +19,28 @@ Options:
   --json              Output JSON envelope {ok, result}
 `;
 
-/**
- * Check for ambiguous ranges: a path like "src/foo.ts:10-20" already embeds
- * a range; combining it with --ranges is ambiguous and exits 3.
- */
-function validateRangesConflict(paths: string[], flagRanges: string[] | undefined): void {
-  if (!flagRanges || flagRanges.length === 0) return;
-
-  for (const p of paths) {
-    const parsed = parseFilePathWithRanges(p);
-    if (parsed.rangeSpecs && parsed.rangeSpecs.length > 0) {
-      throw new UsageError(`ambiguous ranges for ${p}: use either inline ':range' or --ranges, not both`);
-    }
-  }
-}
-
 export default {
   usage: USAGE,
   async run(argv: string[]): Promise<void> {
-    const { values: args, positionals: paths } = parseArgs({
-      args: argv,
-      options: OPTIONS,
-      allowPositionals: true,
-      strict: false,
-    });
+    const { values: args, positionals: paths } = parseCliArgs(argv, OPTIONS);
     if (paths.length === 0) {
-      emitUsageError(new UsageError("read requires at least one file path"));
-      return;
+      throw new UsageError("read requires at least one file path");
     }
 
     // --ranges is a single comma-separated string; split it here.
-    const rangesArg = asString(args.ranges);
-    const flagRanges = rangesArg
-      ? rangesArg
+    const flagRanges = args.ranges
+      ? args.ranges
           .split(",")
           .map((r) => r.trim())
           .filter(Boolean)
       : undefined;
-
-    try {
-      validateRangesConflict(paths, flagRanges);
-    } catch (err) {
-      emitUsageError(err as UsageError);
-      return;
-    }
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 
     const result = await handleReadMulti({
       file_paths: paths,
       ranges: flagRanges,
-      encoding: asString(args.encoding),
+      encoding: args.encoding,
       projectDir,
       allowedDirs,
     });

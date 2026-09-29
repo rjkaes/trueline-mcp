@@ -68,4 +68,12 @@ describe("search subcommand", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("banana");
   });
+
+  test("pattern starting with '-' after -- terminator", () => {
+    const dashedFile = join(tmpDir, "dashed.txt");
+    writeFileSync(dashedFile, "-foo\nbar\n");
+    const { stdout, exitCode } = run(tmpDir, "search", "--", "-foo", dashedFile);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("-foo");
+  });
 });

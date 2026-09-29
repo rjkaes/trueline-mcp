@@ -66,6 +66,13 @@ describe("edit subcommand", () => {
     expect(readFileSync(testFile, "utf-8")).toContain("GAMMA_NEW");
   });
 
+  test.each(["- item", "-1"])("--content %p starting with '-' is a literal value", (content) => {
+    const { ref, hashRange } = readRef("3-3");
+    const { exitCode } = run(tmpDir, "edit", testFile, "--ref", ref, "--range", hashRange, "--content", content);
+    expect(exitCode).toBe(0);
+    expect(readFileSync(testFile, "utf-8")).toBe(`alpha\n${content}\n`);
+  });
+
   test("--content with a trailing newline is a terminator, not an extra blank line", () => {
     // readRef("3-3") returns a ref widened with 1 line of context (covers lines 2-3:
     // "beta"/"gamma"), so the edit below replaces both lines with one.
@@ -111,6 +118,31 @@ describe("edit subcommand", () => {
     );
     expect(exitCode).toBe(3);
     expect(stderr).toContain("mutually exclusive");
+  });
+
+  test("unknown flag exits 3 without editing (typo of --dry-run)", () => {
+    const { ref, hashRange } = readRef("1-1");
+    const { exitCode, stderr } = run(
+      tmpDir,
+      "edit",
+      testFile,
+      "--ref",
+      ref,
+      "--range",
+      hashRange,
+      "--content",
+      "ALPHA_NEW",
+      "--dryrun",
+    );
+    expect(exitCode).toBe(3);
+    expect(stderr).toContain("unknown option --dryrun");
+    expect(readFileSync(testFile, "utf-8")).toBe("alpha\nbeta\ngamma\n");
+  });
+
+  test("string option without a value exits 3", () => {
+    const { exitCode, stderr } = run(tmpDir, "edit", testFile, "--content");
+    expect(exitCode).toBe(3);
+    expect(stderr).toContain("option --content requires a value");
   });
 
   test("--json shape: {ok, result}", () => {
