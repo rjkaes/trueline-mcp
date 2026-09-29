@@ -447,24 +447,6 @@ tools.set("trueline_verify", {
 // MCP protocol handlers
 // =============================================================================
 
-function handleInitialize(id: string | number): void {
-  respond(id, {
-    protocolVersion: PROTOCOL_VERSION,
-    capabilities: { tools: { listChanged: false }, logging: {} },
-    serverInfo: { name: "trueline-mcp", version: VERSION },
-  });
-}
-
-function handleToolsList(id: string | number): void {
-  const toolList = [...tools.entries()].map(([name, def]) => ({
-    name,
-    description: def.description,
-    inputSchema: def.inputSchema,
-    ...(def.annotations ? { annotations: def.annotations } : {}),
-  }));
-  respond(id, { tools: toolList });
-}
-
 async function handleToolsCall(id: string | number, params: Record<string, unknown>): Promise<void> {
   const name = params.name as string;
   const args = (params.arguments ?? {}) as Record<string, unknown>;
@@ -505,13 +487,24 @@ async function dispatch(msg: JsonRpcMessage): Promise<void> {
 
   switch (msg.method) {
     case "initialize":
-      handleInitialize(msg.id);
+      respond(msg.id, {
+        protocolVersion: PROTOCOL_VERSION,
+        capabilities: { tools: { listChanged: false }, logging: {} },
+        serverInfo: { name: "trueline-mcp", version: VERSION },
+      });
       break;
     case "ping":
       respond(msg.id, {});
       break;
     case "tools/list":
-      handleToolsList(msg.id);
+      respond(msg.id, {
+        tools: [...tools.entries()].map(([name, def]) => ({
+          name,
+          description: def.description,
+          inputSchema: def.inputSchema,
+          ...(def.annotations ? { annotations: def.annotations } : {}),
+        })),
+      });
       break;
     case "tools/call":
       await handleToolsCall(msg.id, (msg.params ?? {}) as Record<string, unknown>);

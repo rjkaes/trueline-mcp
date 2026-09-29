@@ -45,24 +45,17 @@ function grammarPath(grammar: string): string {
   return resolve(dirname(wasmsEntry), "out", `tree-sitter-${grammar}.wasm`);
 }
 
-/** Load a language grammar (cached). */
-// biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
-async function loadLanguage(grammar: string): Promise<any> {
-  const cached = languageCache.get(grammar);
-  if (cached) return cached;
-
-  await ensureInit();
-  const lang = await Parser.Language.load(grammarPath(grammar));
-  languageCache.set(grammar, lang);
-  return lang;
-}
-
 /** Create a parser configured for a given grammar. */
 // biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
 export async function createParser(grammar: string): Promise<any> {
   await ensureInit();
   const parser = new Parser();
-  const lang = await loadLanguage(grammar);
+  // Load each grammar once
+  let lang = languageCache.get(grammar);
+  if (!lang) {
+    lang = await Parser.Language.load(grammarPath(grammar));
+    languageCache.set(grammar, lang);
+  }
   parser.setLanguage(lang);
   return parser;
 }
