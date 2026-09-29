@@ -167,7 +167,7 @@ byte-by-byte from disk to a temp file, applying edits inline. The
 file is never loaded into memory as a whole.
 
 ```
-1. Sort edits ascending by startLine.
+1. Group edits by startLine (input order kept within a line).
 2. Open a read stream on the source and a write stream to a temp file.
 3. For each source line:
    a. Hash raw bytes (FNV-1a on the Buffer, no string decode).
@@ -186,9 +186,8 @@ file is never loaded into memory as a whole.
    checksum.
 ```
 
-The ascending sort (opposite of the in-memory approach used by
-the `dry_run` path) works because the streaming engine never needs
-random access — it walks edits in lockstep with the line stream.
+Edits are looked up by line number as the stream advances, so the
+engine never needs random access.
 
 **Backpressure.** The write stream respects Node.js backpressure:
 when `write()` returns `false`, the engine awaits the `drain` event
@@ -508,14 +507,12 @@ hash = (hash XOR b) * prime  (mod 2^32)
 ### Per-line hash: `fnv1aHash`
 
 Input: the line's content as a string, with trailing `\n`, `\r\n`, or
-`\r` stripped. The string is encoded as UTF-8 bytes inline (handling
-surrogate pairs for codepoints above U+FFFF), and each byte is fed
-into the FNV-1a accumulator.
+`\r` stripped. It is encoded with `Buffer.from(line)` and hashed by
+`fnv1aHashBytes(buf)`, which feeds each byte into the FNV-1a
+accumulator.
 
-The streaming edit engine has a byte-level equivalent,
-`fnv1aHashBytes(buf, start, end)`, that hashes raw UTF-8 bytes from a
-Buffer directly — identical output, no string decode/encode
-round-trip.
+The streaming edit engine calls `fnv1aHashBytes(buf)` directly on raw
+line bytes — identical output, no string decode/encode round-trip.
 
 ### Two-character tag: `hashToLetters`
 
