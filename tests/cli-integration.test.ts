@@ -40,7 +40,7 @@ function run(...rest: unknown[]): { stdout: string; stderr: string; exitCode: nu
 }
 
 // Run the outline subprocess in beforeAll so the tree-sitter WASM cold-start
-// (~10 s) is paid once rather than inside the test body.
+// is paid once rather than inside the test body.
 beforeAll(
   () => {
     tmpDir = mkdtempSync(join(tmpdir(), "trueline-cli-"));

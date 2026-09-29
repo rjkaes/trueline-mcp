@@ -30,10 +30,16 @@ function treeSitterWasmPath(): string {
 async function ensureInit(): Promise<void> {
   if (initialized) return;
   // Guard against WASM loading that hangs (e.g. missing .wasm files).
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("tree-sitter WASM init timed out after 10 s")), 10_000),
-  );
-  await Promise.race([Parser.init({ locateFile: () => treeSitterWasmPath() }), timeout]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("tree-sitter WASM init timed out after 10 s")), 10_000);
+  });
+  try {
+    await Promise.race([Parser.init({ locateFile: () => treeSitterWasmPath() }), timeout]);
+  } finally {
+    // A pending timer keeps the event loop alive; CLI runs lingered 10 s.
+    clearTimeout(timer);
+  }
   initialized = true;
 }
 

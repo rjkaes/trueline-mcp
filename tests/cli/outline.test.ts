@@ -8,9 +8,9 @@ let tmpDir: string;
 let tsFile: string;
 
 // A single subprocess invocation covers all assertions that require tree-sitter
-// WASM. The WASM cold-start (~10 s) is paid once in beforeAll rather than
-// once per test.
+// WASM, so its startup is paid once in beforeAll rather than once per test.
 let jsonResult: ReturnType<typeof run>;
+let outlineElapsedMs: number;
 
 beforeAll(
   () => {
@@ -18,7 +18,9 @@ beforeAll(
     tsFile = join(tmpDir, "sample.ts");
     writeFileSync(tsFile, "export function greet(name: string): string { return 'Hello ' + name; }\n");
     // --json --depth 0: JSON output, depth-limited, one subprocess call.
+    const started = performance.now();
     jsonResult = run(tmpDir, "outline", tsFile, "--json", "--depth", "0");
+    outlineElapsedMs = performance.now() - started;
   },
   { timeout: 30_000 },
 );
@@ -45,5 +47,10 @@ describe("outline subcommand", () => {
   test("--depth flag accepted", () => {
     // --depth 0 was used in the shared beforeAll invocation.
     expect(jsonResult.exitCode).toBe(0);
+  });
+
+  test("exits promptly once output is written", () => {
+    // A pending WASM-init timeout timer once held the process open for 10 s.
+    expect(outlineElapsedMs).toBeLessThan(5_000);
   });
 });
