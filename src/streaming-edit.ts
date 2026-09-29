@@ -170,10 +170,6 @@ export async function streamingEdit(
     outputLineCount++;
   }
 
-  async function enqueueString(s: string): Promise<void> {
-    await enqueueLine(Buffer.from(s, encoding));
-  }
-
   async function cleanupTmp(): Promise<void> {
     try {
       await fd.close();
@@ -194,7 +190,7 @@ export async function streamingEdit(
 
   async function writeContentLines(content: string[]): Promise<void> {
     for (const line of content) {
-      await enqueueString(line);
+      await enqueueLine(Buffer.from(line, encoding));
       collector?.insert(line);
     }
   }
@@ -502,8 +498,7 @@ export async function streamingEdit(
     // On Windows, AV/Defender/indexers can briefly hold a handle on the temp
     // file or destination without FILE_SHARE_DELETE, causing rename() to fail
     // with EPERM/EACCES/EBUSY. Retry with exponential back-off before giving up.
-    // Produce a human-readable error for rename failures, preserving the
-    // original as .cause so debug tooling still has the full stack.
+    // Produce a human-readable error for rename failures.
     function formatRenameError(err: unknown, tmp: string, dest: string, attempts: number): Error {
       const errno = err as NodeJS.ErrnoException;
       const code = errno.code ?? "UNKNOWN";
@@ -518,10 +513,7 @@ export async function streamingEdit(
       }
       const retryNote =
         process.platform === "win32" && attempts > 0 ? `; retried ${attempts} times with backoff before failing` : "";
-      const wrapped = new Error(`${code}: rename '${tmp}' -> '${dest}': ${hint}${retryNote}`) as NodeJS.ErrnoException;
-      wrapped.code = code;
-      (wrapped as Error & { cause: unknown }).cause = err;
-      return wrapped;
+      return new Error(`${code}: rename '${tmp}' -> '${dest}': ${hint}${retryNote}`);
     }
 
     async function renameWithRetry(): Promise<void> {
