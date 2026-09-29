@@ -31,6 +31,10 @@ export async function extractOutline(
 ): Promise<OutlineEntry[]> {
   const parser = await createParser(config.grammar);
   const tree = parser.parse(source);
+  // web-tree-sitter 0.24 has no finalizers: parsers and trees stay in the
+  // WASM heap until deleted, and a full heap aborts every later parse.
+  // A tree does not reference its parser, so the parser can go now.
+  parser.delete();
   const lines = source.split("\n");
   const entries: OutlineEntry[] = [];
 
@@ -154,8 +158,12 @@ export async function extractOutline(
     }
   }
 
-  for (const child of tree.rootNode.children) {
-    visit(child, 0, true);
+  try {
+    for (const child of tree.rootNode.children) {
+      visit(child, 0, true);
+    }
+  } finally {
+    tree.delete();
   }
   flushSkipped();
 
