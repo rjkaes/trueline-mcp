@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { constants, open } from "node:fs/promises";
+import { readTextNoFollow } from "../line-splitter.ts";
 import { lcsMiddle, trimCommonEnds } from "../diff-collector.ts";
 import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
@@ -45,20 +45,15 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     const relPath = filePath.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : filePath;
 
     // Read disk content
-    let diskContent: string;
+    let diskContent: string | null;
     try {
-      // O_NOFOLLOW: fail if the leaf path is a symlink, guarding against
-      // TOCTOU races between validatePath() and this open.
-      const noFollow = constants.O_NOFOLLOW ?? 0;
-      const fh = await open(resolvedPath, constants.O_RDONLY | noFollow);
-      const buf = await fh.readFile().finally(() => fh.close());
-      if (buf.includes(0)) {
-        return errorResult(`"${filePath}" appears to be a binary file`);
-      }
-      diskContent = buf.toString("utf-8");
+      diskContent = await readTextNoFollow(resolvedPath);
     } catch {
       sections.push(`## ${relPath}\n\nFile not readable.`);
       continue;
+    }
+    if (diskContent === null) {
+      return errorResult(`"${filePath}" appears to be a binary file`);
     }
 
     // Read git content

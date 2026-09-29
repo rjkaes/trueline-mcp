@@ -11,8 +11,7 @@
 // original encoding, preserving round-trip fidelity.
 // ==============================================================================
 
-import { constants, open } from "node:fs/promises";
-import { readFdChunks, splitChunks, type RawLine, type SplitChunksOpts } from "./line-splitter.ts";
+import { openNoFollow, readFdChunks, splitChunks, type RawLine, type SplitChunksOpts } from "./line-splitter.ts";
 
 // ==============================================================================
 // BOM detection
@@ -76,10 +75,7 @@ const READ_BUF_SIZE = 65536;
  * For plain UTF-8: delegates to splitChunks with zero overhead.
  */
 export async function transcodedLines(filePath: string, opts?: SplitChunksOpts): Promise<TranscodedLinesResult> {
-  // O_NOFOLLOW: fail if the leaf path is a symlink, guarding against
-  // TOCTOU races between validatePath() and this open.
-  const noFollow = constants.O_NOFOLLOW ?? 0;
-  const fd = await open(filePath, constants.O_RDONLY | noFollow);
+  const fd = await openNoFollow(filePath);
   const readBuf = Buffer.allocUnsafe(READ_BUF_SIZE);
 
   // Read the first chunk to detect BOM

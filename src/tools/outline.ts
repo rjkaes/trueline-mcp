@@ -5,7 +5,7 @@
  * Much smaller than reading the full file — useful for navigation and
  * understanding file structure before reading specific ranges.
  */
-import { constants, open } from "node:fs/promises";
+import { readTextNoFollow } from "../line-splitter.ts";
 import { extname } from "node:path";
 import { extractOutline, formatOutline } from "../outline/extract.ts";
 import type { OutlineEntry } from "../outline/extract.ts";
@@ -101,19 +101,14 @@ async function outlineOneFile(
     return runStreamingExtractor("XML", () => extractXmlOutline(resolvedPath, depth));
   }
 
-  let source: string;
+  let source: string | null;
   try {
-    // O_NOFOLLOW: fail if the leaf path is a symlink, guarding against
-    // TOCTOU races between validatePath() and this open.
-    const noFollow = constants.O_NOFOLLOW ?? 0;
-    const fh = await open(resolvedPath, constants.O_RDONLY | noFollow);
-    const buf = await fh.readFile().finally(() => fh.close());
-    if (buf.includes(0)) {
-      return errorResult(`"${file_path}" appears to be a binary file`);
-    }
-    source = buf.toString("utf-8");
+    source = await readTextNoFollow(resolvedPath);
   } catch (err: unknown) {
     return errorResult(`Error reading file: ${(err as Error).message}`);
+  }
+  if (source === null) {
+    return errorResult(`"${file_path}" appears to be a binary file`);
   }
 
   const totalLines = source.split("\n").length;

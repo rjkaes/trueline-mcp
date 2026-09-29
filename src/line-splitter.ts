@@ -164,6 +164,19 @@ export async function* readFdChunks(fd: FileHandle, readBuf: Buffer, leadingChun
   }
 }
 
+// O_NOFOLLOW: fail if the leaf path is a symlink, guarding against
+// TOCTOU races between validatePath() and this open.
+export function openNoFollow(filePath: string): Promise<FileHandle> {
+  return open(filePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+}
+
+/** Reads a file as UTF-8 via openNoFollow. Returns null if it contains a NUL byte (binary). */
+export async function readTextNoFollow(filePath: string): Promise<string | null> {
+  const fh = await openNoFollow(filePath);
+  const buf = await fh.readFile().finally(() => fh.close());
+  return buf.includes(0) ? null : buf.toString("utf-8");
+}
+
 /**
  * Stream lines from a file as raw Buffers without decoding to JS strings.
  *
@@ -172,10 +185,7 @@ export async function* readFdChunks(fd: FileHandle, readBuf: Buffer, leadingChun
  */
 export async function* splitLines(filePath: string, opts?: { detectBinary?: boolean }): AsyncGenerator<RawLine> {
   async function* fileChunks(): AsyncGenerator<Buffer> {
-    // O_NOFOLLOW: fail if the leaf path is a symlink, guarding against
-    // TOCTOU races between validatePath() and this open.
-    const noFollow = constants.O_NOFOLLOW ?? 0;
-    const fd = await open(filePath, constants.O_RDONLY | noFollow);
+    const fd = await openNoFollow(filePath);
     const readBuf = Buffer.allocUnsafe(READ_BUF_SIZE);
     yield* readFdChunks(fd, readBuf);
   }
