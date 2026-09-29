@@ -1,8 +1,4 @@
 // Shared allowed-dirs resolution used by both the MCP server and the CLI.
-//
-// The server historically included ~/.claude/ when running under Claude Code
-// (gated on CLAUDE_CODE_ENTRYPOINT). The CLI previously only added projectDir
-// plus TRUELINE_ALLOWED_DIRS. Extracting this shared module aligns both.
 
 import { mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -11,8 +7,8 @@ import { delimiter, join, sep } from "node:path";
 /**
  * Resolve the set of directories trueline tools are allowed to access.
  *
- * Always returns an empty array — callers are expected to prepend projectDir
- * themselves (so the server can pass it separately from the allow-list).
+ * Callers are expected to prepend projectDir themselves (so the server can
+ * pass it separately from the allow-list).
  * The ~/.claude/ entry is added only when running under Claude Code.
  * @returns {Promise<string[]>}
  */
