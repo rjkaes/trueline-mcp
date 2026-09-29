@@ -208,7 +208,7 @@ Checksum mismatch for lines 1-50: expected f7e2a1b0, got ab12cd34.
 File changed since last read. Re-read with trueline_read.
 
 However, lines 12-14 appear unchanged. Re-read with
-trueline_read(ranges=["12-14"]) to get a fresh ref, then retry
+trueline_read(file_paths=["src/app.ts:12-14"]) to get a narrow checksum, then retry
 the edit.
 ```
 
@@ -388,7 +388,7 @@ The pipeline:
    `context_lines` capacity. Memory usage is O(context_lines) regardless
    of file size — unlike a naive approach that collects all lines first.
    Each line is decoded to a string exactly once.
-4. When a match is found, the ring buffer of recent lines provides
+4. When a match is found, the buffer of recent lines provides
    pre-context. The engine then switches to collecting post-context.
    Overlapping windows (matches within context distance of each other)
    are merged by extending the current window.
