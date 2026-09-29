@@ -11,6 +11,7 @@
 import pkg from "../package.json";
 import { type CliSubcommand, UsageError } from "./cli/io.ts";
 
+// Read with Object.hasOwn: names like `constructor` must not resolve to Object.prototype members.
 const SUBCOMMAND_LOADERS: Record<string, () => Promise<{ default: CliSubcommand }>> = {
   outline: () => import("./cli/outline.ts"),
   read: () => import("./cli/read.ts"),
@@ -39,7 +40,8 @@ Run "trueline <command> --help" for command-specific options.
 
 async function main(argv: string[]): Promise<void> {
   if (argv.includes("--help") || argv.includes("-h")) {
-    const load = argv[0] !== undefined ? SUBCOMMAND_LOADERS[argv[0]] : undefined;
+    const load =
+      argv[0] !== undefined && Object.hasOwn(SUBCOMMAND_LOADERS, argv[0]) ? SUBCOMMAND_LOADERS[argv[0]] : undefined;
     const mod = load ? await load() : undefined;
     process.stdout.write(mod ? mod.default.usage : rootUsage());
     return;
@@ -58,7 +60,7 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
-  const load = SUBCOMMAND_LOADERS[name];
+  const load = Object.hasOwn(SUBCOMMAND_LOADERS, name) ? SUBCOMMAND_LOADERS[name] : undefined;
   if (!load) {
     process.stderr.write(`Unknown command ${name}\n`);
     process.stdout.write(rootUsage());

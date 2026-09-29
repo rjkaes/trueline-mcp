@@ -109,6 +109,26 @@ describe("CLI integration", () => {
     expect(exitCode).not.toBe(0);
   });
 
+  // Names that exist on Object.prototype must not resolve to a subcommand loader.
+  test.each([
+    "constructor",
+    "toString",
+    "hasOwnProperty",
+    "__proto__",
+  ])("%s is reported as an unknown command", (name) => {
+    const unknown = run("nosuchcmd");
+    const { stdout, stderr, exitCode } = run(name);
+    expect(stderr).toBe(`Unknown command ${name}\n`);
+    expect(stdout).toBe(unknown.stdout);
+    expect(exitCode).toBe(unknown.exitCode);
+  });
+
+  test("constructor --help falls back to root usage", () => {
+    const { stdout, exitCode } = run("constructor", "--help");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(run("--help").stdout);
+  });
+
   test("read nonexistent file exits 2", () => {
     const { exitCode } = run("read", "/nonexistent/file.txt");
     expect(exitCode).toBe(2);
