@@ -25,7 +25,8 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
   const entries: OutlineEntry[] = [];
   let totalLines = 0;
 
-  let state: State = State.NORMAL;
+  // Widened so TS doesn't narrow `state` to NORMAL at the EOF check; processLine mutates it via closure.
+  let state = State.NORMAL as State;
   let currentHeadingDepth = -1; // depth of the most recent heading (-1 = none seen)
   let lastHeadingIdx = -1; // index into entries[] of the most recent heading
 
@@ -66,13 +67,6 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
       nodeType: "fenced_code",
       text: fenceLang ? `${opener}${fenceLang} (${lineCount} lines)` : `${opener} (${lineCount} lines)`,
     });
-  }
-
-  /** Flush an unclosed fence at EOF. Extracted to a function to avoid TypeScript narrowing issues. */
-  function flushOpenBlock(s: State, endLine: number) {
-    if (s === State.IN_FENCE) {
-      emitFence(endLine);
-    }
   }
 
   /** Process a single line through the state machine. */
@@ -142,7 +136,7 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
   // ==============================================================================
   // Flush EOF: emit any open fence
   // ==============================================================================
-  flushOpenBlock(state, totalLines);
+  if (state === State.IN_FENCE) emitFence(totalLines);
   // Unclosed frontmatter at EOF: don't emit (ambiguous)
 
   // Fix up the last heading's endLine to the actual last line
