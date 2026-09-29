@@ -24,6 +24,8 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   }
 
   const sections: string[] = [];
+  // Every file shares one repo toplevel; spawn rev-parse once, on first use.
+  let toplevel: Promise<string> | undefined;
 
   for (const filePath of filePaths) {
     if (requireAbsolutePath && filePath !== "*" && !isAbsolutePathArg(filePath)) {
@@ -62,7 +64,8 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     }
 
     // Read git content
-    const gitContent = await getGitContent(resolvedPath, compare_against, projectDir ?? process.cwd());
+    toplevel ??= gitExec(["rev-parse", "--show-toplevel"], projectDir ?? process.cwd()).then((out) => out.trim());
+    const gitContent = await getGitContent(resolvedPath, compare_against, projectDir ?? process.cwd(), toplevel);
 
     // Extract symbols from both
     const [oldSymbols, newSymbols] = await Promise.all([
@@ -81,13 +84,12 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 // Git helpers
 // ==============================================================================
 
-async function getGitContent(filePath: string, ref: string, cwd: string): Promise<string> {
+async function getGitContent(filePath: string, ref: string, cwd: string, toplevel: Promise<string>): Promise<string> {
   try {
     // Use git's own toplevel to compute the relative path, so that
     // Windows 8.3 short-name mismatches between realpath() and the
     // test's realpathSync() don't produce wrong relative paths.
-    const toplevel = (await gitExec(["rev-parse", "--show-toplevel"], cwd)).trim();
-    const relPath = relative(toplevel, filePath).replace(/\\/g, "/");
+    const relPath = relative(await toplevel, filePath).replace(/\\/g, "/");
     return await gitExec(["show", `${ref}:${relPath}`], cwd);
   } catch {
     return ""; // untracked or not in git

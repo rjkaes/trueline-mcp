@@ -15,8 +15,13 @@ const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio:
 
 // Committed, then modified: every file shows up as changed vs HEAD.
 const configFiles = Array.from({ length: 10 }, (_, i) => join(repo, `tenant-${i}.json`));
+const sourceFiles = Array.from({ length: 10 }, (_, i) => join(repo, `ledger-${i}.ts`));
 function writeConfigs(version: number): void {
   for (const file of configFiles) writeFileSync(file, `${JSON.stringify({ version, currency: "CAD" })}\n`);
+  for (const file of sourceFiles) {
+    const refund = version > 1 ? "export function refund(cents: number) { return -cents; }\n" : "";
+    writeFileSync(file, `export function charge(cents: number) { return cents; }\n${refund}`);
+  }
 }
 git("init", "-q");
 git("config", "user.email", "perf@example.com");
@@ -41,5 +46,18 @@ describe("trueline_changes", () => {
       10,
     );
     expect(speedup).toBeGreaterThanOrEqual(5);
+  });
+
+  test("diffs supported files at least 1.3x faster than baseline", async () => {
+    const result = await changes(current, sourceFiles)();
+    expect(result.content[0]).toHaveProperty("text", expect.stringContaining("refund"));
+
+    const speedup = await measureSpeedup(
+      "changes on 10 .ts files",
+      changes(baseline, sourceFiles),
+      changes(current, sourceFiles),
+      10,
+    );
+    expect(speedup).toBeGreaterThanOrEqual(1.3);
   });
 });
