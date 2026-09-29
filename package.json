@@ -28,15 +28,12 @@
   },
   "files": [
     "dist/",
-    "bin/",
     "scripts/resolve-binary.cjs",
     "hooks/",
     "configs/",
     "src/allowed-dirs.js",
     "src/security.js",
-    "README.md",
-    "INSTALL.md",
-    "LICENSE"
+    "INSTALL.md"
   ],
   "scripts": {
     "dev": "bun run src/server.ts",
