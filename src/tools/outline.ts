@@ -12,7 +12,6 @@ import type { OutlineEntry } from "../outline/extract.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { extractMarkdownOutline } from "../outline/markdown.ts";
 import { extractXmlOutline } from "../outline/xml.ts";
-import { MARKDOWN_EXTENSIONS, XML_EXTENSIONS } from "../outline/supported-extensions.js";
 import {
   displayPath,
   expandGlobs,
@@ -24,6 +23,22 @@ import {
 } from "./shared.ts";
 
 import { errorResult, textResult, type ToolResult } from "./types.ts";
+
+// Formats trueline_outline parses with custom parsers rather than tree-sitter grammars.
+const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
+const XML_EXTENSIONS = new Set([
+  ".xml",
+  ".xsl",
+  ".xslt",
+  ".xhtml",
+  ".svg",
+  ".pom",
+  ".csproj",
+  ".props",
+  ".targets",
+  ".fxml",
+  ".xaml",
+]);
 
 interface OutlineParams extends ToolContext {
   file_paths: string[];
