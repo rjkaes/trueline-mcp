@@ -78,4 +78,33 @@ describe("diffSymbols", () => {
     const diff = diffSymbols(old, new_);
     expect(diff.logicChanged.length).toBe(1);
   });
+
+  test("keeps a same-named symbol in removed when only its namesake is renamed", async () => {
+    const oldSource = `
+class Canvas {
+  render(scene: Scene): void {
+    this.paint(scene);
+  }
+}
+
+class Printer {
+  render(doc: Doc): string {
+    return doc.text;
+  }
+}
+`;
+    const newSource = `
+class Canvas {
+  draw(scene: Scene): void {
+    this.paint(scene);
+  }
+}
+
+class Printer {
+}
+`;
+    const diff = diffSymbols(await extractSymbols(oldSource, ".ts"), await extractSymbols(newSource, ".ts"));
+    expect(diff.renamed).toEqual([{ oldName: "render", newName: "draw" }]);
+    expect(diff.removed.map((s) => s.signature.trim())).toEqual(["render(doc: Doc): string {"]);
+  });
 });

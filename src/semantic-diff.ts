@@ -127,20 +127,21 @@ export function diffSymbols(oldSyms: SymbolInfo[], newSyms: SymbolInfo[]): Symbo
 
   // Rename detection: unmatched old + unmatched new with same body hash
   const oldByHash = Map.groupBy(unmatchedOld, (o) => o.bodyHash);
-  const renamedOldNames = new Set<string>();
+  // By identity, not name: names collide across class scopes and overloads.
+  const renamedOld = new Set<SymbolInfo>();
 
   for (const n of unmatchedNew) {
     const o = oldByHash.get(n.bodyHash)?.shift();
     if (o) {
       result.renamed.push({ oldName: o.name, newName: n.name });
-      renamedOldNames.add(o.name);
+      renamedOld.add(o);
     } else {
       result.added.push(n);
     }
   }
 
   for (const o of unmatchedOld) {
-    if (!renamedOldNames.has(o.name)) result.removed.push(o);
+    if (!renamedOld.has(o)) result.removed.push(o);
   }
 
   return result;
