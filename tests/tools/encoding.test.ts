@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { handleEdit } from "../../src/tools/edit.ts";
@@ -85,4 +85,150 @@ describe("trueline_edit context_lines — BOM and UTF-16 files", () => {
       expect(contextLines).toHaveLength(4);
     });
   }
+});
+
+// The caller's `encoding` applies to UTF-8 files only. UTF-16 lines reach the edit
+// path already transcoded to UTF-8, so latin1 must not be applied to them.
+describe("trueline_edit encoding param", () => {
+  let testDir: string;
+
+  beforeAll(() => {
+    testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-edit-encoding-test-")));
+  });
+
+  afterAll(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  const utf16Fixtures: Array<[string, string, (text: string) => Buffer]> = [
+    ["UTF-16LE", "utf-16le", (text) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")])],
+    [
+      "UTF-16BE",
+      "utf-16be",
+      (text) => Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(text, "utf16le").swap16()]),
+    ],
+  ];
+
+  const hashedLines = (text: string) => text.split("\n").filter((line) => LINE_PATTERN.test(line));
+  const refOf = (text: string) => text.match(/ref: (\S+)/)?.[1] ?? "";
+
+  // Writes the fixture, reads it back, and returns the ref and range for editing `targetText`'s line.
+  async function readFixture(file: string, contents: Buffer, targetText: string, encoding?: string) {
+    writeFileSync(file, contents);
+    const readText = getText(await handleRead({ file_path: file, encoding, projectDir: testDir }));
+    const hashLine = hashedLines(readText)
+      .find((line) => line.endsWith(`\t${targetText}`))
+      ?.split("\t")[0];
+    return { ref: refOf(readText), range: `${hashLine}-${hashLine}` };
+  }
+
+  for (const [label, decoderLabel, encode] of utf16Fixtures) {
+    test(`${label} — latin1 param leaves context text intact`, async () => {
+      const file = join(testDir, `context-${label}.txt`);
+      const { ref, range } = await readFixture(file, encode("alpha\ncafé au lait\ngamma\ndelta\n"), "gamma");
+
+      const editResult = await handleEdit({
+        file_path: file,
+        edits: [{ range, content: "GAMMA", ref }],
+        encoding: "latin1",
+        context_lines: 5,
+        projectDir: testDir,
+      });
+      expect(editResult.isError).toBeFalsy();
+
+      const freshRead = getText(await handleRead({ file_path: file, projectDir: testDir }));
+      const contextLines = hashedLines(getText(editResult));
+      expect(contextLines).toEqual(hashedLines(freshRead));
+      expect(contextLines).toHaveLength(4);
+    });
+
+    test(`${label} — latin1 param does not corrupt non-ASCII replacement content`, async () => {
+      const file = join(testDir, `write-${label}.txt`);
+      const { ref, range } = await readFixture(file, encode("alpha\nbeta\ngamma\ndelta\n"), "beta");
+
+      const editResult = await handleEdit({
+        file_path: file,
+        edits: [{ range, content: "crème brûlée", ref }],
+        encoding: "latin1",
+        context_lines: 5,
+        projectDir: testDir,
+      });
+      expect(editResult.isError).toBeFalsy();
+
+      expect(new TextDecoder(decoderLabel).decode(readFileSync(file))).toBe("alpha\ncrème brûlée\ngamma\ndelta\n");
+      const freshRead = getText(await handleRead({ file_path: file, projectDir: testDir }));
+      expect(refOf(getText(editResult))).toBe(refOf(freshRead));
+      expect(hashedLines(getText(editResult))).toEqual(hashedLines(freshRead));
+    });
+
+    test(`${label} — latin1 param leaves dry-run diff text intact`, async () => {
+      const file = join(testDir, `diff-${label}.txt`);
+      const { ref, range } = await readFixture(file, encode("crème alpha\nbeta café\ngamma\n"), "beta café");
+
+      const preview = getText(
+        await handleEdit({
+          file_path: file,
+          edits: [{ range, content: "beta thé", ref }],
+          encoding: "latin1",
+          dry_run: true,
+          projectDir: testDir,
+        }),
+      );
+
+      expect(preview).toContain(" crème alpha");
+      expect(preview).toContain("-beta café");
+      expect(preview).toContain("+beta thé");
+    });
+
+    test(`${label} — latin1 param leaves deleted-line preview intact`, async () => {
+      const file = join(testDir, `delete-${label}.txt`);
+      const { ref, range } = await readFixture(file, encode("alpha\nbeta café\ngamma\n"), "beta café");
+
+      const editResult = await handleEdit({
+        file_path: file,
+        edits: [{ range, content: "", ref }],
+        encoding: "latin1",
+        projectDir: testDir,
+      });
+
+      expect(getText(editResult)).toContain('"beta café"');
+    });
+
+    test(`${label} — resubmitting identical non-ASCII content under latin1 is a no-op`, async () => {
+      const file = join(testDir, `noop-${label}.txt`);
+      const original = encode("alpha\nbeta café\ngamma\n");
+      const { ref, range } = await readFixture(file, original, "beta café");
+
+      const editResult = await handleEdit({
+        file_path: file,
+        edits: [{ range, content: "beta café", ref }],
+        encoding: "latin1",
+        projectDir: testDir,
+      });
+
+      expect(getText(editResult)).toContain("(no changes)");
+      expect(readFileSync(file).toString("hex")).toBe(original.toString("hex"));
+    });
+  }
+
+  test("plain latin1 file — latin1 param still round-trips non-ASCII bytes", async () => {
+    const file = join(testDir, "plain-latin1.txt");
+    const { ref, range } = await readFixture(file, Buffer.from("alpha\ncafé\ngamma\n", "latin1"), "gamma", "latin1");
+
+    const editResult = await handleEdit({
+      file_path: file,
+      edits: [{ range, content: "thé", ref }],
+      encoding: "latin1",
+      context_lines: 5,
+      projectDir: testDir,
+    });
+    expect(editResult.isError).toBeFalsy();
+
+    expect(readFileSync(file)).toEqual(Buffer.from("alpha\ncafé\nthé\n", "latin1"));
+    const freshRead = getText(await handleRead({ file_path: file, encoding: "latin1", projectDir: testDir }));
+    expect(refOf(getText(editResult))).toBe(refOf(freshRead));
+    expect(hashedLines(getText(editResult))).toEqual(hashedLines(freshRead));
+    expect(getText(editResult)).toContain("café");
+    expect(getText(editResult)).toContain("thé");
+  });
 });

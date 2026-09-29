@@ -197,14 +197,16 @@ async function readEditContext(
   const collected = new Map<number, string>();
   const maxLine = Math.max(...collectRanges.map((r) => r.to));
 
-  const { lines } = await transcodedLines(resolvedPath, { detectBinary: false });
+  const { lines, bomInfo } = await transcodedLines(resolvedPath, { detectBinary: false });
+  // UTF-16 lines are already UTF-8; the caller's encoding applies to UTF-8 files only.
+  const textEncoding = bomInfo.encoding === "utf-8" ? encoding : "utf-8";
   for await (const { lineBytes, lineNumber } of lines) {
     if (lineNumber > maxLine) break;
     for (const range of collectRanges) {
       if (lineNumber >= range.from && lineNumber <= range.to) {
         const h = fnv1aHashBytes(lineBytes);
         const letters = hashToLetters(h);
-        collected.set(lineNumber, `${letters}${lineNumber}\t${lineBytes.toString(encoding)}`);
+        collected.set(lineNumber, `${letters}${lineNumber}\t${lineBytes.toString(textEncoding)}`);
         break;
       }
     }

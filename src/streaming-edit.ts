@@ -102,6 +102,8 @@ export async function streamingEdit(
     throw err;
   });
   const targetEncoding = transcoded.bomInfo.encoding;
+  // UTF-16 lines are already UTF-8; the caller's encoding applies to UTF-8 files only.
+  const textEncoding: BufferEncoding = targetEncoding === "utf-8" ? encoding : "utf-8";
 
   // Buffered writer — accumulates small writes and flushes at 64KB to
   // minimize syscalls. This is dramatically faster than createWriteStream
@@ -205,7 +207,7 @@ export async function streamingEdit(
 
   async function writeContentLines(content: string[]): Promise<void> {
     for (const line of content) {
-      await enqueueLine(Buffer.from(line, encoding));
+      await enqueueLine(Buffer.from(line, textEncoding));
       collector?.insert(line);
     }
   }
@@ -229,20 +231,20 @@ export async function streamingEdit(
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[], origEols: Buffer[]): Promise<void> {
     const same =
       op.content.length === origBytes.length &&
-      op.content.every((s, k) => Buffer.from(s, encoding).equals(origBytes[k]));
+      op.content.every((s, k) => Buffer.from(s, textEncoding).equals(origBytes[k]));
     if (same) {
       for (let k = 0; k < origBytes.length; k++) {
         const eol = origEols[k];
         await enqueueLine(origBytes[k], undefined, eol && eol.length > 0 ? eol : undefined);
       }
-      if (collector) for (const buf of origBytes) collector.context(buf.toString(encoding));
+      if (collector) for (const buf of origBytes) collector.context(buf.toString(textEncoding));
       return;
     }
     contentChanged = true;
     if (op.content.length === 0) {
-      op.deletedContent = origBytes.map((buf) => buf.toString(encoding));
+      op.deletedContent = origBytes.map((buf) => buf.toString(textEncoding));
     }
-    if (collector) for (const buf of origBytes) collector.delete(buf.toString(encoding));
+    if (collector) for (const buf of origBytes) collector.delete(buf.toString(textEncoding));
     await writeContentLines(op.content);
   }
 
@@ -363,14 +365,14 @@ export async function streamingEdit(
           }
 
           await enqueueLine(lineBytes, lineH, eolBytes.length > 0 ? eolBytes : undefined);
-          if (collector) collector.context(lineBytes.toString(encoding));
+          if (collector) collector.context(lineBytes.toString(textEncoding));
 
           await emitInserts(lineNumber);
         }
       } else {
         // No ops at this line — write raw bytes unchanged
         await enqueueLine(lineBytes, lineH, eolBytes.length > 0 ? eolBytes : undefined);
-        if (collector) collector.context(lineBytes.toString(encoding));
+        if (collector) collector.context(lineBytes.toString(textEncoding));
       }
     }
   } catch (err: unknown) {
