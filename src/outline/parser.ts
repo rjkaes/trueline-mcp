@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 
 let initialized = false;
 // biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
-const languageCache = new Map<string, any>();
+const languageCache = new Map<string, Promise<any>>();
 
 /**
  * Resolve the path to tree-sitter.wasm at runtime.
@@ -55,13 +55,18 @@ function grammarPath(grammar: string): string {
 // biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
 export async function createParser(grammar: string): Promise<any> {
   await ensureInit();
-  const parser = new Parser();
-  // Load each grammar once
-  let lang = languageCache.get(grammar);
-  if (!lang) {
-    lang = await Parser.Language.load(grammarPath(grammar));
-    languageCache.set(grammar, lang);
+  // Cache the in-flight load: every Language.load instantiates a grammar copy that
+  // is never freed, so concurrent first callers must share one.
+  let load = languageCache.get(grammar);
+  if (!load) {
+    load = Parser.Language.load(grammarPath(grammar));
+    languageCache.set(grammar, load);
+    // Evict failures so a later call retries.
+    load.catch(() => languageCache.delete(grammar));
   }
+  const lang = await load;
+  // After the await: a rejected load would otherwise leak this parser.
+  const parser = new Parser();
   parser.setLanguage(lang);
   return parser;
 }
