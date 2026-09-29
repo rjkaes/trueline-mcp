@@ -6,7 +6,7 @@
 // Returns "valid" or "stale" per ref, near-zero tokens.
 // ==============================================================================
 
-import { splitLines } from "../line-splitter.ts";
+import { transcodedLines } from "../encoding.ts";
 import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash } from "../hash.ts";
 import { type ChecksumRef, parseChecksum } from "../parse.ts";
 import {
@@ -55,7 +55,8 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
     let accIdx = 0;
     // Skip empty-file sentinel refs (startLine 0 sorts first)
     while (accIdx < accs.length && accs[accIdx].startLine === 0) accIdx++;
-    for await (const { lineBytes, lineNumber } of splitLines(validated.resolvedPath, { detectBinary: true })) {
+    const { lines } = await transcodedLines(validated.resolvedPath, { detectBinary: true });
+    for await (const { lineBytes, lineNumber } of lines) {
       totalLines = lineNumber;
 
       if (accIdx >= accs.length) break;

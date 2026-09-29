@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeAll, afterAll, beforeEach } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead } from "../../src/tools/read.ts";
@@ -159,5 +159,78 @@ describe("trueline_verify", () => {
 
     const result = await handleVerify({ file_path: file, refs, projectDir: testDir });
     expect(getText(result)).toBe("all refs valid");
+  });
+
+  // Refs from trueline_read hash BOM-stripped, transcoded lines; verify must do the same.
+  const encodedFixtures: Array<[string, (text: string) => Buffer]> = [
+    ["UTF-8 BOM", (text) => Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(text, "utf-8")])],
+    ["UTF-16LE", (text) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")])],
+    ["UTF-16BE", (text) => Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(text, "utf16le").swap16()])],
+  ];
+
+  for (const [label, encode] of encodedFixtures) {
+    test(`${label} file — ref from read verifies as valid`, async () => {
+      const file = join(testDir, `valid-${label}.txt`);
+      writeFileSync(file, encode("alpha\nbeta\ngamma\n"));
+      const readResult = await handleRead({ file_path: file, projectDir: testDir });
+      const refs = extractInlineRefs(getText(readResult));
+      expect(refs.length).toBe(1);
+
+      const result = await handleVerify({ file_path: file, refs, projectDir: testDir });
+      expect(getText(result)).toBe("all refs valid");
+    });
+
+    test(`${label} file — ref goes stale after content change`, async () => {
+      const file = join(testDir, `stale-${label}.txt`);
+      writeFileSync(file, encode("alpha\nbeta\ngamma\n"));
+      const readResult = await handleRead({ file_path: file, projectDir: testDir });
+      const refs = extractInlineRefs(getText(readResult));
+
+      writeFileSync(file, encode("alpha\nBETA\ngamma\n"));
+
+      const result = await handleVerify({ file_path: file, refs, projectDir: testDir });
+      expect(getText(result)).toContain("checksum mismatch");
+    });
+  }
+
+  test("file with NUL bytes and no UTF-16 BOM is still rejected as binary", async () => {
+    const file = join(testDir, "binary-no-bom.bin");
+    writeFileSync(file, Buffer.from("alpha\0beta\ngamma\n"));
+    const ref = issueTestRef(["alpha", "beta", "gamma"], 1, 3);
+
+    const result = await handleVerify({ file_path: file, refs: [ref], projectDir: testDir });
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain("binary");
+  });
+
+  // Bun >= 1.4 throws when a FileHandle is garbage-collected unclosed. /dev/fd has no Windows equivalent.
+  describe.skipIf(process.platform === "win32")("fd lifetime", () => {
+    const openFdCount = () => readdirSync("/dev/fd").length;
+
+    test("closes the fd when verify stops before the end of a UTF-16 file", async () => {
+      const file = join(testDir, "fd-early-stop.txt");
+      writeFileSync(file, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("alpha\nbeta\ngamma\n", "utf16le")]));
+      const readResult = await handleRead({ file_path: file, ranges: ["1-1"], projectDir: testDir });
+      const refs = extractInlineRefs(getText(readResult));
+
+      const before = openFdCount();
+      const result = await handleVerify({ file_path: file, refs, projectDir: testDir });
+      expect(getText(result)).toBe("all refs valid");
+      expect(openFdCount()).toBe(before);
+    });
+
+    test("closes the fd when verify rejects a binary file", async () => {
+      const file = join(testDir, "fd-binary.bin");
+      writeFileSync(file, Buffer.from("alpha\0beta\ngamma\n"));
+
+      const before = openFdCount();
+      const result = await handleVerify({
+        file_path: file,
+        refs: [issueTestRef(["alpha", "beta", "gamma"], 1, 3)],
+        projectDir: testDir,
+      });
+      expect(result.isError).toBe(true);
+      expect(openFdCount()).toBe(before);
+    });
   });
 });

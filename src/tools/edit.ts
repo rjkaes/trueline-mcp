@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { DiffCollector } from "../diff-collector.ts";
 import { streamingEdit, type StreamEditOp } from "../streaming-edit.ts";
 import { fnv1aHash, fnv1aHashBytes, hashToLetters } from "../hash.ts";
-import { splitLines } from "../line-splitter.ts";
+import { transcodedLines } from "../encoding.ts";
 import {
   type EditInput,
   relativePathError,
@@ -197,7 +197,8 @@ async function readEditContext(
   const collected = new Map<number, string>();
   const maxLine = Math.max(...collectRanges.map((r) => r.to));
 
-  for await (const { lineBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: false })) {
+  const { lines } = await transcodedLines(resolvedPath, { detectBinary: false });
+  for await (const { lineBytes, lineNumber } of lines) {
     if (lineNumber > maxLine) break;
     for (const range of collectRanges) {
       if (lineNumber >= range.from && lineNumber <= range.to) {
