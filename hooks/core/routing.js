@@ -9,7 +9,6 @@
 
 import { stat } from "node:fs/promises";
 import { extname } from "node:path";
-import { OUTLINEABLE_EXTENSIONS } from "../../src/outline/supported-extensions.js";
 
 // Maps platform-specific built-in tool names to canonical names.
 const TOOL_ALIASES = {
@@ -66,28 +65,6 @@ const MEDIUM_FILE_THRESHOLD = 3072; // 3KB
 const NATIVE_MEDIA_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"]);
 
 /**
- * @param {string} toolName
- * @returns {string}
- */
-function canonicalToolName(toolName) {
-  return TOOL_ALIASES[toolName] ?? toolName;
-}
-
-/**
- * Extract a file path from tool input, trying known field names.
- * @param {Record<string, unknown> | undefined} toolInput
- * @returns {string | null}
- */
-function extractFilePath(toolInput) {
-  if (!toolInput || typeof toolInput !== "object") return null;
-  for (const field of FILE_PATH_FIELDS) {
-    const val = toolInput[field];
-    if (typeof val === "string") return val;
-  }
-  return null;
-}
-
-/**
  * Check whether a Read tool call is requesting a partial/ranged read.
  *
  * Partial reads already limit context consumption, which is what trueline_read
@@ -101,23 +78,8 @@ function extractFilePath(toolInput) {
  * @param {Record<string, unknown> | undefined} toolInput
  * @returns {boolean}
  */
-export function isPartialRead(toolInput) {
-  if (!toolInput || typeof toolInput !== "object") return false;
-  for (const field of PARTIAL_READ_FIELDS) {
-    const val = toolInput[field];
-    if (typeof val === "number" && val > 0) return true;
-  }
-  return false;
-}
-
-/**
- * Format a human-readable file size.
- * @param {number} bytes
- * @returns {string}
- */
-function formatSize(bytes) {
-  if (bytes < 1024) return `${bytes}B`;
-  return `${(bytes / 1024).toFixed(0)}KB`;
+function isPartialRead(toolInput) {
+  return PARTIAL_READ_FIELDS.some((field) => typeof toolInput?.[field] === "number" && toolInput[field] > 0);
 }
 
 /**
@@ -196,7 +158,7 @@ function detectBashFilePeek(command) {
  * @returns {Promise<{ action: "block" | "advise"; reason: string } | null>}
  */
 export async function routePreToolUse(toolName, toolInput, canAccessFn) {
-  const canonical = canonicalToolName(toolName);
+  const canonical = TOOL_ALIASES[toolName] ?? toolName;
 
   // Bash: non-blocking nudge when a file-peek command is detected.
   if (canonical === "Bash") {
@@ -218,7 +180,7 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
     return null;
   }
 
-  const filePath = extractFilePath(toolInput);
+  const filePath = FILE_PATH_FIELDS.map((field) => toolInput?.[field]).find((value) => typeof value === "string");
   if (typeof filePath !== "string") return null;
 
   // Check file size. If stat fails (file doesn't exist), pass through.
@@ -245,19 +207,15 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
     // Small files: pass through without any advisory overhead.
     if (fileSize < MEDIUM_FILE_THRESHOLD) return null;
 
-    const size = formatSize(fileSize);
-    const canOutline = OUTLINEABLE_EXTENSIONS.has(extname(filePath).toLowerCase());
+    const size = `${(fileSize / 1024).toFixed(0)}KB`;
 
     // Large files: block with full redirect guidance.
     if (fileSize >= LARGE_FILE_THRESHOLD) {
-      const outlineHint = canOutline
-        ? "Use trueline_outline for structure or trueline_search to find specific content, then "
-        : "Use trueline_search to find specific content, then ";
       return {
         action: "block",
         reason:
           `<trueline_redirect>This file is ${size}. ` +
-          outlineHint +
+          "Use trueline_outline for structure or trueline_search to find specific content, then " +
           "trueline_read with targeted line ranges to read only what you need. " +
           "If you do need the whole file, use a single trueline_read call with no range " +
           "rather than multiple ranged calls.</trueline_redirect>",
@@ -266,12 +224,11 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
 
     // Medium files (3-10KB): block with concise redirect.
     const estTokens = Math.round(fileSize / 4);
-    const outlineHint = canOutline ? "Use trueline_outline for structure, or " : "Use ";
     return {
       action: "block",
       reason:
         `<trueline_redirect>This file is ${size} (~${estTokens} tokens in context). ` +
-        outlineHint +
+        "Use trueline_outline for structure, or " +
         "trueline_read to get edit-ready refs.</trueline_redirect>",
     };
   }

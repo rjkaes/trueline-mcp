@@ -15,6 +15,7 @@
 
 import { fileURLToPath } from "node:url";
 import { resolve, dirname } from "node:path";
+import { text } from "node:stream/consumers";
 
 const hooksDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "hooks");
 
@@ -43,11 +44,8 @@ if (!platform || !event || process.argv.includes("--help") || process.argv.inclu
 // Normalize event names across platforms.
 // Gemini calls it "beforetool", VS Code Copilot calls it "pretooluse" — both
 // map to the same routing logic.
-const EVENT_ALIASES = {
-  beforetool: "pretooluse",
-};
-
-const normalizedEvent = EVENT_ALIASES[event.toLowerCase()] ?? event.toLowerCase();
+const lowerEvent = event.toLowerCase();
+const normalizedEvent = lowerEvent === "beforetool" ? "pretooluse" : lowerEvent;
 
 // ==============================================================================
 // Event Dispatch
@@ -57,31 +55,20 @@ if (normalizedEvent === "session-start") {
   const { getInstructions } = await import(resolve(hooksDir, "core", "instructions.js"));
   process.stdout.write(getInstructions(platform));
 } else if (normalizedEvent === "pretooluse") {
-  const { createAccessChecker } = await import(resolve(hooksDir, "core", "access.js"));
-  const { routePreToolUse } = await import(resolve(hooksDir, "core", "routing.js"));
-  const { formatDecision } = await import(resolve(hooksDir, "core", "formatters.js"));
-  const { getProjectDir } = await import(resolve(hooksDir, "core", "platform.js"));
+  const { processHookEvent } = await import(resolve(hooksDir, "pretooluse.js"));
 
-  const chunks = [];
-  process.stdin.on("data", (chunk) => chunks.push(chunk));
-  process.stdin.on("end", async () => {
-    let hookEvent;
-    try {
-      hookEvent = JSON.parse(Buffer.concat(chunks).toString());
-    } catch {
-      console.error("trueline-hook: failed to parse JSON from stdin");
-      process.exit(1);
-    }
+  let hookEvent;
+  try {
+    hookEvent = JSON.parse(await text(process.stdin));
+  } catch {
+    console.error("trueline-hook: failed to parse JSON from stdin");
+    process.exit(1);
+  }
 
-    const projectDir = getProjectDir(platform);
-    const canAccess = await createAccessChecker(projectDir);
-    const routing = await routePreToolUse(hookEvent.tool_name, hookEvent.tool_input, canAccess);
-    const result = formatDecision(platform, routing);
-
-    if (result !== null) {
-      process.stdout.write(JSON.stringify(result));
-    }
-  });
+  const result = await processHookEvent(hookEvent, platform);
+  if (result !== null) {
+    process.stdout.write(JSON.stringify(result));
+  }
 } else {
   console.error(`trueline-hook: unknown event "${event}". Use pretooluse, beforetool, or session-start.`);
   process.exit(1);

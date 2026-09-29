@@ -2,17 +2,12 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { routePreToolUse, isPartialRead } from "../../hooks/core/routing.js";
-import { OUTLINEABLE_EXTENSIONS } from "../../src/outline/supported-extensions.js";
-import { LANGUAGES } from "../../src/outline/languages.js";
+import { routePreToolUse } from "../../hooks/core/routing.js";
 
 let tmpDir: string;
 let smallFile: string;
 let largeFile: string;
-let smallNonOutlineable: string;
-let largeNonOutlineable: string;
 let mediumFile: string;
-let mediumNonOutlineable: string;
 let largeImage: string;
 let largePdf: string;
 
@@ -22,14 +17,8 @@ beforeAll(() => {
   writeFileSync(smallFile, "const x = 1;\n");
   largeFile = join(tmpDir, "large.ts");
   writeFileSync(largeFile, "x\n".repeat(10000)); // ~20KB
-  smallNonOutlineable = join(tmpDir, "config.json");
-  writeFileSync(smallNonOutlineable, '{"key": "value"}\n');
-  largeNonOutlineable = join(tmpDir, "data.json");
-  writeFileSync(largeNonOutlineable, '{"x": 1}\n'.repeat(2000)); // ~18KB
   mediumFile = join(tmpDir, "medium.ts");
   writeFileSync(mediumFile, "const x = 1;\n".repeat(400)); // ~5.2KB
-  mediumNonOutlineable = join(tmpDir, "medium.json");
-  writeFileSync(mediumNonOutlineable, '{"x": 1}\n'.repeat(600)); // ~5.4KB
   // Binary media: well over LARGE_FILE_THRESHOLD, as real images are.
   largeImage = join(tmpDir, "screenshot.PNG");
   writeFileSync(largeImage, Buffer.alloc(20480, 0));
@@ -53,19 +42,11 @@ describe("routePreToolUse — Read routing", () => {
     expect(result!.reason).toContain("trueline_read");
   });
 
-  test("blocks Read on medium outlineable files (3-10KB)", async () => {
+  test("blocks Read on medium files (3-10KB)", async () => {
     const result = await routePreToolUse("Read", { file_path: mediumFile }, alwaysAccessible);
     expect(result).not.toBeNull();
     expect(result!.action).toBe("block");
     expect(result!.reason).toContain("trueline_outline");
-    expect(result!.reason).toContain("trueline_read");
-  });
-
-  test("blocks Read on medium non-outlineable files (3-10KB)", async () => {
-    const result = await routePreToolUse("Read", { file_path: mediumNonOutlineable }, alwaysAccessible);
-    expect(result).not.toBeNull();
-    expect(result!.action).toBe("block");
-    expect(result!.reason).not.toContain("trueline_outline");
     expect(result!.reason).toContain("trueline_read");
   });
 
@@ -79,59 +60,10 @@ describe("routePreToolUse — Read routing", () => {
     expect(result).toBeNull();
   });
 
-  test("omits outline from block message for non-outlineable large files", async () => {
-    const result = await routePreToolUse("Read", { file_path: largeNonOutlineable }, alwaysAccessible);
-    expect(result).not.toBeNull();
-    expect(result!.action).toBe("block");
-    expect(result!.reason).not.toContain("trueline_outline");
-    expect(result!.reason).toContain("trueline_read");
-  });
-
-  test("passes through Read on small non-outlineable files without advisory", async () => {
-    const result = await routePreToolUse("Read", { file_path: smallNonOutlineable }, alwaysAccessible);
-    expect(result).toBeNull();
-  });
-
   test("blocks Gemini CLI read_file on large files", async () => {
     const result = await routePreToolUse("read_file", { file_path: largeFile }, alwaysAccessible);
     expect(result).not.toBeNull();
     expect(result!.action).toBe("block");
-  });
-});
-
-describe("isPartialRead", () => {
-  test("returns false for undefined/null input", () => {
-    expect(isPartialRead(undefined)).toBe(false);
-    expect(isPartialRead(null as unknown as undefined)).toBe(false);
-  });
-
-  test("returns false for full read (no range fields)", () => {
-    expect(isPartialRead({ file_path: "/tmp/foo.ts" })).toBe(false);
-  });
-
-  test("detects Claude Code / OpenCode offset", () => {
-    expect(isPartialRead({ file_path: "/tmp/foo.ts", offset: 50 })).toBe(true);
-  });
-
-  test("detects Claude Code / OpenCode limit", () => {
-    expect(isPartialRead({ file_path: "/tmp/foo.ts", limit: 100 })).toBe(true);
-  });
-
-  test("detects Gemini CLI start_line", () => {
-    expect(isPartialRead({ file_path: "/tmp/foo.ts", start_line: 10 })).toBe(true);
-  });
-
-  test("detects Gemini CLI end_line", () => {
-    expect(isPartialRead({ file_path: "/tmp/foo.ts", end_line: 50 })).toBe(true);
-  });
-
-  test("ignores zero values (equivalent to full read)", () => {
-    expect(isPartialRead({ file_path: "/tmp/foo.ts", offset: 0 })).toBe(false);
-    expect(isPartialRead({ file_path: "/tmp/foo.ts", start_line: 0 })).toBe(false);
-  });
-
-  test("ignores non-numeric values", () => {
-    expect(isPartialRead({ file_path: "/tmp/foo.ts", offset: "50" })).toBe(false);
   });
 });
 
@@ -174,6 +106,30 @@ describe("routePreToolUse — partial Read pass-through", () => {
       alwaysAccessible,
     );
     expect(result).toBeNull();
+  });
+
+  test("passes through Read with only start_line", async () => {
+    const result = await routePreToolUse("read_file", { file_path: largeFile, start_line: 10 }, alwaysAccessible);
+    expect(result).toBeNull();
+  });
+
+  test("passes through Read with only end_line", async () => {
+    const result = await routePreToolUse("read_file", { file_path: largeFile, end_line: 50 }, alwaysAccessible);
+    expect(result).toBeNull();
+  });
+
+  test("blocks Read when range fields are zero (equivalent to a full read)", async () => {
+    const result = await routePreToolUse(
+      "read_file",
+      { file_path: largeFile, offset: 0, start_line: 0 },
+      alwaysAccessible,
+    );
+    expect(result!.action).toBe("block");
+  });
+
+  test("blocks Read when range fields are non-numeric", async () => {
+    const result = await routePreToolUse("Read", { file_path: largeFile, offset: "50" }, alwaysAccessible);
+    expect(result!.action).toBe("block");
   });
 
   test("still blocks full Read on large files", async () => {
@@ -301,13 +257,5 @@ describe("routePreToolUse — common cases", () => {
   test("returns null when file does not exist", async () => {
     const result = await routePreToolUse("Read", { file_path: "/nonexistent/file.ts" }, alwaysAccessible);
     expect(result).toBeNull();
-  });
-});
-
-describe("OUTLINEABLE_EXTENSIONS sync", () => {
-  test("contains all LANGUAGES keys from languages.ts", () => {
-    for (const ext of Object.keys(LANGUAGES)) {
-      expect(OUTLINEABLE_EXTENSIONS.has(ext)).toBe(true);
-    }
   });
 });

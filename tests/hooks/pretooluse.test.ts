@@ -9,8 +9,6 @@ import { writeTestFile } from "../helpers.ts";
 let projectDir: string;
 let smallFile: string;
 let largeFile: string;
-let smallNonOutlineable: string;
-let largeNonOutlineable: string;
 let savedProjectDir: string | undefined;
 
 beforeAll(() => {
@@ -20,10 +18,6 @@ beforeAll(() => {
   writeFileSync(smallFile, "const x = 1;\n");
   largeFile = join(projectDir, "large.ts");
   writeFileSync(largeFile, "x\n".repeat(10000)); // ~20KB
-  smallNonOutlineable = join(projectDir, "config.json");
-  writeFileSync(smallNonOutlineable, '{"key": "value"}\n');
-  largeNonOutlineable = join(projectDir, "data.json");
-  writeFileSync(largeNonOutlineable, '{"x": 1}\n'.repeat(2000)); // ~18KB
   process.env.CLAUDE_PROJECT_DIR = projectDir;
 });
 
@@ -51,24 +45,6 @@ describe("PreToolUse hook — Read routing", () => {
       tool_input: { file_path: largeFile },
     });
     expect(result?.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(result?.hookSpecificOutput?.permissionDecisionReason).toContain("trueline_read");
-  });
-
-  test("passes through Read on small non-outlineable files without advisory", async () => {
-    const result = await processHookEvent({
-      tool_name: "Read",
-      tool_input: { file_path: smallNonOutlineable },
-    });
-    expect(result).toBeNull();
-  });
-
-  test("omits outline from block for non-outlineable large files", async () => {
-    const result = await processHookEvent({
-      tool_name: "Read",
-      tool_input: { file_path: largeNonOutlineable },
-    });
-    expect(result?.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(result?.hookSpecificOutput?.permissionDecisionReason).not.toContain("trueline_outline");
     expect(result?.hookSpecificOutput?.permissionDecisionReason).toContain("trueline_read");
   });
 

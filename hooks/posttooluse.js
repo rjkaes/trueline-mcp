@@ -2,6 +2,7 @@ import { readFileSync, unlinkSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { text } from "node:stream/consumers";
 import { createHash } from "node:crypto";
 
 const TRUELINE_EDIT_TOOL = "mcp__plugin_trueline-mcp_mcp__trueline_edit";
@@ -122,19 +123,15 @@ export async function processPostToolUseEvent(event) {
 
 // Main: read hook event from stdin, write result to stdout.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const chunks = [];
-  process.stdin.on("data", (chunk) => chunks.push(chunk));
-  process.stdin.on("end", async () => {
-    let event;
-    try {
-      event = JSON.parse(Buffer.concat(chunks).toString());
-    } catch {
-      process.exit(0);
-    }
+  let event;
+  try {
+    event = JSON.parse(await text(process.stdin));
+  } catch {
+    process.exit(0);
+  }
 
-    const result = await processPostToolUseEvent(event);
-    if (result) {
-      process.stdout.write(JSON.stringify(result));
-    }
-  });
+  const result = await processPostToolUseEvent(event);
+  if (result) {
+    process.stdout.write(JSON.stringify(result));
+  }
 }
