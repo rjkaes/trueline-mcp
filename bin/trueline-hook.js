@@ -13,7 +13,7 @@
 // Reads hook event JSON from stdin (for tool-use hooks), writes platform-
 // formatted JSON to stdout.
 
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve, dirname } from "node:path";
 import { text } from "node:stream/consumers";
 
@@ -52,10 +52,11 @@ const normalizedEvent = lowerEvent === "beforetool" ? "pretooluse" : lowerEvent;
 // ==============================================================================
 
 if (normalizedEvent === "session-start") {
-  const { getInstructions } = await import(resolve(hooksDir, "core", "instructions.js"));
+  // import() needs a file URL: Node's ESM loader reads a Windows "C:\..." path as URL scheme "c:".
+  const { getInstructions } = await import(pathToFileURL(resolve(hooksDir, "core", "instructions.js")).href);
   process.stdout.write(getInstructions(platform));
 } else if (normalizedEvent === "pretooluse") {
-  const { processHookEvent } = await import(resolve(hooksDir, "pretooluse.js"));
+  const { processHookEvent } = await import(pathToFileURL(resolve(hooksDir, "pretooluse.js")).href);
 
   let hookEvent;
   try {
