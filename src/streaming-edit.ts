@@ -94,7 +94,13 @@ export async function streamingEdit(
   // transcodedLines handles BOM stripping and UTF-16→UTF-8 transcoding.
   // After this point, lineBytes are always UTF-8 regardless of original encoding.
   // It skips binary detection for UTF-16 itself (null bytes are expected there).
-  const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
+  // Temp opens first: transcodedLines' source fd is released only once its
+  // lines are consumed, so a failed temp open after it would leak that fd.
+  // Rethrow keeps the existing contract for open failures (thrown, not { ok: false }).
+  const transcoded = await transcodedLines(resolvedPath, { detectBinary: true }).catch(async (err: unknown) => {
+    await cleanupTmp();
+    throw err;
+  });
   const targetEncoding = transcoded.bomInfo.encoding;
 
   // Buffered writer — accumulates small writes and flushes at 64KB to

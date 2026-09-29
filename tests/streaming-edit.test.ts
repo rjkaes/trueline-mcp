@@ -1,5 +1,14 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { lineHash, rangeChecksum, writeTestFile } from "./helpers.ts";
@@ -424,5 +433,23 @@ describe("streamingEdit", () => {
       expect(result.error).toContain(f);
       expect(result.error).toContain("binary");
     }
+  });
+
+  // O_NOFOLLOW makes the source open fail with ELOOP after the temp file exists.
+  test.skipIf(process.platform === "win32")("leaves no temp file behind when the source cannot be opened", async () => {
+    const realFile = writeTestFile(testDir, "real.txt", "line 1\nline 2\n");
+    const linkPath = join(testDir, "linked.txt");
+    symlinkSync(realFile, linkPath);
+    const { mtimeMs } = statSync(linkPath);
+    const cs = rangeChecksum(["line 1", "line 2"], 1, 2);
+    const h1 = lineHash("line 1");
+
+    const validated = validateEdits([{ ref: refFromChecksum(cs, linkPath), range: `${h1}1`, content: "changed" }]);
+    if (!validated.ok) throw new Error(`validateEdits failed: ${validated.error.content[0].text}`);
+
+    await expect(streamingEdit(linkPath, validated.ops, validated.checksumRefs, mtimeMs)).rejects.toMatchObject({
+      code: "ELOOP",
+    });
+    expect(readdirSync(testDir).filter((name) => name.startsWith(".trueline-tmp-"))).toEqual([]);
   });
 });
