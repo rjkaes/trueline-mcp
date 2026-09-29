@@ -26,8 +26,8 @@ export interface RawLine {
 }
 
 export const LF_BUF = Buffer.from("\n");
-export const CRLF_BUF = Buffer.from("\r\n");
-export const CR_BUF = Buffer.from("\r");
+const CRLF_BUF = Buffer.from("\r\n");
+const CR_BUF = Buffer.from("\r");
 export const EMPTY_BUF = Buffer.alloc(0);
 
 // ==============================================================================

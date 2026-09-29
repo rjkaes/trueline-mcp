@@ -2,7 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { splitLines, LF_BUF, CRLF_BUF, CR_BUF, EMPTY_BUF } from "../src/line-splitter.ts";
+import { splitLines, LF_BUF, EMPTY_BUF } from "../src/line-splitter.ts";
+
+const CRLF_BUF = Buffer.from("\r\n");
+const CR_BUF = Buffer.from("\r");
 
 // Temporary directory for test fixtures, cleaned up after each test.
 let tmpDir: string;
@@ -53,11 +56,11 @@ describe("splitLines", () => {
 
     expect(lines).toHaveLength(3);
     expect(lines[0].lineBytes.toString()).toBe("alpha");
-    expect(lines[0].eolBytes).toBe(CRLF_BUF);
+    expect(lines[0].eolBytes).toEqual(CRLF_BUF);
     expect(lines[1].lineBytes.toString()).toBe("beta");
-    expect(lines[1].eolBytes).toBe(CRLF_BUF);
+    expect(lines[1].eolBytes).toEqual(CRLF_BUF);
     expect(lines[2].lineBytes.toString()).toBe("gamma");
-    expect(lines[2].eolBytes).toBe(CRLF_BUF);
+    expect(lines[2].eolBytes).toEqual(CRLF_BUF);
   });
 
   test("CR line endings", async () => {
@@ -66,11 +69,11 @@ describe("splitLines", () => {
 
     expect(lines).toHaveLength(3);
     expect(lines[0].lineBytes.toString()).toBe("alpha");
-    expect(lines[0].eolBytes).toBe(CR_BUF);
+    expect(lines[0].eolBytes).toEqual(CR_BUF);
     expect(lines[1].lineBytes.toString()).toBe("beta");
-    expect(lines[1].eolBytes).toBe(CR_BUF);
+    expect(lines[1].eolBytes).toEqual(CR_BUF);
     expect(lines[2].lineBytes.toString()).toBe("gamma");
-    expect(lines[2].eolBytes).toBe(CR_BUF);
+    expect(lines[2].eolBytes).toEqual(CR_BUF);
   });
 
   test("mixed line endings in one file", async () => {
@@ -79,8 +82,8 @@ describe("splitLines", () => {
 
     expect(lines).toHaveLength(4);
     expect(lines[0].eolBytes).toBe(LF_BUF);
-    expect(lines[1].eolBytes).toBe(CRLF_BUF);
-    expect(lines[2].eolBytes).toBe(CR_BUF);
+    expect(lines[1].eolBytes).toEqual(CRLF_BUF);
+    expect(lines[2].eolBytes).toEqual(CR_BUF);
     expect(lines[3].eolBytes).toBe(LF_BUF);
   });
 
@@ -141,7 +144,7 @@ describe("splitLines", () => {
     const lines = await collect(p);
 
     expect(lines).toHaveLength(2);
-    expect(lines[0].eolBytes).toBe(CRLF_BUF);
+    expect(lines[0].eolBytes).toEqual(CRLF_BUF);
     expect(lines[0].lineNumber).toBe(1);
     expect(lines[1].lineBytes.toString()).toBe("next");
     expect(lines[1].eolBytes).toBe(LF_BUF);
@@ -157,7 +160,7 @@ describe("splitLines", () => {
     const lines = await collect(p);
 
     expect(lines).toHaveLength(2);
-    expect(lines[0].eolBytes).toBe(CR_BUF);
+    expect(lines[0].eolBytes).toEqual(CR_BUF);
     expect(lines[1].lineBytes.toString()).toBe("next");
   });
 
