@@ -13,6 +13,7 @@ import { handleSearch } from "../src/tools/search.ts";
 import { handleDiff } from "../src/tools/diff.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
 import { fnv1aHashBytes, hashToLetters } from "../src/hash.ts";
+import { parseChecksum } from "../src/parse.ts";
 
 // ===========================================================================
 // Helpers
@@ -144,17 +145,13 @@ async function benchEditSingleLine(): Promise<BenchResult> {
     allowedDirs: [tmpDir],
   });
   const text = readResult.content[0].text;
-  const checksumMatch = text.match(/checksum: (\S+)/);
-  const lineMatch = text.match(/^([a-z]{2})\.(\d+)\t(.*)$/m);
-  if (!checksumMatch || !lineMatch) throw new Error("Failed to parse read result for edit benchmark");
+  const refMatch = text.match(/^ref: (\S+)$/m);
+  const lineMatch = text.match(/^([a-z]{2})(\d+)\t(.*)$/m);
+  if (!refMatch || !lineMatch) throw new Error("Failed to parse read result for edit benchmark");
 
-  const checksumStr = checksumMatch[1];
   const hash = lineMatch[1];
   const lineNum = Number.parseInt(lineMatch[2], 10);
-
-  // Parse checksum string "100-100:abcdef01" → { startLine, endLine, hash }
-  const [range, csHash] = checksumStr.split(":");
-  const [csStart, csEnd] = range.split("-").map(Number);
+  const { startLine: csStart, endLine: csEnd, hash: csHash } = parseChecksum(refMatch[1]);
 
   return bench("edit-single-line", 20, async () => {
     const mtimeMs = statSync(LARGE_FILE).mtimeMs;
@@ -185,17 +182,14 @@ async function benchEditMultiLine(): Promise<BenchResult> {
     allowedDirs: [tmpDir],
   });
   const text = readResult.content[0].text;
-  const checksumMatch = text.match(/checksum: (\S+)/);
-  const lines = text.split("\n").filter((l) => /^[a-z]{2}\.\d+\t/.test(l));
-  if (!checksumMatch || lines.length === 0)
-    throw new Error("Failed to parse read result for multi-line edit benchmark");
+  const refMatch = text.match(/^ref: (\S+)$/m);
+  const lines = text.split("\n").filter((l) => /^[a-z]{2}\d+\t/.test(l));
+  if (!refMatch || lines.length === 0) throw new Error("Failed to parse read result for multi-line edit benchmark");
 
-  const checksumStr = checksumMatch[1];
-  const [range, csHash] = checksumStr.split(":");
-  const [csStart, csEnd] = range.split("-").map(Number);
+  const { startLine: csStart, endLine: csEnd, hash: csHash } = parseChecksum(refMatch[1]);
 
-  const firstMatch = lines[0].match(/^([a-z]{2})\.(\d+)\t/);
-  const lastMatch = lines[lines.length - 1].match(/^([a-z]{2})\.(\d+)\t/);
+  const firstMatch = lines[0].match(/^([a-z]{2})(\d+)\t/);
+  const lastMatch = lines[lines.length - 1].match(/^([a-z]{2})(\d+)\t/);
   if (!firstMatch || !lastMatch) throw new Error("Failed to parse line hashes");
 
   const replacement = Array.from({ length: 20 }, (_, i) => `const replaced_${i} = ${i};`);
