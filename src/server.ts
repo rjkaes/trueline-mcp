@@ -17,23 +17,10 @@ import { resolveProjectDirs } from "./allowed-dirs.js";
 // JSON-RPC types
 // =============================================================================
 
-interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  id: string | number;
+interface JsonRpcMessage {
+  id?: string | number;
   method: string;
   params?: Record<string, unknown>;
-}
-
-interface JsonRpcNotification {
-  jsonrpc: "2.0";
-  method: string;
-  params?: Record<string, unknown>;
-}
-
-type JsonRpcMessage = JsonRpcRequest | JsonRpcNotification;
-
-function isRequest(msg: JsonRpcMessage): msg is JsonRpcRequest {
-  return "id" in msg;
 }
 
 // =============================================================================
@@ -78,39 +65,6 @@ interface ToolDef {
 }
 
 const tools = new Map<string, ToolDef>();
-
-function registerTool(
-  name: string,
-  description: string,
-  inputSchema: Record<string, unknown>,
-  handler: (params: Record<string, unknown>) => Promise<ToolResult>,
-  annotations?: ToolAnnotations,
-): void {
-  tools.set(name, { description, inputSchema, handler, annotations });
-}
-
-// Wrap handlers so they never throw — errors become MCP error content.
-
-function safeTool(
-  handler: (params: Record<string, unknown>) => Promise<ToolResult>,
-): (params: Record<string, unknown>) => Promise<ToolResult> {
-  return async (params) => {
-    try {
-      return await handler(params);
-    } catch (err: unknown) {
-      // ZodError.message is a JSON dump of issues; surface the per-field messages instead.
-      if (err instanceof z.ZodError) {
-        const issues = err.issues.map((issue) =>
-          issue.path.length > 0 ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
-        );
-        return errorResult(`Invalid parameters: ${issues.join("; ")}`);
-      }
-      const message = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[trueline-mcp] tool error: ${message}\n`);
-      return errorResult(`Internal error: ${message}`);
-    }
-  };
-}
 
 // Single-file tools: unwrap coerceParams' file_paths array back to file_path.
 function coerceSingleFileParams(rawParams: Record<string, unknown>): Record<string, unknown> {
@@ -403,40 +357,40 @@ const verifyJsonSchema = {
 // Register tools
 // =============================================================================
 
-registerTool(
-  "trueline_read",
-  "Read files with per-line hashes and refs. Supports globs and :range syntax. " +
+tools.set("trueline_read", {
+  description:
+    "Read files with per-line hashes and refs. Supports globs and :range syntax. " +
     'Example: {"file_paths": ["src/tools/*.ts", "src/foo.ts:10-25"]}.',
-  readJsonSchema,
-  safeTool(async (rawParams) => {
+  inputSchema: readJsonSchema,
+  handler: async (rawParams) => {
     const params = readSchema.parse(coerceParams(rawParams));
     return handleReadMulti({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
-  }),
-  { readOnlyHint: true },
-);
+  },
+  annotations: { readOnlyHint: true },
+});
 
-registerTool(
-  "trueline_edit",
-  "Apply hash-verified edits to a file. Edits go in the edits array. " +
+tools.set("trueline_edit", {
+  description:
+    "Apply hash-verified edits to a file. Edits go in the edits array. " +
     'Example: {file_path: "foo.ts", edits: [{range: "ab10-cd20", ref: "ab10-cd20/efghij", content: "new text"}]}. ' +
     "Copy the ref from trueline_read/trueline_search output. The 2-letter hash prefix on each line number is required in ranges. " +
     'Use action: "insert_after" to insert content after a line instead of replacing it. ' +
     "Set context_lines to get hashLine context around edit sites for chaining edits without re-searching.",
-  editJsonSchema,
-  safeTool(async (rawParams) => {
+  inputSchema: editJsonSchema,
+  handler: async (rawParams) => {
     const params = editSchema.parse(coerceSingleFileParams(rawParams));
     return handleEdit({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
-  }),
-);
+  },
+});
 
-registerTool(
-  "trueline_changes",
-  "Semantic, AST-based summary of structural changes compared to a git ref. " +
+tools.set("trueline_changes", {
+  description:
+    "Semantic, AST-based summary of structural changes compared to a git ref. " +
     "Detects added/removed/renamed symbols, signature changes, and logic modifications. " +
     "Pass ALL files in a single call via file_paths (never call once per file). " +
     "Returns a compact structural summary, not a line-by-line diff.",
-  changesJsonSchema,
-  safeTool(async (rawParams) => {
+  inputSchema: changesJsonSchema,
+  handler: async (rawParams) => {
     const coerced = coerceParams(rawParams) as Record<string, unknown>;
     // LLMs may send "ref" meaning git ref; alias it here (not globally,
     // since "ref" is a first-class edit field in other tools).
@@ -446,49 +400,49 @@ registerTool(
     }
     const params = changesSchema.parse(coerced);
     return handleDiff({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
-  }),
-  { readOnlyHint: true },
-);
+  },
+  annotations: { readOnlyHint: true },
+});
 
-registerTool(
-  "trueline_outline",
-  "List functions, classes, types, and key structures in the specified files (requires file_paths). " +
+tools.set("trueline_outline", {
+  description:
+    "List functions, classes, types, and key structures in the specified files (requires file_paths). " +
     "Supports code (functions/classes), markdown (headings), and XML (elements). " +
     "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections.",
-  outlineJsonSchema,
-  safeTool(async (rawParams) => {
+  inputSchema: outlineJsonSchema,
+  handler: async (rawParams) => {
     const params = outlineSchema.parse(coerceParams(rawParams));
     return handleOutline({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
-  }),
-  { readOnlyHint: true },
-);
+  },
+  annotations: { readOnlyHint: true },
+});
 
-registerTool(
-  "trueline_search",
-  "Search files for a literal string or regex pattern. Accepts multiple file_paths in one call. " +
+tools.set("trueline_search", {
+  description:
+    "Search files for a literal string or regex pattern. Accepts multiple file_paths in one call. " +
     "Returns matching lines with context, per-line hashes, and refs \u2014 ready for immediate editing. " +
     "Set multiline=true for patterns spanning multiple lines.",
-  searchJsonSchema,
-  safeTool(async (rawParams) => {
+  inputSchema: searchJsonSchema,
+  handler: async (rawParams) => {
     const coerced = coerceParams(rawParams) as Record<string, unknown>;
     const params = searchSchema.parse(coerced);
     return handleSearch({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
-  }),
-  { readOnlyHint: true },
-);
+  },
+  annotations: { readOnlyHint: true },
+});
 
-registerTool(
-  "trueline_verify",
-  "Check if inline refs are still valid against the current file content. Returns valid or stale per ref. " +
+tools.set("trueline_verify", {
+  description:
+    "Check if inline refs are still valid against the current file content. Returns valid or stale per ref. " +
     "Pass file_path and the refs[] array from a prior trueline_read/trueline_search. " +
     "Cheaper than re-reading — use before editing when the file may have changed.",
-  verifyJsonSchema,
-  safeTool(async (rawParams) => {
+  inputSchema: verifyJsonSchema,
+  handler: async (rawParams) => {
     const params = verifySchema.parse(coerceSingleFileParams(rawParams));
     return handleVerify({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
-  }),
-  { readOnlyHint: true },
-);
+  },
+  annotations: { readOnlyHint: true },
+});
 
 // =============================================================================
 // MCP protocol handlers
@@ -522,7 +476,23 @@ async function handleToolsCall(id: string | number, params: Record<string, unkno
     return;
   }
 
-  const result = await tool.handler(args);
+  // Handlers may throw; report as MCP error content rather than a protocol error.
+  let result: ToolResult;
+  try {
+    result = await tool.handler(args);
+  } catch (err: unknown) {
+    // ZodError.message is a JSON dump of issues; surface the per-field messages instead.
+    if (err instanceof z.ZodError) {
+      const issues = err.issues.map((issue) =>
+        issue.path.length > 0 ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
+      );
+      result = errorResult(`Invalid parameters: ${issues.join("; ")}`);
+    } else {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[trueline-mcp] tool error: ${message}\n`);
+      result = errorResult(`Internal error: ${message}`);
+    }
+  }
   respond(id, result);
 }
 
@@ -531,10 +501,8 @@ async function handleToolsCall(id: string | number, params: Record<string, unkno
 // =============================================================================
 
 async function dispatch(msg: JsonRpcMessage): Promise<void> {
-  if (!isRequest(msg)) {
-    // Notifications — nothing to respond to
-    return;
-  }
+  // Notifications carry no id — nothing to respond to
+  if (msg.id === undefined) return;
 
   switch (msg.method) {
     case "initialize":
@@ -572,9 +540,7 @@ createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line", (line)
   dispatch(msg).catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[trueline-mcp] dispatch error: ${message}\n`);
-    if (isRequest(msg)) {
-      respondError(msg.id, INVALID_PARAMS, `Internal error: ${message}`);
-    }
+    if (msg.id !== undefined) respondError(msg.id, INVALID_PARAMS, `Internal error: ${message}`);
   });
 });
 
