@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleReadMulti } from "../../src/tools/read.ts";
 import { handleOutline } from "../../src/tools/outline.ts";
@@ -337,4 +337,185 @@ describe("gitignore-aware globs", () => {
     );
     expect(text).toBe("");
   });
+});
+
+// =============================================================================
+// absolute globs: alternate spellings, other allowed dirs, allow-list boundary
+// =============================================================================
+
+describe("absolute globs and allowed dirs", () => {
+  const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+  const canSymlink = process.platform !== "win32";
+  const created: string[] = [];
+
+  // As mkdtemp returns it: /var/... on macOS, whose realpath is /private/var/...
+  let projectRaw: string;
+  let projectDir: string;
+  let nonGitProject: string;
+  let notesRepo: string;
+  let claudeHome: string;
+  let outsideDir: string;
+  let aliasRoot: string;
+
+  function makeDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), "trueline-glob-abs-"));
+    created.push(dir);
+    return dir;
+  }
+
+  function writeTree(dir: string, files: Record<string, string>): void {
+    for (const [relPath, content] of Object.entries(files)) {
+      mkdirSync(dirname(join(dir, relPath)), { recursive: true });
+      writeFileSync(join(dir, relPath), content);
+    }
+  }
+
+  function initRepo(dir: string): void {
+    const { execSync } = require("node:child_process");
+    execSync("git init", { cwd: dir, env: cleanEnv });
+    execSync("git add -A", { cwd: dir, env: cleanEnv });
+  }
+
+  beforeAll(() => {
+    projectRaw = makeDir();
+    writeTree(projectRaw, {
+      "src/main.ts": "export function main(): void {}\n",
+      "src/util.ts": "export function util(): void {}\n",
+      "dist/bundle.ts": "export const bundle = 1;\n",
+      ".gitignore": "dist/\n",
+    });
+    initRepo(projectRaw);
+    projectDir = realpathSync(projectRaw);
+
+    nonGitProject = realpathSync(makeDir());
+    writeTree(nonGitProject, { "src/app.ts": "export function app(): void {}\n" });
+
+    notesRepo = realpathSync(makeDir());
+    writeTree(notesRepo, {
+      "docs/guide.md": "# Guide\n",
+      "docs/faq.md": "# Faq\n",
+      "scratch/draft.md": "# Draft\n",
+      ".gitignore": "scratch/\n",
+    });
+    initRepo(notesRepo);
+
+    claudeHome = realpathSync(makeDir());
+    writeTree(claudeHome, {
+      "agents/reviewer.md": "# Reviewer\n",
+      "agents/planner.md": "# Planner\n",
+      "node_modules/dep/readme.md": "# Dep\n",
+    });
+
+    outsideDir = realpathSync(makeDir());
+    writeTree(outsideDir, {
+      "payroll-secrets.conf": "secret\n",
+      "nested/vault-keys.conf": "secret\n",
+    });
+
+    if (canSymlink) {
+      aliasRoot = makeDir();
+      symlinkSync(projectDir, join(aliasRoot, "project-alias"));
+      symlinkSync(outsideDir, join(projectDir, "linked-out"));
+      symlinkSync(outsideDir, join(nonGitProject, "linked-out"));
+    }
+  });
+
+  afterAll(() => {
+    for (const dir of created) rmSync(dir, { recursive: true, force: true });
+  });
+
+  function readGlob(pattern: string, dir: string, allowedDirs: string[] = []) {
+    return handleReadMulti({ file_paths: [pattern], projectDir: dir, allowedDirs, requireAbsolutePath: true });
+  }
+
+  const relativeSrcGlob = (glob: string) => handleReadMulti({ file_paths: [glob], projectDir }).then(getText);
+
+  test.skipIf(!canSymlink)(
+    "absolute recursive glob via a symlinked alias of projectDir expands like the relative form",
+    async () => {
+      const relative = await relativeSrcGlob("src/**/*.ts");
+      const viaAlias = getText(await readGlob(join(aliasRoot, "project-alias", "src", "**", "*.ts"), projectDir));
+      expect(relative).toContain("--- src/main.ts ---");
+      expect(viaAlias).toBe(relative);
+    },
+  );
+
+  test.skipIf(!canSymlink)(
+    "absolute non-recursive glob via a symlinked alias of projectDir expands like the relative form",
+    async () => {
+      const relative = await relativeSrcGlob("src/*.ts");
+      const viaAlias = getText(await readGlob(join(aliasRoot, "project-alias", "src", "*.ts"), projectDir));
+      expect(relative).toContain("--- src/main.ts ---");
+      expect(viaAlias).toBe(relative);
+    },
+  );
+
+  // Differs from the canonical spelling on macOS (/var vs /private/var);
+  // elsewhere it is a plain control.
+  test("absolute recursive glob in the tmpdir spelling of projectDir expands like the relative form", async () => {
+    const relative = await relativeSrcGlob("src/**/*.ts");
+    const viaRaw = getText(await readGlob(join(projectRaw, "src", "**", "*.ts"), projectDir));
+    expect(relative).toContain("--- src/main.ts ---");
+    expect(viaRaw).toBe(relative);
+  });
+
+  test("absolute recursive glob expands files in a second allowed dir that is not a repo", async () => {
+    const text = getText(await readGlob(join(claudeHome, "**", "*.md"), projectDir, [claudeHome]));
+    const root = claudeHome.replaceAll("\\", "/");
+    expect(text).toContain(`--- ${root}/agents/reviewer.md ---`);
+    expect(text).toContain(`--- ${root}/agents/planner.md ---`);
+    // Node-glob fallback exclusions still apply
+    expect(text).not.toContain("# Dep");
+  });
+
+  test("absolute recursive glob expands a second allowed dir that is a repo, honoring .gitignore", async () => {
+    const text = getText(await readGlob(join(notesRepo, "**", "*.md"), projectDir, [notesRepo]));
+    expect(text).toContain("# Guide");
+    expect(text).toContain("# Faq");
+    expect(text).not.toContain("# Draft");
+  });
+
+  test("absolute non-recursive glob expands files in a second allowed dir", async () => {
+    const text = getText(await readGlob(join(claudeHome, "agents", "*.md"), projectDir, [claudeHome]));
+    expect(text).toContain("# Reviewer");
+    expect(text).toContain("# Planner");
+  });
+
+  // A denied read must not have named the file: a listing leaks even when
+  // validatePath refuses every entry.
+  const outsideName = () => basename(outsideDir);
+  const outsideForms: Record<string, (project: string) => string> = {
+    "non-recursive": () => join(outsideDir, "*.conf"),
+    recursive: () => join(outsideDir, "**", "*.conf"),
+    "dot-dot in the literal prefix": (project) => `${project}/../${outsideName()}/*.conf`,
+    "dot-dot in a brace, non-recursive": (project) => `${project}/{..,none}/${outsideName()}/*.conf`,
+    "dot-dot in a brace, recursive": (project) => `${project}/{..,none}/${outsideName()}/**/*.conf`,
+    "symlink to outside": (project) => join(project, "linked-out", "*.conf"),
+  };
+
+  for (const [kind, project] of [
+    ["git", () => projectDir],
+    ["non-git", () => nonGitProject],
+  ] as const) {
+    for (const [form, toPattern] of Object.entries(outsideForms)) {
+      test.skipIf(!canSymlink && form === "symlink to outside")(
+        `${kind} project: ${form} glob outside every allowed dir lists nothing`,
+        async () => {
+          const pattern = toPattern(project());
+          const params = { file_paths: [pattern], projectDir: project(), requireAbsolutePath: true };
+          const texts = [
+            getText(await handleReadMulti(params)),
+            getText(await handleOutline(params)),
+            getText(await handleSearch({ ...params, pattern: "secret" })),
+          ];
+          expect(texts[0]).toBe("");
+          for (const text of texts) {
+            expect(text).not.toContain("payroll-secrets");
+            expect(text).not.toContain("vault-keys");
+            expect(text).not.toContain(outsideName());
+          }
+        },
+      );
+    }
+  }
 });

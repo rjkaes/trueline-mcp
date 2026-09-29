@@ -57,7 +57,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     (entry, errorText) => `${entry}:\nerror: ${errorText}\n`,
   );
 
-  const filePaths = await expandGlobs(candidatePaths, projectDir);
+  const filePaths = await expandGlobs(candidatePaths, projectDir, allowedDirs);
   if (filePaths.length === 0) {
     if (rejectedSections.length > 0) return textResult(rejectedSections.join("\n"));
     return errorResult("file_paths must be a non-empty array");

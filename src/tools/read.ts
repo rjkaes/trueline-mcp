@@ -217,7 +217,7 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
   });
 
   // Expand globs before parsing inline ranges (globs never contain ':')
-  const expanded = await expandGlobs(candidates, rest.projectDir);
+  const expanded = await expandGlobs(candidates, rest.projectDir, rest.allowedDirs);
 
   // Parse inline ranges from file_paths (e.g. "src/foo.ts:10-25")
   const parsed = expanded.map(parseFilePathWithRanges);

@@ -341,7 +341,7 @@ export function validateEncoding(encoding?: string): BufferEncoding {
 
 import { glob } from "node:fs/promises";
 import { execFile } from "node:child_process";
-import { matchesGlob } from "node:path";
+import { matchesGlob, parse, relative } from "node:path";
 
 const GLOB_CHARS = /[*?{[]/;
 const RECURSIVE_GLOB = /\*\*/;
@@ -359,20 +359,62 @@ const FALLBACK_EXCLUDE_DIRS = new Set([
   "target",
 ]);
 
+// A glob's leading literal directory and the pattern below it, split at the
+// first wildcard segment: "/repo/src/*.ts" -> "/repo/src" + "*.ts".
+function splitGlob(pattern: string): { prefix: string; remainder: string } {
+  const { root } = parse(pattern);
+  const segments = pattern.slice(root.length).split("/");
+  const firstWildcard = segments.findIndex((segment) => GLOB_CHARS.test(segment));
+  return {
+    prefix: `${root}${segments.slice(0, firstWildcard).join("/")}` || ".",
+    remainder: segments.slice(firstWildcard).join("/"),
+  };
+}
+
+interface GlobRoot {
+  // The caller's spelling, kept for returned paths so displayPath still strips projectDir.
+  label: string;
+  real: string;
+}
+
 /**
  * Expand glob patterns in a file_paths array.
  *
- * Entries without glob characters pass through unchanged. Recursive globs
- * (containing `**`) use `git ls-files` to respect .gitignore, falling back
- * to Node glob with common directory exclusions. Non-recursive globs use
- * Node glob directly (they don't descend into problem directories).
+ * Entries without glob characters pass through unchanged. Globs only ever
+ * list projectDir and allowedDirs: a name outside them is never returned,
+ * because validatePath denying the read would not undo the listing.
+ * Recursive globs (containing `**`) use `git ls-files` to respect .gitignore,
+ * falling back to Node glob with common directory exclusions. Non-recursive
+ * globs use Node glob directly (they don't descend into problem directories).
  */
-export async function expandGlobs(filePaths: string[], projectDir: string | undefined): Promise<string[]> {
+export async function expandGlobs(
+  filePaths: string[],
+  projectDir: string | undefined,
+  allowedDirs: string[] = [],
+): Promise<string[]> {
   const baseDir = projectDir ?? process.cwd();
   const paths = new Set<string>();
+  let roots: GlobRoot[] | undefined;
 
   function add(rawPath: string): void {
     paths.add(rawPath.replaceAll("\\", "/"));
+  }
+
+  // Async realpath, like validatePath: sync and async disagree on Windows 8.3 names.
+  async function globRoots(): Promise<GlobRoot[]> {
+    roots ??= (
+      await Promise.all(
+        [baseDir, ...allowedDirs].map(async (label) => ({ label, real: await realpath(label).catch(() => null) })),
+      )
+    ).filter((root): root is GlobRoot => root.real !== null);
+    return roots;
+  }
+
+  // Node glob follows `..` inside braces and symlinked literal dirs, so vet each match.
+  async function isInAllowedDir(path: string): Promise<boolean> {
+    const real = await realpath(path).catch(() => null);
+    const bases = (await globRoots()).map((root) => root.real);
+    return real !== null && isContained(real, bases);
   }
 
   for (const entry of filePaths) {
@@ -381,30 +423,40 @@ export async function expandGlobs(filePaths: string[], projectDir: string | unde
       continue;
     }
 
-    if (RECURSIVE_GLOB.test(entry)) {
+    const pattern = process.platform === "win32" ? entry.replaceAll("\\", "/") : entry;
+    const { prefix, remainder } = splitGlob(pattern);
+    // Pick the root by the canonical literal prefix, so aliases and 8.3 names still match it.
+    const literalDir = await realpath(resolve(baseDir, prefix)).catch(() => null);
+    const root = literalDir === null ? undefined : (await globRoots()).find((r) => isContained(literalDir, [r.real]));
+    if (literalDir === null || root === undefined) continue;
+
+    const below = relative(root.real, literalDir).replaceAll("\\", "/");
+    const localPattern = below ? `${below}/${remainder}` : remainder;
+    // Relative patterns keep relative results; anything else is absolute for validatePath.
+    const output = (match: string) =>
+      isAbsolute(pattern) || root.label !== baseDir ? resolve(root.label, match) : match;
+
+    if (RECURSIVE_GLOB.test(pattern)) {
       // Recursive glob: use git ls-files to respect .gitignore
-      const gitFiles = await gitListFiles(baseDir);
+      const gitFiles = await gitListFiles(root.real);
       if (gitFiles) {
-        // git paths are relative to baseDir; an absolute pattern needs absolute candidates.
-        // Candidates still come only from baseDir's tracked files, so the glob cannot escape it.
-        const absolutePattern = isAbsolute(entry);
+        // git paths are relative to root, so matching them against localPattern cannot escape it.
         for (const f of gitFiles) {
-          const candidate = absolutePattern ? resolve(baseDir, f) : f;
-          if (matchesGlob(candidate, entry)) add(candidate);
+          if (matchesGlob(f, localPattern)) add(output(f));
         }
       } else {
         // Fallback: Node glob with common exclusions
-        for await (const match of glob(entry, {
-          cwd: baseDir,
+        for await (const match of glob(localPattern, {
+          cwd: root.real,
           exclude: (name) => FALLBACK_EXCLUDE_DIRS.has(name),
         })) {
-          add(match);
+          if (await isInAllowedDir(resolve(root.real, match))) add(output(match));
         }
       }
     } else {
       // Non-recursive glob: Node glob is safe (won't descend into node_modules)
-      for await (const match of glob(entry, { cwd: baseDir })) {
-        add(match);
+      for await (const match of glob(localPattern, { cwd: root.real })) {
+        if (await isInAllowedDir(resolve(root.real, match))) add(output(match));
       }
     }
   }

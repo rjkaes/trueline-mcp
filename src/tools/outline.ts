@@ -60,7 +60,7 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
     (entry, errorText) => `--- ${entry} ---\n${errorText}`,
   );
 
-  const filePaths = await expandGlobs(candidates, projectDir);
+  const filePaths = await expandGlobs(candidates, projectDir, allowedDirs);
   if (filePaths.length === 0) {
     if (rejectedSections.length > 0) return textResult(rejectedSections.join("\n\n"));
     return errorResult("Provide at least one file path in file_paths.");
