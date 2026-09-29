@@ -7,8 +7,6 @@
 // string allocation; only edit boundaries and replacement content are decoded.
 //
 // Key design choices:
-//  - Forward ascending sort (opposite of the in-memory back-to-front approach
-//    used previously) because we have no random access during streaming.
 //  - Pending-write pattern: each output line is buffered and flushed when the
 //    next line arrives, so the last line can omit its EOL if the original file
 //    had no trailing newline.
@@ -23,17 +21,9 @@
 import { randomBytes } from "node:crypto";
 import { chmod, open, rename, stat, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import {
-  EMPTY_FILE_CHECKSUM,
-  FNV_OFFSET_BASIS,
-  checksumToLetters,
-  fnv1aHashBytes,
-  foldHash,
-  formatChecksum,
-  hashToLetters,
-} from "./hash.ts";
+import { FNV_OFFSET_BASIS, checksumToLetters, fnv1aHashBytes, foldHash, hashToLetters } from "./hash.ts";
 import { EMPTY_BUF, LF_BUF } from "./line-splitter.ts";
-import { transcodedLines, bomBytes, encodeBuffer, encodeString, type BOMInfo } from "./encoding.ts";
+import { transcodedLines, bomBytes, encodeBuffer } from "./encoding.ts";
 import type { DiffCollector } from "./diff-collector.ts";
 import { BARE_LINE_HASH, type ChecksumRef } from "./parse.ts";
 
@@ -59,13 +49,11 @@ export interface StreamEditOp {
 type StreamingEditResult =
   | {
       ok: true;
-      newChecksum: string;
       newLineCount: number;
       newHash: string;
       newStartLetters: string;
       newEndLetters: string;
       changed: boolean;
-      tmpPath?: string;
     }
   | { ok: false; error: string };
 
@@ -84,23 +72,11 @@ export async function streamingEdit(
   dryRun = false,
   encoding: BufferEncoding = "utf-8",
   collector?: DiffCollector,
-  fileBomInfo?: BOMInfo,
 ): Promise<StreamingEditResult> {
-  // ---- Sort ops ascending by startLine, insert_after after replace at same line ----
-  const indexed = ops.map((op, i) => ({ op, i }));
-  indexed.sort((a, b) => {
-    if (a.op.startLine !== b.op.startLine) return a.op.startLine - b.op.startLine;
-    // At same line: replace before insert_after
-    if (a.op.insertAfter !== b.op.insertAfter) return a.op.insertAfter ? 1 : -1;
-    // Same type at same line: preserve input order
-    return a.i - b.i;
-  });
-  const sortedOps = indexed.map((x) => x.op);
-
   // ---- Build lookup structures ----
 
   // Map from line number to list of ops starting at that line
-  const opsByStartLine = Map.groupBy(sortedOps, (op) => op.startLine);
+  const opsByStartLine = Map.groupBy(ops, (op) => op.startLine);
 
   // Per-checksum-ref accumulators (sorted by startLine from validateEdits)
   const csAccumulators = checksumRefs.map((ref) => ({
@@ -109,25 +85,17 @@ export async function streamingEdit(
   }));
   let csIdx = 0;
 
-  // ---- Encoding ----
-  const isUtf16 = fileBomInfo?.encoding === "utf-16le" || fileBomInfo?.encoding === "utf-16be";
-  const targetEncoding = fileBomInfo?.encoding ?? "utf-8";
-
-  /** Encode a UTF-8 Buffer for the target file encoding. Identity for UTF-8. */
-  function encodeForWrite(buf: Buffer): Buffer {
-    return isUtf16 ? encodeBuffer(buf, targetEncoding) : buf;
-  }
-
-  /** Encode a UTF-8 EOL Buffer for the target file encoding. */
-  function encodeEolForWrite(eol: Buffer): Buffer {
-    return isUtf16 ? encodeString(eol.toString("utf-8"), targetEncoding) : eol;
-  }
-
   // ---- Temp file setup ----
   const dir = dirname(resolvedPath);
   const tmpName = `.trueline-tmp-${randomBytes(6).toString("hex")}`;
   const tmpPath = resolve(dir, tmpName);
   const fd = await open(tmpPath, "w");
+
+  // transcodedLines handles BOM stripping and UTF-16→UTF-8 transcoding.
+  // After this point, lineBytes are always UTF-8 regardless of original encoding.
+  // It skips binary detection for UTF-16 itself (null bytes are expected there).
+  const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
+  const targetEncoding = transcoded.bomInfo.encoding;
 
   // Buffered writer — accumulates small writes and flushes at 64KB to
   // minimize syscalls. This is dramatically faster than createWriteStream
@@ -137,11 +105,9 @@ export async function streamingEdit(
   let writeBufPos = 0;
 
   // Write BOM if the original file had one
-  if (fileBomInfo?.hasBOM) {
-    const bom = bomBytes(fileBomInfo);
-    if (bom.length > 0) {
-      await fd.write(bom, 0, bom.length);
-    }
+  if (transcoded.bomInfo.hasBOM) {
+    const bom = bomBytes(transcoded.bomInfo);
+    await fd.write(bom, 0, bom.length);
   }
 
   async function flushWriteBuf(): Promise<void> {
@@ -187,8 +153,8 @@ export async function streamingEdit(
 
   async function flushPending(): Promise<void> {
     if (pendingWrite !== null) {
-      await writeBytes(encodeForWrite(pendingWrite));
-      await writeBytes(encodeEolForWrite(pendingEol));
+      await writeBytes(encodeBuffer(pendingWrite, targetEncoding));
+      await writeBytes(encodeBuffer(pendingEol, targetEncoding));
       pendingWrite = null;
     }
   }
@@ -227,7 +193,10 @@ export async function streamingEdit(
   }
 
   async function writeContentLines(content: string[]): Promise<void> {
-    for (const line of content) await enqueueString(line);
+    for (const line of content) {
+      await enqueueString(line);
+      collector?.insert(line);
+    }
   }
 
   // Compare replacement content against original bytes. If identical, write
@@ -236,42 +205,23 @@ export async function streamingEdit(
   // Fast path: when line counts differ, skip Buffer allocation entirely —
   // the content is definitely changed.
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[], origEols: Buffer[]): Promise<void> {
-    if (op.content.length !== origBytes.length) {
-      contentChanged = true;
-      if (op.content.length === 0) {
-        op.deletedContent = origBytes.map((buf) => buf.toString(encoding));
-      }
-      for (const s of op.content) await enqueueString(s);
-      if (collector) {
-        for (const buf of origBytes) collector.delete(buf.toString(encoding));
-        for (const s of op.content) collector.insert(s);
-      }
-      return;
-    }
-    // Same line count — encode and compare byte-by-byte
-    const replacementBufs = op.content.map((s) => Buffer.from(s, encoding));
-    if (replacementBufs.every((buf, k) => buf.equals(origBytes[k]))) {
+    const same =
+      op.content.length === origBytes.length &&
+      op.content.every((s, k) => Buffer.from(s, encoding).equals(origBytes[k]));
+    if (same) {
       for (let k = 0; k < origBytes.length; k++) {
         const eol = origEols[k];
         await enqueueLine(origBytes[k], undefined, eol && eol.length > 0 ? eol : undefined);
       }
       if (collector) for (const buf of origBytes) collector.context(buf.toString(encoding));
-    } else {
-      contentChanged = true;
-      for (const buf of replacementBufs) await enqueueLine(buf);
-      if (collector) {
-        for (const buf of origBytes) collector.delete(buf.toString(encoding));
-        for (const s of op.content) collector.insert(s);
-      }
+      return;
     }
-  }
-
-  function outputChecksumStr(): string {
-    return outputLineCount > 0 ? formatChecksum(1, outputLineCount, outputChecksumAcc) : EMPTY_FILE_CHECKSUM;
-  }
-
-  function outputHashLetters(): string {
-    return checksumToLetters(outputChecksumAcc);
+    contentChanged = true;
+    if (op.content.length === 0) {
+      op.deletedContent = origBytes.map((buf) => buf.toString(encoding));
+    }
+    if (collector) for (const buf of origBytes) collector.delete(buf.toString(encoding));
+    await writeContentLines(op.content);
   }
 
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
@@ -293,16 +243,11 @@ export async function streamingEdit(
   if (line0Ops) {
     for (const op of line0Ops) {
       await writeContentLines(op.content);
-      if (collector) for (const line of op.content) collector.insert(line);
     }
     contentChanged = true;
-    opsByStartLine.delete(0);
   }
 
   // ---- Stream source file ----
-  // transcodedLines handles BOM stripping and UTF-16→UTF-8 transcoding.
-  // After this point, lineBytes are always UTF-8 regardless of original encoding.
-  const transcoded = await transcodedLines(resolvedPath, { detectBinary: !isUtf16 });
   try {
     for await (const { lineBytes, eolBytes, lineNumber } of transcoded.lines) {
       totalLines = lineNumber;
@@ -362,7 +307,6 @@ export async function streamingEdit(
               if (iaOp.insertAfter) {
                 contentChanged = true;
                 await writeContentLines(iaOp.content);
-                if (collector) for (const line of iaOp.content) collector.insert(line);
               }
             }
           }
@@ -399,7 +343,6 @@ export async function streamingEdit(
             for (const iaOp of insertOps) {
               contentChanged = true;
               await writeContentLines(iaOp.content);
-              if (collector) for (const line of iaOp.content) collector.insert(line);
             }
           } else {
             // Multi-line replace: enter active replace mode
@@ -427,7 +370,6 @@ export async function streamingEdit(
           for (const iaOp of insertOps) {
             contentChanged = true;
             await writeContentLines(iaOp.content);
-            if (collector) for (const line of iaOp.content) collector.insert(line);
           }
         }
       } else {
@@ -450,10 +392,10 @@ export async function streamingEdit(
   // EOL based on whether the original file had a trailing newline.
   try {
     if (pendingWrite !== null) {
-      await writeBytes(encodeForWrite(pendingWrite));
+      await writeBytes(encodeBuffer(pendingWrite, targetEncoding));
       // If the last source line had a non-empty eolBytes, the file had a trailing newline
       if (lastEolBytes.length > 0) {
-        await writeBytes(encodeEolForWrite(detectedEol));
+        await writeBytes(encodeBuffer(detectedEol, targetEncoding));
       }
     }
   } catch (err) {
@@ -513,7 +455,7 @@ export async function streamingEdit(
       // changed.  Suggest a narrow re-read of just the target lines.
       let minLine = Infinity;
       let maxLine = -Infinity;
-      for (const op of sortedOps) {
+      for (const op of ops) {
         if (op.startLine > 0) {
           minLine = Math.min(minLine, op.startLine);
           maxLine = Math.max(maxLine, op.endLine);
@@ -546,160 +488,130 @@ export async function streamingEdit(
     }
   }
 
-  // ---- No-op: skip write if nothing changed ----
-  if (!contentChanged) {
+  const summary = {
+    newLineCount: outputLineCount,
+    newHash: checksumToLetters(outputChecksumAcc),
+    newStartLetters: hashToLetters(outputFirstLineHash),
+    newEndLetters: hashToLetters(outputLastLineHash),
+  };
+
+  // ---- No-op or dry run: skip write ----
+  if (!contentChanged || dryRun) {
     await cleanupTmp();
-    return {
-      ok: true,
-      newChecksum: outputChecksumStr(),
-      newLineCount: outputLineCount,
-      newHash: outputHashLetters(),
-      newStartLetters: hashToLetters(outputFirstLineHash),
-      newEndLetters: hashToLetters(outputLastLineHash),
-      changed: false,
-    };
+    return { ok: true, ...summary, changed: contentChanged };
   }
 
   // ---- Atomic rename with mtime check ----
-  if (!dryRun) {
-    let originalMode: number | undefined;
-    try {
-      const fileStat = await stat(resolvedPath);
-      originalMode = fileStat.mode;
-      if (fileStat.mtimeMs !== mtimeMs) {
-        return await fail(
-          "File was modified by another process during the edit. Your ref is stale. Re-read with trueline_read to get a fresh ref.",
-        );
-      }
-    } catch (err: unknown) {
-      // ENOENT means the file was deleted between validatePath and here —
-      // proceed with rename so the edit still lands. Any other error
-      // (EPERM, EIO, etc.) is unexpected and should not be silently ignored.
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        return await fail(`stat failed: ${(err as NodeJS.ErrnoException).message}`);
-      }
+  let originalMode: number | undefined;
+  try {
+    const fileStat = await stat(resolvedPath);
+    originalMode = fileStat.mode;
+    if (fileStat.mtimeMs !== mtimeMs) {
+      return await fail(
+        "File was modified by another process during the edit. Your ref is stale. Re-read with trueline_read to get a fresh ref.",
+      );
     }
-
-    try {
-      // On win32, Node's chmod only toggles the read-only bit (0o200); all other
-      // bits are silently ignored. Calling chmod when the file is already writable
-      // is a no-op that can still trip ACL filters or AV hooks, so skip it.
-      const skipChmod = process.platform === "win32" && originalMode !== undefined && (originalMode & 0o200) !== 0; // original was writable — chmod would be a no-op
-
-      // On Windows, AV/Defender/indexers can briefly hold a handle on the temp
-      // file or destination without FILE_SHARE_DELETE, causing rename() to fail
-      // with EPERM/EACCES/EBUSY. Retry with exponential back-off before giving up.
-      // Produce a human-readable error for rename failures, preserving the
-      // original as .cause so debug tooling still has the full stack.
-      function formatRenameError(err: unknown, tmp: string, dest: string, attempts: number): Error {
-        const errno = err as NodeJS.ErrnoException;
-        const code = errno.code ?? "UNKNOWN";
-        let hint: string;
-        if (code === "EPERM" || code === "EACCES") {
-          hint =
-            process.platform === "win32"
-              ? "likely antivirus, file indexer, or editor holding a handle without FILE_SHARE_DELETE; the file may also be read-only or on a permission-restricted volume"
-              : errno.message;
-        } else if (code === "EBUSY") {
-          hint =
-            process.platform === "win32"
-              ? "the destination is currently locked by another process (often an editor or watcher)"
-              : errno.message;
-        } else {
-          hint = errno.message;
-        }
-        const retryNote =
-          process.platform === "win32" && attempts > 0 ? `; retried ${attempts} times with backoff before failing` : "";
-        const wrapped = new Error(
-          `${code}: rename '${tmp}' -> '${dest}': ${hint}${retryNote}`,
-        ) as NodeJS.ErrnoException;
-        wrapped.code = code;
-        (wrapped as Error & { cause: unknown }).cause = err;
-        return wrapped;
-      }
-
-      async function renameWithRetry(): Promise<void> {
-        // Read the delay sequence from TRUELINE_RENAME_DELAYS_MS at call time so
-        // tests can opt into zero-delay retries by setting the env var dynamically
-        // (module-scope evaluation would miss changes made after import). An unset,
-        // empty, or malformed value falls back to the production default silently.
-        const rawDelays = process.env.TRUELINE_RENAME_DELAYS_MS;
-        const parsed = rawDelays?.trim() ? rawDelays.split(",").map((s) => parseInt(s.trim(), 10)) : null;
-        const delays: number[] = parsed?.every((n) => !Number.isNaN(n) && n >= 0) ? parsed : [10, 30, 100, 300, 1000];
-        let lastErr: unknown;
-        for (let attempt = 0; attempt <= delays.length; attempt++) {
-          // Before each retry (not the first attempt — that's covered by the
-          // pre-rename mtime check above), re-stat the destination to detect
-          // external writes during the backoff sleep. A changed mtime means
-          // another process modified the file; overwriting it silently would
-          // corrupt their changes. ENOENT is tolerated: destination was deleted
-          // between attempts, and rename() will recreate it.
-          if (attempt > 0) {
-            try {
-              const currentStat = await stat(resolvedPath);
-              if (currentStat.mtimeMs !== mtimeMs) {
-                const staleErr = new Error(
-                  "File was modified by another process during retry backoff. Your ref is stale.",
-                ) as NodeJS.ErrnoException;
-                staleErr.code = "ESTALE_DURING_RETRY";
-                throw formatRenameError(staleErr, tmpPath, resolvedPath, attempt);
-              }
-            } catch (err) {
-              const code = (err as NodeJS.ErrnoException).code;
-              if (code === "ENOENT") {
-                // Destination was deleted between attempts — fine, rename will create it
-              } else {
-                throw err;
-              }
-            }
-          }
-          try {
-            await rename(tmpPath, resolvedPath);
-            return;
-          } catch (err) {
-            const code = (err as NodeJS.ErrnoException).code;
-            if (process.platform !== "win32" || !code || !(code === "EPERM" || code === "EACCES" || code === "EBUSY")) {
-              throw formatRenameError(err, tmpPath, resolvedPath, 0); // non-retryable: wrong platform, or non-transient error code
-            }
-            lastErr = err;
-            if (attempt < delays.length) {
-              await new Promise<void>((r) => setTimeout(r, delays[attempt]));
-            }
-          }
-        }
-        // delays.length retries attempted (delays.length + 1 total attempts)
-        throw formatRenameError(lastErr, tmpPath, resolvedPath, delays.length);
-      }
-      await renameWithRetry();
-      // chmod the destination after a successful rename, not the temp file before.
-      // Doing it beforehand made the temp read-only on win32 when the source was
-      // read-only; a subsequent rename failure left cleanupTmp unable to unlink
-      // the temp (EACCES), stranding it on disk.
-      if (originalMode !== undefined && !skipChmod) {
-        // Rename already committed the new content. A chmod failure must not
-        // mask that success — surface it as a warning instead of failing.
-        try {
-          await chmod(resolvedPath, originalMode);
-        } catch (chmodErr) {
-          process.stderr.write(
-            `[trueline-mcp] warning: failed to restore mode on ${resolvedPath}: ${(chmodErr as Error).message}\n`,
-          );
-        }
-      }
-    } catch (err) {
-      // rename threw — formatRenameError already embedded full path/errno/AV hint.
-      return await fail((err as Error).message);
+  } catch (err: unknown) {
+    // ENOENT means the file was deleted between validatePath and here —
+    // proceed with rename so the edit still lands. Any other error
+    // (EPERM, EIO, etc.) is unexpected and should not be silently ignored.
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      return await fail(`stat failed: ${(err as NodeJS.ErrnoException).message}`);
     }
   }
 
-  return {
-    ok: true,
-    newChecksum: outputChecksumStr(),
-    newLineCount: outputLineCount,
-    newHash: outputHashLetters(),
-    newStartLetters: hashToLetters(outputFirstLineHash),
-    newEndLetters: hashToLetters(outputLastLineHash),
-    changed: true,
-    ...(dryRun ? { tmpPath } : {}),
-  };
+  try {
+    // On win32, Node's chmod only toggles the read-only bit (0o200); all other
+    // bits are silently ignored. Calling chmod when the file is already writable
+    // is a no-op that can still trip ACL filters or AV hooks, so skip it.
+    const skipChmod = process.platform === "win32" && originalMode !== undefined && (originalMode & 0o200) !== 0; // original was writable — chmod would be a no-op
+
+    // On Windows, AV/Defender/indexers can briefly hold a handle on the temp
+    // file or destination without FILE_SHARE_DELETE, causing rename() to fail
+    // with EPERM/EACCES/EBUSY. Retry with exponential back-off before giving up.
+    // Produce a human-readable error for rename failures, preserving the
+    // original as .cause so debug tooling still has the full stack.
+    function formatRenameError(err: unknown, tmp: string, dest: string, attempts: number): Error {
+      const errno = err as NodeJS.ErrnoException;
+      const code = errno.code ?? "UNKNOWN";
+      let hint = errno.message;
+      if (process.platform === "win32") {
+        if (code === "EPERM" || code === "EACCES") {
+          hint =
+            "likely antivirus, file indexer, or editor holding a handle without FILE_SHARE_DELETE; the file may also be read-only or on a permission-restricted volume";
+        } else if (code === "EBUSY") {
+          hint = "the destination is currently locked by another process (often an editor or watcher)";
+        }
+      }
+      const retryNote =
+        process.platform === "win32" && attempts > 0 ? `; retried ${attempts} times with backoff before failing` : "";
+      const wrapped = new Error(`${code}: rename '${tmp}' -> '${dest}': ${hint}${retryNote}`) as NodeJS.ErrnoException;
+      wrapped.code = code;
+      (wrapped as Error & { cause: unknown }).cause = err;
+      return wrapped;
+    }
+
+    async function renameWithRetry(): Promise<void> {
+      // Read the delay sequence from TRUELINE_RENAME_DELAYS_MS at call time so
+      // tests can opt into zero-delay retries by setting the env var dynamically
+      // (module-scope evaluation would miss changes made after import). An unset,
+      // empty, or malformed value falls back to the production default silently.
+      const rawDelays = process.env.TRUELINE_RENAME_DELAYS_MS;
+      const parsed = rawDelays?.trim() ? rawDelays.split(",").map((s) => parseInt(s.trim(), 10)) : null;
+      const delays: number[] = parsed?.every((n) => !Number.isNaN(n) && n >= 0) ? parsed : [10, 30, 100, 300, 1000];
+      let lastErr: unknown;
+      for (let attempt = 0; attempt <= delays.length; attempt++) {
+        // Before each retry (not the first attempt — that's covered by the
+        // pre-rename mtime check above), re-stat the destination to detect
+        // external writes during the backoff sleep. A changed mtime means
+        // another process modified the file; overwriting it silently would
+        // corrupt their changes. ENOENT is tolerated: destination was deleted
+        // between attempts, and rename() will recreate it.
+        if (attempt > 0) {
+          const currentStat = await stat(resolvedPath).catch((err: NodeJS.ErrnoException) => {
+            if (err.code !== "ENOENT") throw err;
+          });
+          if (currentStat && currentStat.mtimeMs !== mtimeMs) {
+            throw new Error("File was modified by another process during retry backoff. Your ref is stale.");
+          }
+        }
+        try {
+          await rename(tmpPath, resolvedPath);
+          return;
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (process.platform !== "win32" || !code || !(code === "EPERM" || code === "EACCES" || code === "EBUSY")) {
+            throw formatRenameError(err, tmpPath, resolvedPath, 0); // non-retryable: wrong platform, or non-transient error code
+          }
+          lastErr = err;
+          if (attempt < delays.length) {
+            await new Promise<void>((r) => setTimeout(r, delays[attempt]));
+          }
+        }
+      }
+      // delays.length retries attempted (delays.length + 1 total attempts)
+      throw formatRenameError(lastErr, tmpPath, resolvedPath, delays.length);
+    }
+    await renameWithRetry();
+    // chmod the destination after a successful rename, not the temp file before.
+    // Doing it beforehand made the temp read-only on win32 when the source was
+    // read-only; a subsequent rename failure left cleanupTmp unable to unlink
+    // the temp (EACCES), stranding it on disk.
+    if (originalMode !== undefined && !skipChmod) {
+      // Rename already committed the new content. A chmod failure must not
+      // mask that success — surface it as a warning instead of failing.
+      try {
+        await chmod(resolvedPath, originalMode);
+      } catch (chmodErr) {
+        process.stderr.write(
+          `[trueline-mcp] warning: failed to restore mode on ${resolvedPath}: ${(chmodErr as Error).message}\n`,
+        );
+      }
+    }
+  } catch (err) {
+    // rename threw — formatRenameError already embedded full path/errno/AV hint.
+    return await fail((err as Error).message);
+  }
+
+  return { ok: true, ...summary, changed: true };
 }

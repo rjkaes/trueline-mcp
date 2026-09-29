@@ -6,67 +6,15 @@ export const FNV_OFFSET_BASIS = 2166136261;
 const FNV_PRIME = 16777619;
 
 /**
- * Sentinel checksum representing an empty file (zero lines).
- * The `0-0` range is what disambiguates this from a non-empty range that
- * happens to fold to checksum 0 (which also encodes to `aaaaaa`); never
- * match on the letter suffix alone.
- */
-export const EMPTY_FILE_CHECKSUM = "0-0:aaaaaa";
-
-/**
  * Compute FNV-1a 32-bit hash of a string's UTF-8 bytes.
  *
  * FNV-1a is a fast, non-cryptographic hash with good distribution.
  * We use it because the vscode-hashline-edit-tool spec chose
  * it, and matching the spec means interoperability with other tools.
- *
- * Encodes UTF-8 inline to avoid per-call Buffer allocation.
  */
 export function fnv1aHash(line: string): number {
-  let hash = FNV_OFFSET_BASIS;
-
-  for (let i = 0; i < line.length; i++) {
-    let cp = line.charCodeAt(i);
-
-    // Handle surrogate pairs (codepoints > 0xFFFF)
-    if (cp >= 0xd800 && cp <= 0xdbff) {
-      if (i + 1 < line.length) {
-        const lo = line.charCodeAt(i + 1);
-        if (lo >= 0xdc00 && lo <= 0xdfff) {
-          cp = ((cp - 0xd800) << 10) + (lo - 0xdc00) + 0x10000;
-          i++;
-        } else {
-          // Unpaired high surrogate: encode as U+FFFD to match UTF-8 file I/O
-          cp = 0xfffd;
-        }
-      } else {
-        // Trailing high surrogate: encode as U+FFFD
-        cp = 0xfffd;
-      }
-    } else if (cp >= 0xdc00 && cp <= 0xdfff) {
-      // Unpaired low surrogate: encode as U+FFFD
-      cp = 0xfffd;
-    }
-
-    // Encode codepoint as UTF-8 bytes, feeding each to FNV-1a
-    if (cp < 0x80) {
-      hash = Math.imul(hash ^ cp, FNV_PRIME) >>> 0;
-    } else if (cp < 0x800) {
-      hash = Math.imul(hash ^ (0xc0 | (cp >> 6)), FNV_PRIME) >>> 0;
-      hash = Math.imul(hash ^ (0x80 | (cp & 0x3f)), FNV_PRIME) >>> 0;
-    } else if (cp < 0x10000) {
-      hash = Math.imul(hash ^ (0xe0 | (cp >> 12)), FNV_PRIME) >>> 0;
-      hash = Math.imul(hash ^ (0x80 | ((cp >> 6) & 0x3f)), FNV_PRIME) >>> 0;
-      hash = Math.imul(hash ^ (0x80 | (cp & 0x3f)), FNV_PRIME) >>> 0;
-    } else {
-      hash = Math.imul(hash ^ (0xf0 | (cp >> 18)), FNV_PRIME) >>> 0;
-      hash = Math.imul(hash ^ (0x80 | ((cp >> 12) & 0x3f)), FNV_PRIME) >>> 0;
-      hash = Math.imul(hash ^ (0x80 | ((cp >> 6) & 0x3f)), FNV_PRIME) >>> 0;
-      hash = Math.imul(hash ^ (0x80 | (cp & 0x3f)), FNV_PRIME) >>> 0;
-    }
-  }
-
-  return hash >>> 0;
+  const buf = Buffer.from(line);
+  return fnv1aHashBytes(buf, 0, buf.length);
 }
 
 /**
@@ -112,11 +60,6 @@ export function checksumToLetters(h: number): string {
     n = (n / 26) | 0;
   }
   return result;
-}
-
-/** Format a checksum as `"<start>-<end>/<6letters>"`. */
-export function formatChecksum(startLine: number, endLine: number, hash: number): string {
-  return `${startLine}-${endLine}/${checksumToLetters(hash)}`;
 }
 
 // 623 pairs, 1246 chars

@@ -10,12 +10,11 @@
 // The file is never loaded into memory as a whole.
 // ==============================================================================
 
-import { open, unlink, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { DiffCollector } from "../diff-collector.ts";
-import { detectBOM } from "../encoding.ts";
 import { streamingEdit, type StreamEditOp } from "../streaming-edit.ts";
 import { fnv1aHash, fnv1aHashBytes, hashToLetters } from "../hash.ts";
 import { splitLines } from "../line-splitter.ts";
@@ -62,74 +61,23 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const built = validateEdits(edits);
   if (!built.ok) return built.error;
 
-  // Detect BOM to pass encoding info through to streamingEdit for round-trip fidelity
-  const fd = await open(resolvedPath, "r");
-  const bomBuf = Buffer.alloc(4);
-  try {
-    await fd.read(bomBuf, 0, 4);
-  } finally {
-    await fd.close();
-  }
-  const bomInfo = detectBOM(bomBuf);
+  const collector = new DiffCollector();
+  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, dry_run, enc, collector);
+  if (!result.ok) return errorResult(result.error);
 
-  if (dry_run) {
-    const collector = new DiffCollector();
-    const result = await streamingEdit(
-      resolvedPath,
-      built.ops,
-      built.checksumRefs,
-      mtimeMs,
-      true,
-      enc,
-      collector,
-      bomInfo,
-    );
+  const relPath = file_path.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : file_path;
+  const diff = result.changed ? collector.format(`a/${relPath}`, `b/${relPath}`) : "";
 
-    if (!result.ok) return errorResult(result.error);
-    if (!result.changed) return textResult("(no changes)");
-
-    const relPath = file_path.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : file_path;
-    const diff = collector.format(`a/${relPath}`, `b/${relPath}`);
-
-    if (result.tmpPath) {
-      try {
-        await unlink(result.tmpPath);
-      } catch {
-        /* best-effort */
-      }
-    }
-
-    return textResult(diff);
-  }
-
-  const editCollector = new DiffCollector();
-  const result = await streamingEdit(
-    resolvedPath,
-    built.ops,
-    built.checksumRefs,
-    mtimeMs,
-    false,
-    enc,
-    editCollector,
-    bomInfo,
-  );
-
-  if (!result.ok) {
-    return errorResult(result.error);
-  }
+  if (dry_run) return textResult(result.changed ? diff : "(no changes)");
 
   // Write diff to temp file for PostToolUse hook display (never enters LLM context).
-  if (result.changed) {
-    const relPath = file_path.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : file_path;
-    const diff = editCollector.format(`a/${relPath}`, `b/${relPath}`);
-    if (diff) {
-      const cwdHash = createHash("sha256")
-        .update(`${projectDir ?? process.cwd()}\0${file_path}`)
-        .digest("hex")
-        .slice(0, 12);
-      const diffPath = join(tmpdir(), `trueline-edit-${cwdHash}.diff`);
-      await writeFile(diffPath, diff, "utf-8").catch(() => {});
-    }
+  if (diff) {
+    const cwdHash = createHash("sha256")
+      .update(`${projectDir ?? process.cwd()}\0${file_path}`)
+      .digest("hex")
+      .slice(0, 12);
+    const diffPath = join(tmpdir(), `trueline-edit-${cwdHash}.diff`);
+    await writeFile(diffPath, diff, "utf-8").catch(() => {});
   }
 
   const newRef =
@@ -146,11 +94,8 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     if (ctx) contextBlock = `\n\n${ctx}`;
   }
 
-  if (!result.changed) {
-    return textResult(`(no changes)\n${summary}\nref: ${newRef}${warn}${contextBlock}`);
-  }
-
-  return textResult(`(${(performance.now() - t0).toFixed(0)}ms)\n${summary}\nref: ${newRef}${warn}${contextBlock}`);
+  const status = result.changed ? `(${(performance.now() - t0).toFixed(0)}ms)` : "(no changes)";
+  return textResult(`${status}\n${summary}\nref: ${newRef}${warn}${contextBlock}`);
 }
 
 // ==============================================================================
@@ -196,15 +141,6 @@ function editSummary(ops: StreamEditOp[]): string {
     .map((op, i) => {
       const { newStart, newEnd, lineCount: lines } = sites[i];
 
-      if (op.insertAfter) {
-        const location = op.startLine === 0 ? "@start" : `@${op.startLine}`;
-        const rangeHint =
-          lines === 1
-            ? hl(op.content[0], newStart)
-            : `${hl(op.content[0], newStart)}-${hl(op.content[lines - 1], newEnd)}`;
-        return `+${lines} ${location} -> ${rangeHint}`;
-      }
-
       const span = op.endLine - op.startLine + 1;
       const rangeStr = op.startLine === op.endLine ? `${op.startLine}` : `${op.startLine}-${op.endLine}`;
 
@@ -218,6 +154,12 @@ function editSummary(ops: StreamEditOp[]): string {
         lines === 1
           ? hl(op.content[0], newStart)
           : `${hl(op.content[0], newStart)}-${hl(op.content[lines - 1], newEnd)}`;
+
+      if (op.insertAfter) {
+        const location = op.startLine === 0 ? "@start" : `@${op.startLine}`;
+        return `+${lines} ${location} -> ${hint}`;
+      }
+
       return `~${rangeStr} -> ${hint} (${span}->${lines})`;
     })
     .join("\n");
@@ -252,7 +194,7 @@ async function readEditContext(
   }));
 
   // Single pass over the file, collecting lines that fall in any range.
-  const collected = new Map<number, { letters: string; content: string }>();
+  const collected = new Map<number, string>();
   const maxLine = Math.max(...collectRanges.map((r) => r.to));
 
   for await (const { lineBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: false })) {
@@ -261,7 +203,7 @@ async function readEditContext(
       if (lineNumber >= range.from && lineNumber <= range.to) {
         const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
         const letters = hashToLetters(h);
-        collected.set(lineNumber, { letters, content: lineBytes.toString(encoding) });
+        collected.set(lineNumber, `${letters}${lineNumber}\t${lineBytes.toString(encoding)}`);
         break;
       }
     }
@@ -280,39 +222,31 @@ async function readEditContext(
         : `lines ${site.newStart}-${site.newEnd}`;
     const lines: string[] = [`context near ${loc}:`];
 
+    const emit = (from: number, to: number) => {
+      for (let ln = from; ln <= to; ln++) {
+        const entry = collected.get(ln);
+        if (entry) lines.push(entry);
+      }
+    };
+
     // Lines before the edit
-    for (let ln = range.from; ln < site.newStart; ln++) {
-      const entry = collected.get(ln);
-      if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
-    }
+    emit(range.from, site.newStart - 1);
 
     if (collapse) {
       // First contextLines of new content
-      for (let ln = site.newStart; ln < site.newStart + contextLines && ln <= site.newEnd; ln++) {
-        const entry = collected.get(ln);
-        if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
-      }
+      emit(site.newStart, Math.min(site.newStart + contextLines - 1, site.newEnd));
       const skipped = site.lineCount - 2 * contextLines;
       lines.push(`  \u2500\u2500 ${skipped} lines \u2500\u2500`);
       // Last contextLines of new content
-      for (let ln = site.newEnd - contextLines + 1; ln <= site.newEnd; ln++) {
-        const entry = collected.get(ln);
-        if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
-      }
+      emit(site.newEnd - contextLines + 1, site.newEnd);
     } else {
       // All new content lines
-      for (let ln = site.newStart; ln <= site.newEnd; ln++) {
-        const entry = collected.get(ln);
-        if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
-      }
+      emit(site.newStart, site.newEnd);
     }
 
     // Lines after the edit
     const afterStart = site.lineCount > 0 ? site.newEnd + 1 : site.newStart;
-    for (let ln = afterStart; ln <= range.to; ln++) {
-      const entry = collected.get(ln);
-      if (entry) lines.push(`${entry.letters}${ln}\t${entry.content}`);
-    }
+    emit(afterStart, range.to);
 
     blocks.push(lines.join("\n"));
   }

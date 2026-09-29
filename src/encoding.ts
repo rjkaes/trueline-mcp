@@ -36,7 +36,7 @@ const UTF16_BE_BOM = Buffer.from([0xfe, 0xff]);
  * UTF-16 LE BOM (2 bytes, prefix of some UTF-8 BOM sequences is not
  * an issue but checking longer matches first is standard practice).
  */
-export function detectBOM(firstBytes: Buffer): BOMInfo {
+function detectBOM(firstBytes: Buffer): BOMInfo {
   if (firstBytes.subarray(0, 3).equals(UTF8_BOM)) {
     return { encoding: "utf-8", bomLength: 3, hasBOM: true };
   }
@@ -80,13 +80,6 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
 
   // Read the first chunk to detect BOM
   const { bytesRead: firstBytesRead } = await fd.read(readBuf, 0, READ_BUF_SIZE);
-
-  if (firstBytesRead === 0) {
-    await fd.close();
-    // Empty file — return an empty generator
-    async function* empty(): AsyncGenerator<RawLine> {}
-    return { lines: empty(), bomInfo: { encoding: "utf-8", bomLength: 0, hasBOM: false } };
-  }
 
   const firstChunk = Buffer.from(readBuf.subarray(0, firstBytesRead));
   const bomInfo = detectBOM(firstChunk);
@@ -137,26 +130,16 @@ export function bomBytes(bomInfo: BOMInfo): Buffer {
 }
 
 /**
- * Encode a UTF-8 string to the target encoding's byte representation.
- *
- * Node's Buffer.from(str, encoding) supports 'utf-8' and 'utf16le' natively.
- * For UTF-16 BE, we encode as UTF-16 LE then swap byte pairs.
- */
-export function encodeString(str: string, encoding: DetectedEncoding): Buffer {
-  if (encoding === "utf-8") return Buffer.from(str, "utf-8");
-  if (encoding === "utf-16le") return Buffer.from(str, "utf16le");
-
-  // UTF-16 BE: encode as LE, then swap byte pairs.
-  return Buffer.from(str, "utf16le").swap16();
-}
-
-/**
  * Encode a UTF-8 Buffer to the target encoding.
  *
  * Decodes the buffer to a string first, then re-encodes. This is the
  * write-path counterpart to the read-path transcoding.
+ *
+ * Node's Buffer.from(str, encoding) supports 'utf-8' and 'utf16le' natively.
+ * For UTF-16 BE, we encode as UTF-16 LE then swap byte pairs.
  */
 export function encodeBuffer(buf: Buffer, encoding: DetectedEncoding): Buffer {
   if (encoding === "utf-8") return buf;
-  return encodeString(buf.toString("utf-8"), encoding);
+  const utf16le = Buffer.from(buf.toString("utf-8"), "utf16le");
+  return encoding === "utf-16le" ? utf16le : utf16le.swap16();
 }

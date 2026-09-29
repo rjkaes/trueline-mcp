@@ -4,14 +4,11 @@ import {
   fnv1aHashBytes,
   foldHash,
   fnv1aHash,
-  formatChecksum,
   hashToLetters,
 } from "../src/hash.ts";
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 
-// Production formatChecksum only emits the plain decimal form; tests need
-// the letter-prefixed hashLine ref format ("ab10-cd20/efghij") for fixtures.
 function formatChecksumWithLetters(
   startLine: number,
   endLine: number,
@@ -29,12 +26,7 @@ function formatChecksumWithLetters(
  * streaming reads. Tests need a standalone version to fabricate valid
  * checksum strings for `handleEdit` / `handleDiff` inputs.
  */
-export function rangeChecksum(
-  lines: string[],
-  startLine: number,
-  endLine: number,
-  options?: { decimal?: boolean },
-): string {
+export function rangeChecksum(lines: string[], startLine: number, endLine: number): string {
   let hash = FNV_OFFSET_BASIS;
   const effectiveEnd = Math.min(endLine, lines.length);
   let firstLetters = "";
@@ -45,9 +37,6 @@ export function rangeChecksum(
     if (i === startLine - 1) firstLetters = letters;
     lastLetters = letters;
     hash = foldHash(hash, h);
-  }
-  if (options?.decimal) {
-    return formatChecksum(startLine, effectiveEnd, hash);
   }
   return formatChecksumWithLetters(startLine, effectiveEnd, hash, firstLetters, lastLetters);
 }

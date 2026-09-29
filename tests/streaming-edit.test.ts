@@ -176,8 +176,8 @@ describe("streamingEdit", () => {
     if (!result.ok) return;
 
     const newLines = ["line 1", "replaced", "line 3"];
-    const expectedCs = rangeChecksum(newLines, 1, 3, { decimal: true });
-    expect(result.newChecksum).toBe(expectedCs);
+    const { newStartLetters, newEndLetters, newLineCount, newHash } = result;
+    expect(`${newStartLetters}1-${newEndLetters}${newLineCount}/${newHash}`).toBe(rangeChecksum(newLines, 1, 3));
   });
 
   // --------------------------------------------------------------------------
