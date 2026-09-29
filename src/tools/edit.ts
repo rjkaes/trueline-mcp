@@ -10,7 +10,7 @@
 // The file is never loaded into memory as a whole.
 // ==============================================================================
 
-import { writeFile } from "node:fs/promises";
+import { realpath, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -65,7 +65,10 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, dry_run, enc, collector);
   if (!result.ok) return errorResult(result.error);
 
-  const relPath = file_path.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : file_path;
+  // resolvedPath is canonical, so the base must be too: an aliased projectDir yields ../ headers.
+  const relPath = isAbsolute(file_path)
+    ? relative(await realpath(projectDir ?? process.cwd()), resolvedPath)
+    : file_path;
   const diff = result.changed ? collector.format(`a/${relPath}`, `b/${relPath}`) : "";
 
   if (dry_run) return textResult(result.changed ? diff : "(no changes)");

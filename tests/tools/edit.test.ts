@@ -1,5 +1,14 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync, readFileSync, mkdirSync, rmSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  realpathSync,
+  writeFileSync,
+  readFileSync,
+  mkdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -536,6 +545,32 @@ describe("handleEdit", () => {
       });
 
       expect(result.isError).toBe(true);
+    });
+
+    test("dry-run diff headers stay relative when projectDir is a symlinked alias", async () => {
+      // Windows reaches the same mismatch via 8.3 names: realpath expands RUNNER~1.
+      const alias = `${testDir}-alias`;
+      symlinkSync(testDir, alias, "junction");
+      try {
+        writeTestFile(testDir, "invoice.ts", "line 1\nline 2\nline 3\n");
+        const ref = issueTestRef(["line 1", "line 2", "line 3"], 1, 3);
+        const h2 = lineHash("line 2");
+
+        const result = await handleEdit({
+          file_path: join(alias, "invoice.ts"),
+          dry_run: true,
+          edits: [{ ref, range: `${h2}2-${h2}2`, content: "CHANGED" }],
+          projectDir: alias,
+          allowedDirs: [alias],
+        });
+
+        expect(result.isError).toBeUndefined();
+        const text = result.content[0].text;
+        expect(text).toContain("--- a/invoice.ts");
+        expect(text).not.toContain("../");
+      } finally {
+        rmSync(alias, { force: true });
+      }
     });
   });
 
