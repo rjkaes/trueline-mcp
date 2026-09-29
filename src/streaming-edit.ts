@@ -454,22 +454,15 @@ export async function streamingEdit(
         `Re-read with trueline_read to get a fresh ref. ` +
         `A wider ref from a prior read (covering more lines) is valid for editing any sub-range within it.`;
 
-      if (minLine !== Infinity) {
-        return {
-          ok: false,
-          error:
-            base +
-            `\n\n` +
+      const narrowHint =
+        minLine === Infinity
+          ? ""
+          : `\n\n` +
             `However, lines ${minLine}\u2013${maxLine} appear unchanged. ` +
             `Re-read with trueline_read(file_paths=["${resolvedPath}:${minLine}-${maxLine}"]) ` +
-            `to get a narrow checksum, then retry the edit.`,
-        };
-      }
+            `to get a narrow checksum, then retry the edit.`;
 
-      return {
-        ok: false,
-        error: base,
-      };
+      return { ok: false, error: base + narrowHint };
     }
   }
 
