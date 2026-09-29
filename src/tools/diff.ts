@@ -39,7 +39,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     }
 
     const { resolvedPath } = validated;
-    const ext = extname(resolvedPath).replace(/^\./, "");
+    const ext = extname(resolvedPath);
     const relPath = filePath.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : filePath;
 
     // Read disk content
@@ -64,7 +64,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     ]);
 
     // Unsupported file type: extension has no language config
-    if (!getLanguageConfig(`.${ext}`)) {
+    if (!getLanguageConfig(ext)) {
       sections.push(`## ${relPath}\n\nFile type not supported for semantic diffing.`);
       continue;
     }

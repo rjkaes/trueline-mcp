@@ -1,6 +1,6 @@
 import { getLanguageConfig } from "./outline/languages.ts";
 import { extractOutline } from "./outline/extract.ts";
-import { fnv1aHash, foldHash, FNV_OFFSET_BASIS } from "./hash.ts";
+import { fnv1aHash } from "./hash.ts";
 
 // ==============================================================================
 // Types
@@ -17,9 +17,9 @@ interface SymbolInfo {
 export interface SymbolDiff {
   added: SymbolInfo[];
   removed: SymbolInfo[];
-  renamed: Array<{ oldName: string; newName: string; signature: string }>;
+  renamed: Array<{ oldName: string; newName: string }>;
   signatureChanged: Array<{ name: string; oldSig: string; newSig: string }>;
-  logicChanged: Array<{ name: string; signature: string; oldBody?: string; newBody?: string }>;
+  logicChanged: Array<{ name: string; oldBody?: string; newBody?: string }>;
 }
 
 // ==============================================================================
@@ -39,21 +39,12 @@ export function normalizeBody(text: string, mode: "collapse" | "preserve-indent"
 // Symbol Extraction
 // ==============================================================================
 
-/** Hash a normalized body string using FNV-1a with folding. */
-function hashBody(text: string): number {
-  let acc = FNV_OFFSET_BASIS;
-  for (const line of text.split("\n")) {
-    acc = foldHash(acc, fnv1aHash(line));
-  }
-  return acc;
-}
-
 /**
  * Extract symbols from source code for a given file extension.
  * Returns [] for unsupported extensions.
  */
 export async function extractSymbols(source: string, ext: string): Promise<SymbolInfo[]> {
-  const config = getLanguageConfig(ext.startsWith(".") ? ext : `.${ext}`);
+  const config = getLanguageConfig(ext);
   if (!config) return [];
 
   const entries = await extractOutline(source, config);
@@ -74,7 +65,7 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
       return {
         name,
         signature: entry.text,
-        bodyHash: hashBody(normalized),
+        bodyHash: fnv1aHash(normalized),
         bodyText,
       };
     });
@@ -110,16 +101,21 @@ export function diffSymbols(oldSyms: SymbolInfo[], newSyms: SymbolInfo[]): Symbo
   const oldByName = new Map(oldSyms.map((s) => [s.name, s]));
   const newByName = new Map(newSyms.map((s) => [s.name, s]));
 
-  const matched: Array<{ old: SymbolInfo; new: SymbolInfo }> = [];
   const unmatchedOld: SymbolInfo[] = [];
   const unmatchedNew: SymbolInfo[] = [];
 
-  for (const old of oldSyms) {
-    const n = newByName.get(old.name);
-    if (n) {
-      matched.push({ old, new: n });
-    } else {
-      unmatchedOld.push(old);
+  for (const o of oldSyms) {
+    const n = newByName.get(o.name);
+    if (!n) {
+      unmatchedOld.push(o);
+      continue;
+    }
+    // Categorize matched symbols
+    if (o.signature !== n.signature) {
+      result.signatureChanged.push({ name: o.name, oldSig: o.signature, newSig: n.signature });
+    }
+    if (o.bodyHash !== n.bodyHash) {
+      result.logicChanged.push({ name: o.name, oldBody: o.bodyText, newBody: n.bodyText });
     }
   }
 
@@ -136,7 +132,7 @@ export function diffSymbols(oldSyms: SymbolInfo[], newSyms: SymbolInfo[]): Symbo
   for (const n of unmatchedNew) {
     const o = oldByHash.get(n.bodyHash)?.shift();
     if (o) {
-      result.renamed.push({ oldName: o.name, newName: n.name, signature: n.signature });
+      result.renamed.push({ oldName: o.name, newName: n.name });
       renamedOldNames.add(o.name);
     } else {
       result.added.push(n);
@@ -145,16 +141,6 @@ export function diffSymbols(oldSyms: SymbolInfo[], newSyms: SymbolInfo[]): Symbo
 
   for (const o of unmatchedOld) {
     if (!renamedOldNames.has(o.name)) result.removed.push(o);
-  }
-
-  // Categorize matched symbols
-  for (const { old: o, new: n } of matched) {
-    if (o.signature !== n.signature) {
-      result.signatureChanged.push({ name: o.name, oldSig: o.signature, newSig: n.signature });
-    }
-    if (o.bodyHash !== n.bodyHash) {
-      result.logicChanged.push({ name: o.name, signature: n.signature, oldBody: o.bodyText, newBody: n.bodyText });
-    }
   }
 
   return result;

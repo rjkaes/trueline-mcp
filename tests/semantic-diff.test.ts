@@ -22,7 +22,7 @@ function goodbye(): void {
   return;
 }
 `;
-    const symbols = await extractSymbols(source, "ts");
+    const symbols = await extractSymbols(source, ".ts");
     expect(symbols.length).toBe(2);
     expect(symbols[0].name).toContain("hello");
     expect(symbols[1].name).toContain("goodbye");
@@ -30,7 +30,7 @@ function goodbye(): void {
   });
 
   test("returns empty array for unsupported extension", async () => {
-    const symbols = await extractSymbols("{}", "json");
+    const symbols = await extractSymbols("{}", ".json");
     expect(symbols).toEqual([]);
   });
 });
