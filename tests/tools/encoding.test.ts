@@ -231,4 +231,55 @@ describe("trueline_edit encoding param", () => {
     expect(getText(editResult)).toContain("café");
     expect(getText(editResult)).toContain("thé");
   });
+
+  // Summary hints are refs callers reuse for follow-up edits, so they must equal a fresh read's hashLines.
+  const hintRefs = (summary: string) =>
+    summary.split("\n").flatMap((line) => line.match(/^[~+].* -> (\S+)/)?.[1].split("-") ?? []);
+
+  const hintFixtures: Array<[string, (text: string) => Buffer, string | undefined]> = [
+    ["plain latin1", (text) => Buffer.from(text, "latin1"), "latin1"],
+    ["UTF-16LE", utf16Fixtures[0][2], "latin1"],
+    ["UTF-16BE", utf16Fixtures[1][2], "latin1"],
+    ["UTF-8", (text) => Buffer.from(text, "utf-8"), undefined],
+  ];
+
+  const hintShapes: Array<[string, string, "replace" | "insert_after", number]> = [
+    ["single-line replace", "crème", "replace", 1],
+    ["multi-line replace", "crème\nbrûlée\nthé", "replace", 2],
+    ["single-line insert_after", "crème", "insert_after", 1],
+    ["multi-line insert_after", "crème\nnoël", "insert_after", 2],
+  ];
+
+  for (const [fixtureLabel, encode, encoding] of hintFixtures) {
+    for (const [shape, content, action, hintCount] of hintShapes) {
+      test(`${fixtureLabel} — ${shape} hint matches a fresh read`, async () => {
+        const file = join(testDir, `hint-${fixtureLabel}-${shape}.txt`.replace(/\s+/g, "-"));
+        const fixture = await readFixture(file, encode("alpha\nbeta\ngamma\ndelta\n"), "beta", encoding);
+
+        const editResult = await handleEdit({
+          file_path: file,
+          edits: [
+            {
+              range: action === "insert_after" ? fixture.range.split("-")[0] : fixture.range,
+              content,
+              ref: fixture.ref,
+              action,
+            },
+          ],
+          encoding,
+          projectDir: testDir,
+        });
+        expect(editResult.isError).toBeFalsy();
+
+        const freshRead = getText(await handleRead({ file_path: file, encoding, projectDir: testDir }));
+        const freshByLine = new Map(
+          hashedLines(freshRead).map((line) => [Number.parseInt(line.slice(2), 10), line.split("\t")[0]]),
+        );
+        const hints = hintRefs(getText(editResult));
+        expect(hints).toHaveLength(hintCount);
+        const expected = hints.map((hint) => freshByLine.get(Number.parseInt(hint.slice(2), 10)) ?? "(no such line)");
+        expect(hints).toEqual(expected);
+      });
+    }
+  }
 });

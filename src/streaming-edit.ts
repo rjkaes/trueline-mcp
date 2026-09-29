@@ -53,6 +53,7 @@ type StreamingEditResult =
       newHash: string;
       newStartLetters: string;
       newEndLetters: string;
+      textEncoding: BufferEncoding;
       changed: boolean;
     }
   | { ok: false; error: string };
@@ -485,6 +486,7 @@ export async function streamingEdit(
     newHash: checksumToLetters(outputChecksumAcc),
     newStartLetters: hashToLetters(outputFirstLineHash),
     newEndLetters: hashToLetters(outputLastLineHash),
+    textEncoding,
   };
 
   // ---- No-op or dry run: skip write ----

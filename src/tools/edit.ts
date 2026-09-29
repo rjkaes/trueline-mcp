@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { DiffCollector } from "../diff-collector.ts";
 import { streamingEdit, type StreamEditOp } from "../streaming-edit.ts";
-import { fnv1aHash, fnv1aHashBytes, hashToLetters } from "../hash.ts";
+import { fnv1aHashBytes, hashToLetters } from "../hash.ts";
 import { transcodedLines } from "../encoding.ts";
 import {
   type EditInput,
@@ -85,7 +85,7 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
       ? `${result.newStartLetters}1-${result.newEndLetters}${result.newLineCount}/${result.newHash}`
       : "0-0/aaaaaa";
 
-  const summary = editSummary(built.ops);
+  const summary = editSummary(built.ops, result.textEncoding);
   const warn = built.warnings.length > 0 ? `\n\n${built.warnings.join("\n")}` : "";
   let contextBlock = "";
   const effectiveContextLines = context_lines ?? (built.ops.length >= 2 ? 2 : 0);
@@ -135,7 +135,7 @@ function computeEditSites(ops: StreamEditOp[]): EditSite[] {
 // Per-edit summary for operator visibility
 // ==============================================================================
 
-function editSummary(ops: StreamEditOp[]): string {
+function editSummary(ops: StreamEditOp[], textEncoding: BufferEncoding): string {
   const sites = computeEditSites(ops);
   return ops
     .map((op, i) => {
@@ -152,8 +152,8 @@ function editSummary(ops: StreamEditOp[]): string {
 
       const hint =
         lines === 1
-          ? hl(op.content[0], newStart)
-          : `${hl(op.content[0], newStart)}-${hl(op.content[lines - 1], newEnd)}`;
+          ? hl(op.content[0], newStart, textEncoding)
+          : `${hl(op.content[0], newStart, textEncoding)}-${hl(op.content[lines - 1], newEnd, textEncoding)}`;
 
       if (op.insertAfter) {
         const location = op.startLine === 0 ? "@start" : `@${op.startLine}`;
@@ -165,9 +165,12 @@ function editSummary(ops: StreamEditOp[]): string {
     .join("\n");
 }
 
-/** Format a hash.line reference for a content string at a given line number. */
-function hl(content: string, lineNumber: number): string {
-  return `${hashToLetters(fnv1aHash(content))}${lineNumber}`;
+/**
+ * Format a hash.line reference for a content string at a given line number.
+ * Hashes the bytes trueline_read hashes: the file's own encoding, or UTF-8 for UTF-16 files.
+ */
+function hl(content: string, lineNumber: number, textEncoding: BufferEncoding): string {
+  return `${hashToLetters(fnv1aHashBytes(Buffer.from(content, textEncoding)))}${lineNumber}`;
 }
 
 // ==============================================================================
