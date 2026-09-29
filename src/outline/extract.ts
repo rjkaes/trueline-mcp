@@ -103,22 +103,13 @@ export async function extractOutline(
       .replace(/ statement$/, "")
       .replace(/ declaration$/, "");
 
-    if (skipCount === 0 || label === skipType) {
-      // Start or extend the current skip group
-      if (skipCount === 0) {
-        skipStart = nodeStart;
-        skipType = label;
-      }
-      skipEnd = nodeEnd;
-      skipCount++;
-    } else {
-      // Different skip type — flush and start new group
-      flushSkipped();
+    if (skipCount > 0 && label !== skipType) flushSkipped();
+    if (skipCount === 0) {
       skipStart = nodeStart;
-      skipEnd = nodeEnd;
-      skipCount = 1;
       skipType = label;
     }
+    skipEnd = nodeEnd;
+    skipCount++;
   }
 
   function visit(node: SyntaxNode, depth: number, isRootChild: boolean): void {
@@ -129,13 +120,7 @@ export async function extractOutline(
     }
     if (config.skip?.has(node.type)) return;
 
-    const isOutline = config.outline.has(node.type);
-    const isTopOnly = config.topLevelOnly?.has(node.type) ?? false;
-
-    // topLevelOnly nodes are only captured as direct children of root
-    if (isTopOnly && !isRootChild) return;
-
-    if (isOutline || (isTopOnly && isRootChild)) {
+    if (config.outline.has(node.type)) {
       // Flush any pending skipped nodes before this entry
       if (isRootChild) flushSkipped();
 

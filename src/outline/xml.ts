@@ -58,17 +58,13 @@ export async function extractXmlOutline(
   // Line where the current tag/comment/PI started
   let tokenStartLine = 0;
 
-  function currentDepth(): number {
-    return stack.length;
-  }
-
   /** Process a complete tag (everything between < and >, exclusive). */
   function handleTag(content: string, endLine: number): void {
     // Self-closing: <foo attr="val" />
     if (content.endsWith("/")) {
       const trimmed = content.slice(0, -1).trim();
       const tagName = extractTagName(trimmed);
-      const depth = currentDepth();
+      const depth = stack.length;
       if (depth <= maxDepth) {
         entries.push({
           startLine: tokenStartLine,
@@ -108,7 +104,7 @@ export async function extractXmlOutline(
 
     // Open tag: <foo attr="val">
     const tagName = extractTagName(content);
-    const depth = currentDepth();
+    const depth = stack.length;
     stack.push({
       tagName,
       depth,
@@ -120,7 +116,7 @@ export async function extractXmlOutline(
   /** Process a complete processing instruction (everything between <? and ?>). */
   function handlePI(content: string, endLine: number): void {
     // Only include top-level PIs
-    if (currentDepth() > 0) return;
+    if (stack.length > 0) return;
 
     const trimmed = content.trim();
     const sig = trimmed.length > 200 ? `${trimmed.slice(0, 197)}...` : trimmed;
@@ -178,7 +174,6 @@ export async function extractXmlOutline(
           if (ch === ">") {
             handleTag(buf.trim(), lineNumber);
             state = State.Text;
-            buf = "";
           } else {
             buf += ch;
           }
@@ -189,7 +184,6 @@ export async function extractXmlOutline(
           if (ch === "?" && i + 1 < line.length && line[i + 1] === ">") {
             handlePI(buf, lineNumber);
             state = State.Text;
-            buf = "";
             i++; // skip '>'
           } else {
             buf += ch;
@@ -200,7 +194,6 @@ export async function extractXmlOutline(
           // Looking for '-->'
           if (ch === "-" && line.slice(i, i + 3) === "-->") {
             state = State.Text;
-            buf = "";
             i += 2; // skip '->'
           }
           // Intentionally not buffering comment content
@@ -210,7 +203,6 @@ export async function extractXmlOutline(
           // Looking for ']]>'
           if (ch === "]" && line.slice(i, i + 3) === "]]>") {
             state = State.Text;
-            buf = "";
             i += 2; // skip ']>'
           }
           break;
@@ -224,7 +216,6 @@ export async function extractXmlOutline(
             inDocSubset = false;
           } else if (ch === ">" && !inDocSubset) {
             state = State.Text;
-            buf = "";
           }
           break;
         }

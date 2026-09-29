@@ -17,8 +17,6 @@ export interface LanguageConfig {
   skip?: Set<string>;
   /** Node types whose children should be recursed into (one level) */
   recurse?: Set<string>;
-  /** Node types only included when they are direct children of the root */
-  topLevelOnly?: Set<string>;
   /** Whitespace normalization for semantic diffing body hashes.
    *  "collapse" (default): collapse whitespace runs to single space, trim lines.
    *  "preserve-indent": normalize trailing whitespace only, preserve leading indentation. */
@@ -36,12 +34,12 @@ const typescript: LanguageConfig = {
     "lexical_declaration",
     "variable_declaration",
     "export_statement",
+    "expression_statement",
     "method_definition",
     "public_field_definition",
   ]),
   skip: new Set(["import_statement"]),
   recurse: new Set(["class_body"]),
-  topLevelOnly: new Set(["expression_statement"]),
 };
 
 const tsx: LanguageConfig = {
@@ -314,10 +312,6 @@ export const LANGUAGES: Record<string, LanguageConfig> = {
   // Bash
   ".sh": bash,
   ".bash": bash,
-  // Config / data (no outline, but parseable)
-  // ".json": json,
-  // ".yaml": yaml,
-  // ".toml": toml,
 };
 
 export function getLanguageConfig(ext: string): LanguageConfig | undefined {
