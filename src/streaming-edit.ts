@@ -382,7 +382,9 @@ export async function streamingEdit(
   try {
     await flushWriteBuf();
     try {
-      await fd.sync();
+      // Only a temp file that will replace the original needs to be durable;
+      // on macOS, Node's fsync (F_FULLFSYNC) costs ~5 ms even for tiny files.
+      if (contentChanged && !dryRun) await fd.sync();
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       // Swallow only filesystem-incompatibility codes (e.g. FAT, NFS, /proc);
