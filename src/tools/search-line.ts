@@ -11,16 +11,19 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
   let totalMatches = 0;
   let matchesCaptured = 0;
 
-  // Ring buffer for pre-context
-  const ring: DecodedLine[] = new Array(contextLines > 0 ? contextLines : 0);
-  let ringLen = 0;
-  let ringStart = 0;
+  // Last contextLines lines seen outside any window, oldest first (pre-context)
+  const pre: DecodedLine[] = [];
 
   let postRemaining = 0;
   let currentLines: DecodedLine[] | null = null;
   let done = false;
   let postLimitScanned = 0;
   let postLimitCapped = false;
+
+  const flush = (): void => {
+    if (currentLines !== null) matches.push({ lines: currentLines });
+    currentLines = null;
+  };
 
   const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
   for await (const { lineBytes, lineNumber } of transcoded.lines) {
@@ -46,62 +49,39 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
       matchesCaptured++;
 
       if (currentLines === null) {
-        currentLines = [];
-        // Drain ring buffer as pre-context
-        if (ringLen > 0) {
-          const count = Math.min(ringLen, ring.length);
-          for (let i = 0; i < count; i++) {
-            currentLines.push(ring[(ringStart + i) % ring.length]);
-          }
-        }
+        // Drain pre-context into the new window
+        currentLines = pre.splice(0);
       }
 
       currentLines.push(decoded);
       postRemaining = contextLines;
 
       if (matchesCaptured >= maxMatches && postRemaining === 0) {
-        matches.push({ lines: currentLines });
-        currentLines = null;
+        flush();
         done = true;
       }
     } else if (postRemaining > 0 && currentLines !== null) {
       currentLines.push(decoded);
       postRemaining--;
       if (postRemaining === 0 && matchesCaptured >= maxMatches) {
-        matches.push({ lines: currentLines });
-        currentLines = null;
+        flush();
         done = true;
       } else if (postRemaining === 0) {
-        matches.push({ lines: currentLines });
-        currentLines = null;
-        ringLen = 0;
-        ringStart = 0;
+        flush();
       }
     } else {
       // context_lines=0: a non-match line arrives while currentLines is open but
       // postRemaining is already 0.  Flush now so the next match starts a fresh
       // window -- otherwise non-adjacent matches merge into one sparse window
       // whose checksum excludes intermediate lines, causing edit verification to fail.
-      if (currentLines !== null) {
-        matches.push({ lines: currentLines });
-        currentLines = null;
-      }
-      if (contextLines > 0) {
-        if (ringLen < ring.length) {
-          ring[(ringStart + ringLen) % ring.length] = decoded;
-          ringLen++;
-        } else {
-          ring[ringStart] = decoded;
-          ringStart = (ringStart + 1) % ring.length;
-        }
-      }
+      flush();
+      pre.push(decoded);
+      if (pre.length > contextLines) pre.shift();
     }
   }
 
   // Flush any in-progress window
-  if (currentLines !== null) {
-    matches.push({ lines: currentLines });
-  }
+  flush();
 
   return {
     filePath: resolvedPath,
