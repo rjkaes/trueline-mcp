@@ -127,6 +127,25 @@ describe("semantic trueline_changes", () => {
     expect(text).toContain("not supported");
   });
 
+  test("binary file of an unsupported type does not abort other files", async () => {
+    const logo = join(testDir, "logo.png");
+    const source = writeTestFile(testDir, "invoice.ts", "function total() { return 1; }\n");
+    writeFileSync(logo, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x00]));
+    git("add .");
+    git("commit -m init");
+    writeFileSync(logo, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]));
+    writeFileSync(source, "function total() { return 1; }\nfunction tax() { return 2; }\n");
+
+    const result = await handleDiff({
+      file_paths: [logo, source],
+      projectDir: testDir,
+      allowedDirs: [testDir],
+    });
+
+    const text = result.content[0].text;
+    expect(text).toContain("## logo.png\n\nFile type not supported");
+    expect(text).toContain("tax");
+  });
   test("star expands to all unstaged changed files", async () => {
     const f1 = join(testDir, "a.ts");
     const f2 = join(testDir, "b.ts");

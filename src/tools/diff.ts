@@ -42,6 +42,13 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     const ext = extname(resolvedPath);
     const relPath = filePath.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : filePath;
 
+    // Unsupported file type: extension has no language config. Checked before
+    // any I/O so lockfiles, JSON, and images skip the disk read and git spawns.
+    if (!getLanguageConfig(ext)) {
+      sections.push(`## ${relPath}\n\nFile type not supported for semantic diffing.`);
+      continue;
+    }
+
     // Read disk content
     let diskContent: string | null;
     try {
@@ -62,12 +69,6 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
       extractSymbols(gitContent, ext),
       extractSymbols(diskContent, ext),
     ]);
-
-    // Unsupported file type: extension has no language config
-    if (!getLanguageConfig(ext)) {
-      sections.push(`## ${relPath}\n\nFile type not supported for semantic diffing.`);
-      continue;
-    }
 
     const diff = diffSymbols(oldSymbols, newSymbols);
     sections.push(formatDiffSection(relPath, diff, compare_against));
