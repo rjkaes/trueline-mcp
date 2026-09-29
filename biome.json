@@ -6,16 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": [
-      "**",
-      "!**/dist",
-      "!**/build",
-      "!tests/fixtures/",
-      "!package.json",
-      "!.claude-plugin/**",
-      "!.claude/**",
-      "!.beads/**"
-    ]
+    "includes": ["**", "!package.json", "!.claude-plugin/**", "!.claude/**"]
   },
   "formatter": {
     "enabled": true,
