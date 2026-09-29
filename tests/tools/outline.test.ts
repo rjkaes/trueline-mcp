@@ -465,8 +465,9 @@ describe("trueline_outline", () => {
     expect(text).toContain("beta");
     expect(text).toContain("gamma");
     expect(text).toContain("delta");
-    // Aggregate summary at the end
-    expect(text).toMatch(/\d+ symbols, \d+ source lines across 2 files/);
+    // Each file section carries its own count; no cross-file total
+    expect(text.match(/\(\d+ symbols?, \d+ source lines?\)/g)).toHaveLength(2);
+    expect(text).not.toMatch(/across \d+ files/);
   });
 
   test("file_paths with mixed supported/unsupported files includes both", async () => {

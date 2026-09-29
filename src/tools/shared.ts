@@ -6,20 +6,6 @@ import { type ChecksumRef, parseChecksum, parseFilePathWithRanges, parseRange } 
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
 
-// Memoize realpath() of base directories. projectDir and allowedDirs are
-// stable across the server lifetime, so re-resolving them on every
-// validatePath call wastes syscalls. The target file path is NOT cached —
-// callers can create or delete files between validations.
-const baseDirRealpathCache = new Map<string, Promise<string>>();
-function cachedBaseRealpath(p: string): Promise<string> {
-  let pending = baseDirRealpathCache.get(p);
-  if (!pending) {
-    pending = realpath(p);
-    baseDirRealpathCache.set(p, pending);
-    pending.catch(() => baseDirRealpathCache.delete(p));
-  }
-  return pending;
-}
 // ==============================================================================
 // Shared input type used by both edit and diff tools
 // ==============================================================================
@@ -149,7 +135,7 @@ export async function validatePath(
   // short 8.3 names on Windows (e.g. RUNNER~1) match the realpath of the file.
   let realBase: string;
   try {
-    realBase = await cachedBaseRealpath(projectDir ? projectDir : process.cwd());
+    realBase = await realpath(projectDir ? projectDir : process.cwd());
   } catch {
     return {
       ok: false,
@@ -161,7 +147,7 @@ export async function validatePath(
   const resolvedAllowed = await Promise.all(
     allowedDirs.map(async (d) => {
       try {
-        return await cachedBaseRealpath(d);
+        return await realpath(d);
       } catch {
         return d;
       }
@@ -464,37 +450,24 @@ export async function expandGlobs(filePaths: string[], projectDir: string | unde
   return result;
 }
 
-/** Cache git ls-files results per directory within a single call chain. */
-const gitFilesCache = new Map<string, string[] | null>();
-
 const execFileAsync = promisify(execFile);
 
 // Strip inherited GIT_* env vars so git discovers the repo from cwd,
 // not from a parent worktree or other inherited context.
-export const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
 
-async function gitListFiles(cwd: string): Promise<string[] | null> {
-  const cached = gitFilesCache.get(cwd);
-  if (cached !== undefined) return cached;
-
-  try {
-    const { stdout } = await execFileAsync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
-      cwd,
-      env: gitEnv,
-      maxBuffer: 10 * 1024 * 1024,
-    });
-    const result = stdout.split("\0").filter(Boolean);
-    gitFilesCache.set(cwd, result);
-    return result;
-  } catch {
-    gitFilesCache.set(cwd, null);
-    return null;
-  }
+export async function gitExec(args: string[], cwd: string): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd, env: gitEnv, maxBuffer: 10 * 1024 * 1024 });
+  return stdout;
 }
 
-/** Clear the git file list cache (for testing). */
-export function clearGitFilesCache(): void {
-  gitFilesCache.clear();
+async function gitListFiles(cwd: string): Promise<string[] | null> {
+  try {
+    const stdout = await gitExec(["ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd);
+    return stdout.split("\0").filter(Boolean);
+  } catch {
+    return null;
+  }
 }
 
 /**

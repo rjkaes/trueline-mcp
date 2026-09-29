@@ -130,41 +130,29 @@ export function diffSymbols(oldSyms: SymbolInfo[], newSyms: SymbolInfo[]): Symbo
   }
 
   // Rename detection: unmatched old + unmatched new with same body hash
-  const oldByHash = new Map<number, SymbolInfo[]>();
-  for (const o of unmatchedOld) {
-    const list = oldByHash.get(o.bodyHash) ?? [];
-    list.push(o);
-    oldByHash.set(o.bodyHash, list);
-  }
-
+  const oldByHash = Map.groupBy(unmatchedOld, (o) => o.bodyHash);
   const renamedOldNames = new Set<string>();
-  const renamedNewNames = new Set<string>();
 
   for (const n of unmatchedNew) {
-    const candidates = oldByHash.get(n.bodyHash);
-    if (candidates && candidates.length > 0) {
-      const o = candidates.shift()!;
+    const o = oldByHash.get(n.bodyHash)?.shift();
+    if (o) {
       result.renamed.push({ oldName: o.name, newName: n.name, signature: n.signature });
       renamedOldNames.add(o.name);
-      renamedNewNames.add(n.name);
+    } else {
+      result.added.push(n);
     }
   }
 
   for (const o of unmatchedOld) {
     if (!renamedOldNames.has(o.name)) result.removed.push(o);
   }
-  for (const n of unmatchedNew) {
-    if (!renamedNewNames.has(n.name)) result.added.push(n);
-  }
 
   // Categorize matched symbols
   for (const { old: o, new: n } of matched) {
-    if (o.signature !== n.signature && o.bodyHash !== n.bodyHash) {
+    if (o.signature !== n.signature) {
       result.signatureChanged.push({ name: o.name, oldSig: o.signature, newSig: n.signature });
-      result.logicChanged.push({ name: o.name, signature: n.signature, oldBody: o.bodyText, newBody: n.bodyText });
-    } else if (o.signature !== n.signature) {
-      result.signatureChanged.push({ name: o.name, oldSig: o.signature, newSig: n.signature });
-    } else if (o.bodyHash !== n.bodyHash) {
+    }
+    if (o.bodyHash !== n.bodyHash) {
       result.logicChanged.push({ name: o.name, signature: n.signature, oldBody: o.bodyText, newBody: n.bodyText });
     }
   }

@@ -1,11 +1,9 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { readTextNoFollow } from "../line-splitter.ts";
 import { lcsMiddle, trimCommonEnds } from "../diff-collector.ts";
 import { extname, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
-import { gitEnv, isAbsolutePathArg, relativePathError, type ToolContext, validatePath } from "./shared.ts";
+import { gitExec, isAbsolutePathArg, relativePathError, type ToolContext, validatePath } from "./shared.ts";
 import { type ToolResult, textResult, errorResult } from "./types.ts";
 
 interface DiffParams extends ToolContext {
@@ -72,8 +70,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     }
 
     const diff = diffSymbols(oldSymbols, newSymbols);
-    const formatted = formatDiffSection(relPath, diff, compare_against);
-    if (formatted) sections.push(formatted);
+    sections.push(formatDiffSection(relPath, diff, compare_against));
   }
 
   if (sections.length === 0) {
@@ -86,13 +83,6 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 // ==============================================================================
 // Git helpers
 // ==============================================================================
-
-const execFileAsync = promisify(execFile);
-
-async function gitExec(args: string[], cwd: string): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd, env: gitEnv, maxBuffer: 10 * 1024 * 1024 });
-  return stdout;
-}
 
 async function getGitContent(filePath: string, ref: string, cwd: string): Promise<string> {
   try {
@@ -127,7 +117,7 @@ async function getChangedFiles(cwd: string, ref: string): Promise<string[]> {
 /** Threshold: inline mini-diff for body changes <= this many lines different */
 const INLINE_DIFF_THRESHOLD = 5;
 
-function formatDiffSection(relPath: string, diff: SymbolDiff, ref: string): string | null {
+function formatDiffSection(relPath: string, diff: SymbolDiff, ref: string): string {
   const hasChanges =
     diff.added.length +
       diff.removed.length +

@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -215,12 +215,6 @@ describe("gitignore-aware globs", () => {
 
     // Stage files so git ls-files sees them
     git("add -A");
-  });
-
-  beforeEach(() => {
-    // Clear the git file list cache between tests
-    const { clearGitFilesCache } = require("../../src/tools/shared.ts");
-    clearGitFilesCache();
   });
 
   afterAll(() => {

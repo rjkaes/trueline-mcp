@@ -58,26 +58,13 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
 
   // Multiple files — collect results with per-file headers
   const sections: string[] = [...rejectedSections];
-  let totalSymbols = 0;
-  let totalLines = 0;
 
   for (const fp of filePaths) {
     const result = await outlineOneFile(fp, params.depth, projectDir, allowedDirs);
-    const text = result.content[0].type === "text" ? result.content[0].text : "";
-
-    // Extract counts from the summary line, e.g. "(12 symbols, 200 source lines)"
-    const countsMatch = text.match(/\((\d+) symbols?, (\d+) source lines?\)/);
-    if (countsMatch) {
-      totalSymbols += Number(countsMatch[1]);
-      totalLines += Number(countsMatch[2]);
-    }
-
-    sections.push(`--- ${displayPath(fp, projectDir)} ---\n${text}`);
+    sections.push(`--- ${displayPath(fp, projectDir)} ---\n${result.content[0].text}`);
   }
 
-  const combined = sections.join("\n\n");
-  const summary = `\n(${totalSymbols} symbols, ${totalLines} source lines across ${filePaths.length} files)`;
-  return textResult(combined + summary);
+  return textResult(sections.join("\n\n"));
 }
 
 async function outlineOneFile(

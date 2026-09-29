@@ -243,11 +243,7 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
   for (const fp of parsed) {
     const result = await handleRead({ ...rest, file_path: fp.path, ranges: fp.rangeSpecs });
     const text = (result.content[0] as { text: string }).text;
-    if (result.isError) {
-      parts.push(`--- ${displayPath(fp.path, rest.projectDir)} ---\nerror: ${text}`);
-      continue;
-    }
-    parts.push(`--- ${displayPath(fp.path, rest.projectDir)} ---\n${text}`);
+    parts.push(`--- ${displayPath(fp.path, rest.projectDir)} ---\n${result.isError ? "error: " : ""}${text}`);
   }
   return textResult(parts.join("\n\n"));
 }
