@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -212,5 +213,20 @@ describe("PreToolUse hook — other tools", () => {
       const out = result as { hookSpecificOutput: { additionalContext: string } };
       expect(out.hookSpecificOutput.additionalContext).toContain("cat");
     }
+  });
+});
+
+describe("trueline-hook CLI — gemini-cli advise delivery", () => {
+  test("writes the nudge to stderr, not as JSON on stdout", () => {
+    const hookBin = join(import.meta.dir, "..", "..", "bin", "trueline-hook.js");
+    const result = spawnSync("node", [hookBin, "gemini-cli", "beforetool"], {
+      input: JSON.stringify({ tool_name: "run_shell_command", tool_input: { command: `cat ${smallFile}` } }),
+      env: { ...process.env, GEMINI_PROJECT_DIR: projectDir },
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("<trueline_nudge>");
+    expect(result.stdout).not.toContain('"stderr"');
   });
 });

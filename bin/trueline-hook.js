@@ -67,7 +67,10 @@ if (normalizedEvent === "session-start") {
 
   const result = await processHookEvent(hookEvent, platform);
   if (result !== null) {
-    process.stdout.write(JSON.stringify(result));
+    // `stderr` is out-of-band feedback; stdout stays valid JSON ({} when nothing else is set).
+    const { stderr, ...json } = result;
+    if (stderr) process.stderr.write(stderr);
+    process.stdout.write(JSON.stringify(json));
   }
 } else {
   console.error(`trueline-hook: unknown event "${event}". Use pretooluse, beforetool, or session-start.`);
