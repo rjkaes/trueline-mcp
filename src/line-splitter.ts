@@ -34,6 +34,22 @@ export const EMPTY_BUF = Buffer.alloc(0);
 // Core chunk-based line-splitting generator
 // ==============================================================================
 
+/**
+ * Index of the next CR or LF at or after `from`, or -1. Kept out of the
+ * async generator: JSC leaves loops in generator bodies under-optimized,
+ * and the per-byte scan ran ~2x slower inline.
+ */
+function findTerminator(buf: Buffer, from: number, detectBinary: boolean): number {
+  for (let i = from; i < buf.length; i++) {
+    const byte = buf[i];
+    if (detectBinary && byte === 0x00) {
+      throw new Error("File appears to be binary (contains null bytes)");
+    }
+    if (byte === 0x0d || byte === 0x0a) return i;
+  }
+  return -1;
+}
+
 export interface SplitChunksOpts {
   detectBinary?: boolean;
 }
@@ -73,49 +89,50 @@ export async function* splitChunks(chunks: AsyncIterable<Buffer>, opts?: SplitCh
 
     let lineStart = 0;
 
-    // If the previous chunk ended with \r, resolve whether it's \r\n or bare \r.
-    if (prevChunkEndedWithCR) {
-      prevChunkEndedWithCR = false;
-      const eol = buf[0] === 0x0a ? CRLF_BUF : CR_BUF;
-      if (eol === CRLF_BUF) lineStart = 1;
-      yield { lineBytes: flushPartials(), eolBytes: eol, lineNumber: ++lineNumber };
-    }
-
-    for (let i = lineStart; i < buf.length; i++) {
-      const byte = buf[i];
-
-      if (detectBinary && byte === 0x00) {
-        throw new Error("File appears to be binary (contains null bytes)");
-      }
-
-      if (byte !== 0x0d && byte !== 0x0a) continue;
-
-      // Found a line terminator — extract content and determine EOL type.
-      const slice = buf.subarray(lineStart, i);
-
+    while (true) {
+      let lineBytes: Buffer;
       let eol: Buffer;
-      if (byte === 0x0d) {
-        if (i + 1 < buf.length) {
-          if (buf[i + 1] === 0x0a) {
-            eol = CRLF_BUF;
-            i++;
+
+      if (prevChunkEndedWithCR) {
+        // The previous chunk ended with \r; this chunk's first byte decides \r\n vs bare \r.
+        prevChunkEndedWithCR = false;
+        eol = buf[0] === 0x0a ? CRLF_BUF : CR_BUF;
+        if (eol === CRLF_BUF) lineStart = 1;
+        lineBytes = flushPartials();
+      } else {
+        let i = findTerminator(buf, lineStart, detectBinary);
+        if (i === -1) break;
+
+        // Found a line terminator — extract content and determine EOL type.
+        const slice = buf.subarray(lineStart, i);
+
+        if (buf[i] === 0x0d) {
+          if (i + 1 < buf.length) {
+            if (buf[i + 1] === 0x0a) {
+              eol = CRLF_BUF;
+              i++;
+            } else {
+              eol = CR_BUF;
+            }
           } else {
-            eol = CR_BUF;
+            // \r at chunk boundary — defer until next chunk to check for \r\n.
+            partials.push(Buffer.from(slice));
+            partialsLen += slice.length;
+            prevChunkEndedWithCR = true;
+            lineStart = i + 1;
+            break;
           }
         } else {
-          // \r at chunk boundary — defer until next chunk to check for \r\n.
-          partials.push(Buffer.from(slice));
-          partialsLen += slice.length;
-          prevChunkEndedWithCR = true;
-          lineStart = i + 1;
-          continue;
+          eol = LF_BUF;
         }
-      } else {
-        eol = LF_BUF;
+
+        lineBytes = flushPartials(slice);
+        lineStart = i + 1;
       }
 
-      yield { lineBytes: flushPartials(slice), eolBytes: eol, lineNumber: ++lineNumber };
-      lineStart = i + 1;
+      // Keep this the loop's only yield: a second yield site made JSC run
+      // the generator 2-3x slower.
+      yield { lineBytes, eolBytes: eol, lineNumber: ++lineNumber };
     }
 
     // Remaining bytes from this chunk become partial for the next chunk.
