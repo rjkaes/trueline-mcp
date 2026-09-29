@@ -1,12 +1,7 @@
 [changelog]
-header = "# Changelog\n\nAll notable changes to this project are documented in this file.\n"
 body = """
-{%- macro remote_url() -%}
-  https://github.com/rjkaes/trueline-mcp
-{%- endmacro -%}
-
 {% if version -%}
-  ## [{{ version | trim_start_matches(pat="v") }}]({{ self::remote_url() }}/releases/tag/{{ version }}) — {{ timestamp | date(format="%Y-%m-%d") }}
+  ## [{{ version | trim_start_matches(pat="v") }}](https://github.com/rjkaes/trueline-mcp/releases/tag/{{ version }}) — {{ timestamp | date(format="%Y-%m-%d") }}
 {% else -%}
   ## Unreleased
 {% endif -%}
@@ -27,12 +22,10 @@ conventional_commits = true
 filter_unconventional = true
 commit_parsers = [
   { message = "^feat", group = "Features" },
-  { message = "^feature", group = "Features" },
   { message = "^fix", group = "Bug Fixes" },
   { message = "^bugfix", group = "Bug Fixes" },
   { message = "^hotfix", group = "Bug Fixes" },
   { message = "^doc", group = "Documentation" },
-  { message = "^docs", group = "Documentation" },
   { message = "^perf", group = "Performance" },
   { message = "^refactor", group = "Refactoring" },
   { message = "^style", group = "Style" },
