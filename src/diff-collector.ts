@@ -43,7 +43,8 @@ function realign(entries: DiffEntry[]): DiffEntry[] {
       (entries[i].type === "del" ? oldLines : newLines).push(entries[i].text);
       i++;
     }
-    out.push(...alignBlock(oldLines, newLines));
+    // push(...spread) passes every element as an argument and overflows the stack on huge blocks.
+    for (const entry of alignBlock(oldLines, newLines)) out.push(entry);
   }
   return out;
 }
@@ -216,7 +217,7 @@ export class DiffCollector {
       const oldRange = oldCount === 1 ? `${oldLine}` : `${oldLine},${oldCount}`;
       const newRange = newCount === 1 ? `${newLine}` : `${newLine},${newCount}`;
       parts.push(`@@ -${oldRange} +${newRange} @@`);
-      parts.push(...lines);
+      for (const line of lines) parts.push(line);
     }
 
     return `${parts.join("\n")}\n`;
