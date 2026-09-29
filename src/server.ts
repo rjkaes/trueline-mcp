@@ -112,6 +112,20 @@ function safeTool(
   };
 }
 
+// Single-file tools: unwrap coerceParams' file_paths array back to file_path.
+function coerceSingleFileParams(rawParams: Record<string, unknown>): Record<string, unknown> {
+  const coerced = coerceParams(rawParams) as Record<string, unknown>;
+  if (!coerced.file_path && Array.isArray(coerced.file_paths)) {
+    const paths = coerced.file_paths as string[];
+    if (paths.length > 1) {
+      throw new Error(`This tool accepts a single file path; received ${paths.length}. Pass one path as file_path.`);
+    }
+    coerced.file_path = paths[0];
+    delete coerced.file_paths;
+  }
+  return coerced;
+}
+
 // =============================================================================
 // Protocol constants
 // =============================================================================
@@ -410,17 +424,7 @@ registerTool(
     "Set context_lines to get hashLine context around edit sites for chaining edits without re-searching.",
   editJsonSchema,
   safeTool(async (rawParams) => {
-    const coerced = coerceParams(rawParams) as Record<string, unknown>;
-    // Single-file tool: unwrap coerceParams' file_paths array back to file_path.
-    if (!coerced.file_path && Array.isArray(coerced.file_paths)) {
-      const paths = coerced.file_paths as string[];
-      if (paths.length > 1) {
-        throw new Error(`This tool accepts a single file path; received ${paths.length}. Pass one path as file_path.`);
-      }
-      coerced.file_path = paths[0];
-      delete coerced.file_paths;
-    }
-    const params = editSchema.parse(coerced);
+    const params = editSchema.parse(coerceSingleFileParams(rawParams));
     return handleEdit({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
 );
@@ -480,7 +484,7 @@ registerTool(
     "Cheaper than re-reading — use before editing when the file may have changed.",
   verifyJsonSchema,
   safeTool(async (rawParams) => {
-    const params = verifySchema.parse(coerceParams(rawParams));
+    const params = verifySchema.parse(coerceSingleFileParams(rawParams));
     return handleVerify({ ...params, projectDir, allowedDirs, requireAbsolutePath: true });
   }),
   { readOnlyHint: true },
