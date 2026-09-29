@@ -26,11 +26,14 @@ export function fnv1aHash(line: string): number {
  * making hashes encoding-independent.
  */
 export function fnv1aHashBytes(buf: Buffer): number {
-  let hash = FNV_OFFSET_BASIS;
+  // Stay in int32 inside the loop and convert to unsigned once: a uint32
+  // above 2^31 is a heap number in V8, and per-byte `>>> 0` made Node
+  // hash ~7x slower. XOR and Math.imul give the same low 32 bits either way.
+  let hash = FNV_OFFSET_BASIS | 0;
   for (let i = 0; i < buf.length; i++) {
-    hash = Math.imul(hash ^ buf[i], FNV_PRIME) >>> 0;
+    hash = Math.imul(hash ^ buf[i], FNV_PRIME);
   }
-  return hash;
+  return hash >>> 0;
 }
 
 /**
@@ -38,14 +41,14 @@ export function fnv1aHashBytes(buf: Buffer): number {
  *
  * Feeds all 4 bytes of `h` (little-endian) into the FNV-1a accumulator.
  * This is the core building block for streaming checksum computation
- * in `handleRead`.
+ * in `handleRead`. Int32 until the end, as in `fnv1aHashBytes`.
  */
 export function foldHash(accumulator: number, h: number): number {
-  accumulator = Math.imul(accumulator ^ (h & 0xff), FNV_PRIME) >>> 0;
-  accumulator = Math.imul(accumulator ^ ((h >>> 8) & 0xff), FNV_PRIME) >>> 0;
-  accumulator = Math.imul(accumulator ^ ((h >>> 16) & 0xff), FNV_PRIME) >>> 0;
-  accumulator = Math.imul(accumulator ^ ((h >>> 24) & 0xff), FNV_PRIME) >>> 0;
-  return accumulator;
+  accumulator = Math.imul(accumulator ^ (h & 0xff), FNV_PRIME);
+  accumulator = Math.imul(accumulator ^ ((h >>> 8) & 0xff), FNV_PRIME);
+  accumulator = Math.imul(accumulator ^ ((h >>> 16) & 0xff), FNV_PRIME);
+  accumulator = Math.imul(accumulator ^ ((h >>> 24) & 0xff), FNV_PRIME);
+  return accumulator >>> 0;
 }
 
 /** 26-char base for checksum encoding. */
