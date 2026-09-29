@@ -63,8 +63,12 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
   const fd = await openNoFollow(filePath);
   const readBuf = Buffer.allocUnsafe(READ_BUF_SIZE);
 
-  // Read the first chunk to detect BOM
-  const { bytesRead: firstBytesRead } = await fd.read(readBuf, 0, READ_BUF_SIZE);
+  // Read the first chunk to detect BOM. No generator owns the fd yet, so a
+  // failed read must close it here.
+  const { bytesRead: firstBytesRead } = await fd.read(readBuf, 0, READ_BUF_SIZE).catch(async (err: unknown) => {
+    await fd.close();
+    throw err;
+  });
 
   const firstChunk = Buffer.from(readBuf.subarray(0, firstBytesRead));
   const bomInfo: BOMInfo = BOMS.find(({ bom }) => firstChunk.subarray(0, bom.length).equals(bom)) ?? {

@@ -269,6 +269,14 @@ describe.skipIf(process.platform === "win32")("transcodedLines — fd lifetime",
     for await (const _line of lines) break;
     expect(openFdCount()).toBe(before);
   });
+
+  // open(O_RDONLY) accepts a directory; the BOM-sniffing read then fails with EISDIR.
+  test("closes the fd when the BOM-sniffing read fails", async () => {
+    const dir = setup();
+    const before = openFdCount();
+    await expect(transcodedLines(dir)).rejects.toMatchObject({ code: "EISDIR" });
+    expect(openFdCount()).toBe(before);
+  });
 });
 
 // ==============================================================================
