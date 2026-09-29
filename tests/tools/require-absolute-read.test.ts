@@ -190,7 +190,7 @@ describe("trueline_outline requireAbsolutePath guard", () => {
 describe("trueline_search requireAbsolutePath guard", () => {
   test("MCP mode rejects a relative file_path", async () => {
     const result = await handleSearch({
-      file_path: "target.ts",
+      file_paths: ["target.ts"],
       pattern: "line",
       projectDir: testDir,
       requireAbsolutePath: true,
@@ -201,7 +201,7 @@ describe("trueline_search requireAbsolutePath guard", () => {
 
   test("MCP mode accepts an absolute file_path", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "line",
       projectDir: testDir,
       requireAbsolutePath: true,
@@ -212,7 +212,7 @@ describe("trueline_search requireAbsolutePath guard", () => {
 
   test("CLI mode (flag omitted) still accepts a relative file_path", async () => {
     const result = await handleSearch({
-      file_path: "target.ts",
+      file_paths: ["target.ts"],
       pattern: "line",
       projectDir: testDir,
     });

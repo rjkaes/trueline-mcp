@@ -11,6 +11,7 @@ import {
   expandGlobs,
   filterAbsolutePaths,
   isAbsolutePathArg,
+  isBinaryError,
   relativePathError,
   type ToolContext,
   validatePath,
@@ -21,7 +22,6 @@ import { searchMultiline } from "./search-multiline.ts";
 import { failedSearchResult, type FileSearchResult, type LineMatcher } from "./search-types.ts";
 
 interface SearchParams extends ToolContext {
-  file_path?: string;
   file_paths?: string[];
   pattern: string;
   context_lines?: number;
@@ -42,8 +42,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     return errorResult(`context_lines must be between 0 and ${MAX_CONTEXT_LINES}`);
   }
 
-  // Normalize file_path / file_paths
-  const rawPaths = normalizeFilePaths(params);
+  const rawPaths = params.file_paths ?? [];
 
   if (requireAbsolutePath && rawPaths.length === 1 && !isAbsolutePathArg(rawPaths[0])) {
     return relativePathError(rawPaths[0]);
@@ -76,8 +75,12 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     return undefined;
   }
 
+  let searchFile: (resolvedPath: string, maxMatches: number) => Promise<FileSearchResult>;
+  // Multiline windows count once each; line-mode windows count every marked line.
+  let countCaptured: (result: FileSearchResult) => number;
+
   if (params.multiline) {
-    // Multiline mode: build regex with dotAll flag, delegate to multiline engine
+    // Multiline mode: build regex with global + dotAll flags, delegate to multiline engine
     const maxMatchLines = params.max_match_lines ?? 50;
 
     if (pattern === "") {
@@ -86,27 +89,14 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 
     let regex: RegExp;
     try {
-      regex = new RegExp(pattern, `s${params.case_insensitive ? "i" : ""}`);
+      regex = new RegExp(pattern, `gs${params.case_insensitive ? "i" : ""}`);
     } catch {
       return errorResult(`Invalid regex pattern: "${pattern}"`);
     }
 
-    for (const fp of filePaths) {
-      const resolvedPath = await validatePathForSearch(fp);
-      if (resolvedPath === undefined) continue;
-
-      const fileResult = await searchMultiline({
-        resolvedPath,
-        regex,
-        contextLines,
-        maxMatches: matchBudget,
-        maxMatchLines,
-      });
-      fileResult.filePath = fp;
-      fileResult.resolvedPath = resolvedPath;
-      results.push(fileResult);
-      matchBudget = Math.max(0, matchBudget - fileResult.matches.length);
-    }
+    searchFile = (resolvedPath, maxMatches) =>
+      searchMultiline({ resolvedPath, regex, contextLines, maxMatches, maxMatchLines });
+    countCaptured = (result) => result.matches.length;
   } else {
     // Line-by-line mode: reject newline patterns, build line matcher
     if (pattern.includes("\n") || pattern.includes("\r")) {
@@ -120,23 +110,24 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     if (!matcherResult.ok) return matcherResult.error;
     const matchLine = matcherResult.matcher;
 
-    for (const fp of filePaths) {
-      const resolvedPath = await validatePathForSearch(fp);
-      if (resolvedPath === undefined) continue;
+    searchFile = (resolvedPath, maxMatches) => searchLineByLine({ resolvedPath, matchLine, contextLines, maxMatches });
+    countCaptured = (result) => result.matches.reduce((sum, m) => sum + m.lines.filter((l) => l.isMatch).length, 0);
+  }
 
-      const fileResult = await searchLineByLine({
-        resolvedPath,
-        matchLine,
-        contextLines,
-        maxMatches: matchBudget,
-      });
-      fileResult.filePath = fp;
-      fileResult.resolvedPath = resolvedPath;
-      results.push(fileResult);
+  for (const fp of filePaths) {
+    const resolvedPath = await validatePathForSearch(fp);
+    if (resolvedPath === undefined) continue;
 
-      const captured = fileResult.matches.reduce((sum, m) => sum + m.lines.filter((l) => l.isMatch).length, 0);
-      matchBudget = Math.max(0, matchBudget - captured);
+    let fileResult: FileSearchResult;
+    try {
+      fileResult = await searchFile(resolvedPath, matchBudget);
+    } catch (err) {
+      if (!isBinaryError(err)) throw err;
+      fileResult = failedSearchResult(fp, "binary file");
     }
+    fileResult.filePath = fp;
+    results.push(fileResult);
+    matchBudget = Math.max(0, matchBudget - countCaptured(fileResult));
   }
 
   const formatted = formatResults(
@@ -159,12 +150,6 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function normalizeFilePaths(params: SearchParams): string[] {
-  if (params.file_paths && params.file_paths.length > 0) return params.file_paths;
-  if (params.file_path) return [params.file_path];
-  return [];
-}
 
 function buildMatcher(
   pattern: string,
@@ -238,6 +223,8 @@ function formatResults(
       let checksumHash = FNV_OFFSET_BASIS;
       let firstLetters = "";
       let lastLetters = "";
+      const firstLine = match.lines[0].lineNumber;
+      const lastLine = match.lines[match.lines.length - 1].lineNumber;
 
       if (!multiFile && i > 0) parts.push("");
 
@@ -255,7 +242,7 @@ function formatResults(
 
       const ck = checksumToLetters(checksumHash);
       parts.push("");
-      parts.push(`ref: ${firstLetters}${match.firstLine}-${lastLetters}${match.lastLine}/${ck}`);
+      parts.push(`ref: ${firstLetters}${firstLine}-${lastLetters}${lastLine}/${ck}`);
     }
   }
 

@@ -9,14 +9,11 @@ export interface DecodedLine {
 // A contiguous block of matches + context, ready for formatting.
 export interface SearchMatch {
   lines: DecodedLine[];
-  firstLine: number;
-  lastLine: number;
 }
 
 // Result of searching a single file.
 export interface FileSearchResult {
   filePath: string;
-  resolvedPath: string;
   matches: SearchMatch[];
   totalMatches: number;
   capped: boolean;
@@ -25,7 +22,7 @@ export interface FileSearchResult {
 
 // Result for a file that couldn't be scanned (binary, or rejected by path validation).
 export function failedSearchResult(path: string, error: string): FileSearchResult {
-  return { filePath: path, resolvedPath: path, matches: [], totalMatches: 0, capped: false, error };
+  return { filePath: path, matches: [], totalMatches: 0, capped: false, error };
 }
 
 // A function that tests whether a line matches the search pattern.

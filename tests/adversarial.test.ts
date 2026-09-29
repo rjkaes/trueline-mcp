@@ -327,7 +327,7 @@ describe("Adversarial Tests", () => {
     const { path } = setupFile("multiline.txt", "line 1\nline 2\n");
     const result = await import("../src/tools/search.ts").then((m) =>
       m.handleSearch({
-        file_path: path,
+        file_paths: [path],
         pattern: "line 1\nline 2",
         projectDir: testDir,
       }),
@@ -341,7 +341,7 @@ describe("Adversarial Tests", () => {
     const { path } = setupFile("regex.txt", "abc\n");
     const result = await import("../src/tools/search.ts").then((m) =>
       m.handleSearch({
-        file_path: path,
+        file_paths: [path],
         pattern: "[",
         regex: true,
         projectDir: testDir,
@@ -368,7 +368,7 @@ describe("Adversarial Tests", () => {
     const { path } = setupFile("matches.txt", "a\na\na\na\na\n");
     const result = await import("../src/tools/search.ts").then((m) =>
       m.handleSearch({
-        file_path: path,
+        file_paths: [path],
         pattern: "a",
         max_matches: 2,
         projectDir: testDir,
@@ -459,7 +459,7 @@ describe("Adversarial Tests", () => {
     const { path } = setupFile("many-matches.txt", "match\n".repeat(2000));
     const result = await import("../src/tools/search.ts").then((m) =>
       m.handleSearch({
-        file_path: path,
+        file_paths: [path],
         pattern: "match",
         max_matches: 5000, // exceeds available matches
         projectDir: testDir,
@@ -478,7 +478,7 @@ describe("Adversarial Tests", () => {
     const { path } = setupFile("context-limit.txt", "1\n2\n3\nmatch\n5\n6\n7\n");
     const result = await import("../src/tools/search.ts").then((m) =>
       m.handleSearch({
-        file_path: path,
+        file_paths: [path],
         pattern: "match",
         context_lines: 100, // exceeds file length
         projectDir: testDir,
@@ -525,7 +525,7 @@ describe("Adversarial Tests", () => {
     const { path } = setupFile("search-long.txt", `${longLine}\nmatch\n`);
     const result = await import("../src/tools/search.ts").then((m) =>
       m.handleSearch({
-        file_path: path,
+        file_paths: [path],
         pattern: "match",
         context_lines: 1,
         projectDir: testDir,
@@ -596,7 +596,7 @@ describe("Adversarial Tests", () => {
     const { path } = setupFile("empty-search.txt", "line1\nline2\n");
     const result = await import("../src/tools/search.ts").then((m) =>
       m.handleSearch({
-        file_path: path,
+        file_paths: [path],
         pattern: "",
         projectDir: testDir,
       }),
@@ -612,7 +612,7 @@ describe("Adversarial Tests", () => {
     const { path } = setupFile("regex-chars.txt", "a.b\naxb\n");
     const result = await import("../src/tools/search.ts").then((m) =>
       m.handleSearch({
-        file_path: path,
+        file_paths: [path],
         pattern: "a.b",
         regex: false,
         projectDir: testDir,
@@ -658,7 +658,7 @@ describe("Adversarial Tests", () => {
     const { path } = setupFile("tab.txt", "a\tb\n");
     const result = await import("../src/tools/search.ts").then((m) =>
       m.handleSearch({
-        file_path: path,
+        file_paths: [path],
         pattern: "\t",
         projectDir: testDir,
       }),

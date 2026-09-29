@@ -1,11 +1,10 @@
 import { transcodedLines } from "../encoding.ts";
 import { fnv1aHashBytes } from "../hash.ts";
-import { isBinaryError } from "./shared.ts";
-import { type DecodedLine, failedSearchResult, type FileSearchResult, type SearchMatch } from "./search-types.ts";
+import type { DecodedLine, FileSearchResult, SearchMatch } from "./search-types.ts";
 
 export interface MultilineEngineParams {
   resolvedPath: string;
-  regex: RegExp;
+  regex: RegExp; // must carry the g flag (matchAll)
   contextLines: number;
   maxMatches: number;
   maxMatchLines: number;
@@ -25,20 +24,9 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
   // individual matches can be, not the file size.
   const lines: BufferedLine[] = [];
 
-  try {
-    const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
-    for await (const { lineBytes, lineNumber } of transcoded.lines) {
-      lines.push({ lineNumber, text: lineBytes.toString("utf-8"), bytes: lineBytes });
-    }
-  } catch (err: unknown) {
-    if (isBinaryError(err)) {
-      return failedSearchResult(resolvedPath, "binary file");
-    }
-    throw err;
-  }
-
-  if (lines.length === 0) {
-    return { filePath: resolvedPath, resolvedPath, matches: [], totalMatches: 0, capped: false };
+  const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
+  for await (const { lineBytes, lineNumber } of transcoded.lines) {
+    lines.push({ lineNumber, text: lineBytes.toString("utf-8"), bytes: lineBytes });
   }
 
   // Join lines and build a character-offset-to-line-index map
@@ -52,41 +40,22 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
     offset += text.length + 1; // +1 for the \n
   }
 
-  // Find all matches via global regex
-  const allMatchRanges: { startIdx: number; endIdx: number }[] = [];
-  const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
-  const globalRegex = new RegExp(regex.source, flags);
+  let totalMatches = 0;
+  const matches: SearchMatch[] = [];
 
-  for (;;) {
-    const m = globalRegex.exec(joined);
-    if (m === null) break;
-
-    // Guard against zero-length matches causing infinite loops
-    if (m[0].length === 0) {
-      globalRegex.lastIndex++;
-      continue;
-    }
-
-    const matchStart = m.index;
-    const matchEnd = matchStart + m[0].length;
+  for (const m of joined.matchAll(regex)) {
+    // A zero-length match covers no line
+    if (m[0].length === 0) continue;
 
     // Map character offsets to line indices
-    const startIdx = charOffsetToLineIndex(lineOffsets, matchStart);
-    const endIdx = charOffsetToLineIndex(lineOffsets, matchEnd - 1);
+    const startIdx = charOffsetToLineIndex(lineOffsets, m.index);
+    const endIdx = charOffsetToLineIndex(lineOffsets, m.index + m[0].length - 1);
 
     // Skip matches that span more than maxMatchLines
     if (endIdx - startIdx + 1 > maxMatchLines) continue;
 
-    allMatchRanges.push({ startIdx, endIdx });
-  }
-
-  const totalMatches = allMatchRanges.length;
-
-  // Build SearchMatch windows with context, up to maxMatches
-  const matches: SearchMatch[] = [];
-
-  for (const { startIdx, endIdx } of allMatchRanges) {
-    if (matches.length >= maxMatches) break;
+    totalMatches++;
+    if (matches.length >= maxMatches) continue;
 
     const ctxStart = Math.max(0, startIdx - contextLines);
     const ctxEnd = Math.min(lines.length - 1, endIdx + contextLines);
@@ -103,14 +72,10 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
       });
     }
 
-    matches.push({
-      lines: windowLines,
-      firstLine: lines[ctxStart].lineNumber,
-      lastLine: lines[ctxEnd].lineNumber,
-    });
+    matches.push({ lines: windowLines });
   }
 
-  return { filePath: resolvedPath, resolvedPath, matches, totalMatches, capped: false };
+  return { filePath: resolvedPath, matches, totalMatches, capped: false };
 }
 
 // Binary search for the line index containing a character offset.

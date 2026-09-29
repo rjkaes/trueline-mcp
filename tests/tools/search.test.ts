@@ -43,7 +43,7 @@ beforeEach(() => {});
 describe("trueline_search", () => {
   test("finds matching lines with context", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "console.log",
       projectDir: testDir,
     });
@@ -60,7 +60,7 @@ describe("trueline_search", () => {
 
   test("respects context_lines parameter", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "console.log",
       context_lines: 0,
       projectDir: testDir,
@@ -73,7 +73,7 @@ describe("trueline_search", () => {
 
   test("merges overlapping context windows", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "console.log",
       context_lines: 5,
       projectDir: testDir,
@@ -86,7 +86,7 @@ describe("trueline_search", () => {
 
   test("respects max_matches", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "const",
       max_matches: 1,
       projectDir: testDir,
@@ -99,7 +99,7 @@ describe("trueline_search", () => {
 
   test("returns no-matches message for zero hits", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "nonexistent_xyz",
       projectDir: testDir,
     });
@@ -109,7 +109,7 @@ describe("trueline_search", () => {
 
   test("regex mode matches regex patterns", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "function \\w+",
       regex: true,
       projectDir: testDir,
@@ -121,7 +121,7 @@ describe("trueline_search", () => {
 
   test("regex mode rejects invalid regex", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "[invalid",
       regex: true,
       projectDir: testDir,
@@ -132,7 +132,7 @@ describe("trueline_search", () => {
 
   test("literal mode does not reject regex metacharacters", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "[invalid",
       projectDir: testDir,
     });
@@ -143,7 +143,7 @@ describe("trueline_search", () => {
 
   test("case_insensitive matches case-insensitively", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "HELLO",
       case_insensitive: true,
       projectDir: testDir,
@@ -155,7 +155,7 @@ describe("trueline_search", () => {
 
   test("case_insensitive false (default) does not match wrong case", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "HELLO",
       projectDir: testDir,
     });
@@ -166,7 +166,7 @@ describe("trueline_search", () => {
   test("literal mode matches metacharacters without escaping", async () => {
     // The test file has 'console.log("hello")' — the dot and parens are regex metacharacters
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "console.log(",
       projectDir: testDir,
     });
@@ -177,7 +177,7 @@ describe("trueline_search", () => {
 
   test("literal mode treats bare parens as literal text", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "hello(",
       projectDir: testDir,
     });
@@ -186,7 +186,7 @@ describe("trueline_search", () => {
   });
   test("validates file path", async () => {
     const result = await handleSearch({
-      file_path: "/etc/passwd",
+      file_paths: ["/etc/passwd"],
       pattern: "root",
       projectDir: testDir,
     });
@@ -194,7 +194,7 @@ describe("trueline_search", () => {
   });
   test("rejects pattern with embedded newlines", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "hello\nworld",
       projectDir: testDir,
     });
@@ -203,7 +203,7 @@ describe("trueline_search", () => {
   });
   test("rejects regex pattern with embedded newlines", async () => {
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "hello\nworld",
       regex: true,
       projectDir: testDir,
@@ -288,17 +288,6 @@ describe("multi-file search", () => {
     expect(text).toMatch(/ref: [a-z]{2}\d+-[a-z]{2}\d+\/[a-z]{6}/);
   });
 
-  test("file_path string alias still works", async () => {
-    const result = await handleSearch({
-      file_path: testFile,
-      pattern: "console.log",
-      projectDir: testDir,
-    });
-    expect(result.isError).toBeUndefined();
-    const text = getText(result);
-    expect(text).toContain("console.log");
-  });
-
   test("empty file_paths returns error", async () => {
     const result = await handleSearch({
       file_paths: [],
@@ -317,6 +306,25 @@ describe("multi-file search", () => {
     const text = getText(result);
     expect(text).toContain("No matches");
     expect(text).toContain("2 files");
+  });
+
+  test.each([false, true])("binary file is reported as an error (multiline=%p)", async (multiline) => {
+    const binaryFile = join(testDir, `blob-${multiline}.bin`);
+    writeFileSync(binaryFile, Buffer.from([0x63, 0x6f, 0x00, 0x00, 0x01, 0x02, 0x0a]));
+
+    const single = await handleSearch({ file_paths: [binaryFile], pattern: "co", multiline, projectDir: testDir });
+    expect(single.isError).toBe(true);
+    expect(getText(single)).toContain("binary file");
+
+    // In a batch the binary file becomes an error section; the sibling still matches.
+    const batch = await handleSearch({
+      file_paths: [binaryFile, testFile],
+      pattern: "console.log",
+      multiline,
+      projectDir: testDir,
+    });
+    expect(getText(batch)).toContain("error: binary file");
+    expect(getText(batch)).toContain("console.log");
   });
 });
 
@@ -343,7 +351,7 @@ describe("context_lines=0 non-adjacent matches", () => {
     writeFileSync(testFile, `${lines.join("\n")}\n`);
 
     const result = await handleSearch({
-      file_path: testFile,
+      file_paths: [testFile],
       pattern: "MATCH_",
       context_lines: 0,
       projectDir: testDir,

@@ -1,13 +1,6 @@
 import { transcodedLines } from "../encoding.ts";
 import { fnv1aHashBytes } from "../hash.ts";
-import { isBinaryError } from "./shared.ts";
-import {
-  type DecodedLine,
-  type EngineParams,
-  failedSearchResult,
-  type FileSearchResult,
-  type SearchMatch,
-} from "./search-types.ts";
+import type { DecodedLine, EngineParams, FileSearchResult, SearchMatch } from "./search-types.ts";
 
 const POST_LIMIT_SCAN_CAP = 1000;
 
@@ -29,107 +22,91 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
   let postLimitScanned = 0;
   let postLimitCapped = false;
 
-  try {
-    const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
-    for await (const { lineBytes, lineNumber } of transcoded.lines) {
-      if (done) {
-        postLimitScanned++;
-        if (postLimitScanned > POST_LIMIT_SCAN_CAP) {
-          postLimitCapped = true;
-          break;
-        }
-        const text = lineBytes.toString("utf-8");
-        if (matchLine(text)) totalMatches++;
-        continue;
+  const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
+  for await (const { lineBytes, lineNumber } of transcoded.lines) {
+    if (done) {
+      postLimitScanned++;
+      if (postLimitScanned > POST_LIMIT_SCAN_CAP) {
+        postLimitCapped = true;
+        break;
       }
-
-      const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
       const text = lineBytes.toString("utf-8");
-      const isMatch = matchLine(text);
-      const decoded: DecodedLine = { lineNumber, text, hash: h, isMatch };
+      if (matchLine(text)) totalMatches++;
+      continue;
+    }
 
-      if (isMatch) totalMatches++;
+    const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
+    const text = lineBytes.toString("utf-8");
+    const isMatch = matchLine(text);
+    const decoded: DecodedLine = { lineNumber, text, hash: h, isMatch };
 
-      if (isMatch && matchesCaptured < maxMatches) {
-        matchesCaptured++;
+    if (isMatch) totalMatches++;
 
-        if (currentLines === null) {
-          currentLines = [];
-          // Drain ring buffer as pre-context
-          if (ringLen > 0) {
-            const count = Math.min(ringLen, ring.length);
-            for (let i = 0; i < count; i++) {
-              currentLines.push(ring[(ringStart + i) % ring.length]);
-            }
-          }
-        }
+    if (isMatch && matchesCaptured < maxMatches) {
+      matchesCaptured++;
 
-        currentLines.push(decoded);
-        postRemaining = contextLines;
-
-        if (matchesCaptured >= maxMatches && postRemaining === 0) {
-          flushWindow(matches, currentLines);
-          currentLines = null;
-          done = true;
-        }
-      } else if (postRemaining > 0 && currentLines !== null) {
-        currentLines.push(decoded);
-        postRemaining--;
-        if (postRemaining === 0 && matchesCaptured >= maxMatches) {
-          flushWindow(matches, currentLines);
-          currentLines = null;
-          done = true;
-        } else if (postRemaining === 0) {
-          flushWindow(matches, currentLines);
-          currentLines = null;
-          ringLen = 0;
-          ringStart = 0;
-        }
-      } else {
-        // context_lines=0: a non-match line arrives while currentLines is open but
-        // postRemaining is already 0.  Flush now so the next match starts a fresh
-        // window -- otherwise non-adjacent matches merge into one sparse window
-        // whose checksum excludes intermediate lines, causing edit verification to fail.
-        if (currentLines !== null) {
-          flushWindow(matches, currentLines);
-          currentLines = null;
-        }
-        if (contextLines > 0) {
-          if (ringLen < ring.length) {
-            ring[(ringStart + ringLen) % ring.length] = decoded;
-            ringLen++;
-          } else {
-            ring[ringStart] = decoded;
-            ringStart = (ringStart + 1) % ring.length;
+      if (currentLines === null) {
+        currentLines = [];
+        // Drain ring buffer as pre-context
+        if (ringLen > 0) {
+          const count = Math.min(ringLen, ring.length);
+          for (let i = 0; i < count; i++) {
+            currentLines.push(ring[(ringStart + i) % ring.length]);
           }
         }
       }
+
+      currentLines.push(decoded);
+      postRemaining = contextLines;
+
+      if (matchesCaptured >= maxMatches && postRemaining === 0) {
+        matches.push({ lines: currentLines });
+        currentLines = null;
+        done = true;
+      }
+    } else if (postRemaining > 0 && currentLines !== null) {
+      currentLines.push(decoded);
+      postRemaining--;
+      if (postRemaining === 0 && matchesCaptured >= maxMatches) {
+        matches.push({ lines: currentLines });
+        currentLines = null;
+        done = true;
+      } else if (postRemaining === 0) {
+        matches.push({ lines: currentLines });
+        currentLines = null;
+        ringLen = 0;
+        ringStart = 0;
+      }
+    } else {
+      // context_lines=0: a non-match line arrives while currentLines is open but
+      // postRemaining is already 0.  Flush now so the next match starts a fresh
+      // window -- otherwise non-adjacent matches merge into one sparse window
+      // whose checksum excludes intermediate lines, causing edit verification to fail.
+      if (currentLines !== null) {
+        matches.push({ lines: currentLines });
+        currentLines = null;
+      }
+      if (contextLines > 0) {
+        if (ringLen < ring.length) {
+          ring[(ringStart + ringLen) % ring.length] = decoded;
+          ringLen++;
+        } else {
+          ring[ringStart] = decoded;
+          ringStart = (ringStart + 1) % ring.length;
+        }
+      }
     }
-  } catch (err: unknown) {
-    if (isBinaryError(err)) {
-      return failedSearchResult(resolvedPath, "binary file");
-    }
-    throw err;
   }
 
   // Flush any in-progress window
   if (currentLines !== null) {
-    flushWindow(matches, currentLines);
+    matches.push({ lines: currentLines });
   }
 
   return {
     filePath: resolvedPath,
-    resolvedPath,
     matches,
     totalMatches,
     capped: postLimitCapped,
   };
-}
-
-function flushWindow(matches: SearchMatch[], lines: DecodedLine[]): void {
-  matches.push({
-    lines: [...lines],
-    firstLine: lines[0].lineNumber,
-    lastLine: lines[lines.length - 1].lineNumber,
-  });
 }

@@ -151,7 +151,6 @@ const outlineSchema = z.object({
 });
 
 const searchSchema = z.object({
-  file_path: z.string().optional(),
   file_paths: z.array(z.string()).optional(),
   pattern: z.string({ required_error: "pattern is required" }),
   context_lines: z.number().int().min(0).optional(),
