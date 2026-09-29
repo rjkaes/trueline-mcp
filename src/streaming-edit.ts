@@ -199,6 +199,17 @@ export async function streamingEdit(
     }
   }
 
+  // Emits insert_after content anchored at lineNumber. The insert's own
+  // startHash is verified only on insert-only lines (below); on a replace
+  // line the replace's boundary hash check stands in for it.
+  async function emitInserts(lineNumber: number): Promise<void> {
+    for (const op of opsByStartLine.get(lineNumber) ?? []) {
+      if (!op.insertAfter) continue;
+      contentChanged = true;
+      await writeContentLines(op.content);
+    }
+  }
+
   // Compare replacement content against original bytes. If identical, write
   // the original buffers (no-op); otherwise write the replacement.
   //
@@ -301,15 +312,7 @@ export async function streamingEdit(
           activeReplaceOrigEols = [];
 
           // Process insert_after ops at this line
-          const opsAtLine = opsByStartLine.get(lineNumber);
-          if (opsAtLine) {
-            for (const iaOp of opsAtLine) {
-              if (iaOp.insertAfter) {
-                contentChanged = true;
-                await writeContentLines(iaOp.content);
-              }
-            }
-          }
+          await emitInserts(lineNumber);
         }
         continue;
       }
@@ -317,17 +320,7 @@ export async function streamingEdit(
       // Check for ops starting at this line
       const opsAtLine = opsByStartLine.get(lineNumber);
       if (opsAtLine) {
-        // Separate replace ops and insert_after ops
-        let replaceOp: StreamEditOp | null = null;
-        const insertOps: StreamEditOp[] = [];
-
-        for (const op of opsAtLine) {
-          if (op.insertAfter) {
-            insertOps.push(op);
-          } else {
-            replaceOp = op;
-          }
-        }
+        const replaceOp = opsAtLine.find((op) => !op.insertAfter);
 
         if (replaceOp) {
           // Verify start boundary hash
@@ -339,26 +332,21 @@ export async function streamingEdit(
             // Single-line replace: handle immediately
             await writeReplaceOrOriginal(replaceOp, [lineBytes], [eolBytes]);
 
-            // Process insert_after ops at this line
-            for (const iaOp of insertOps) {
-              contentChanged = true;
-              await writeContentLines(iaOp.content);
-            }
+            await emitInserts(lineNumber);
           } else {
             // Multi-line replace: enter active replace mode
             activeReplace = replaceOp;
             activeReplaceOrigBytes = [lineBytes];
             activeReplaceOrigEols = [eolBytes];
 
-            // Verify start boundary hash for the end line too (done when we reach it)
-            // insert_after ops at endLine will be handled when we reach it
-            // But insert_after ops at startLine that aren't the end? Not meaningful
-            // for multi-line replace starting at startLine.
+            // The end hash and any insert_after at endLine are handled on reaching
+            // endLine. validateEdits rejects inserts anywhere in a replace except
+            // its endLine, so none share this start line.
           }
         } else {
           // No replace op — just write the line and process insert_after
           // Verify boundary hash for insert_after ops
-          for (const iaOp of insertOps) {
+          for (const iaOp of opsAtLine) {
             if (iaOp.startHash !== "" && letters !== iaOp.startHash) {
               return await fail(hashMismatchMsg(lineNumber, iaOp.startHash, letters));
             }
@@ -367,10 +355,7 @@ export async function streamingEdit(
           await enqueueLine(lineBytes, lineH, eolBytes.length > 0 ? eolBytes : undefined);
           if (collector) collector.context(lineBytes.toString(encoding));
 
-          for (const iaOp of insertOps) {
-            contentChanged = true;
-            await writeContentLines(iaOp.content);
-          }
+          await emitInserts(lineNumber);
         }
       } else {
         // No ops at this line — write raw bytes unchanged
