@@ -1,25 +1,5 @@
 # Default: auto-detect text files and enforce LF on all platforms
 * text=auto eol=lf
 
-# Source
-*.ts text eol=lf
-*.js text eol=lf
-*.cjs text eol=lf
-
-# Config / data
-*.json text eol=lf
-*.yml text eol=lf
-*.toml text eol=lf
-
-# Documentation
-*.md text eol=lf
-LICENSE text eol=lf
-
-# Shell scripts must stay LF (bash won't run CRLF)
-*.sh text eol=lf
-
-# Lock files (bun.lock is text-based)
-*.lock text eol=lf
-
 # Ignore generated / vendored paths in GitHub stats
 bun.lock linguist-generated
