@@ -233,6 +233,20 @@ export interface ReadRange {
   end: number;
 }
 
+/** Merges overlapping or adjacent ranges. `ranges` must already be sorted by start. Mutates and returns its input. */
+export function mergeSortedRanges(ranges: ReadRange[]): ReadRange[] {
+  for (let i = 1; i < ranges.length; i++) {
+    const prev = ranges[i - 1];
+    const curr = ranges[i];
+    if (prev.end === Infinity || curr.start <= prev.end + 1) {
+      prev.end = Math.max(prev.end, curr.end);
+      ranges.splice(i, 1);
+      i--;
+    }
+  }
+  return ranges;
+}
+
 /**
  * Parse and validate the `ranges` input for trueline_read.
  *
@@ -282,19 +296,7 @@ export function parseRanges(ranges: string[] | undefined): ReadRange[] {
   });
 
   parsed.sort((a, b) => a.start - b.start);
-
-  // Merge overlapping or adjacent ranges
-  for (let i = 1; i < parsed.length; i++) {
-    const prev = parsed[i - 1];
-    const curr = parsed[i];
-    if (prev.end === Infinity || curr.start <= prev.end + 1) {
-      prev.end = Math.max(prev.end, curr.end);
-      parsed.splice(i, 1);
-      i--;
-    }
-  }
-
-  return parsed;
+  return mergeSortedRanges(parsed);
 }
 
 // ---------------------------------------------------------------------------

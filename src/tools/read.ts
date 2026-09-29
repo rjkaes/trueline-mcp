@@ -12,7 +12,7 @@
 import { LF_BUF } from "../line-splitter.ts";
 import { transcodedLines } from "../encoding.ts";
 import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, hashToLetters } from "../hash.ts";
-import { parseFilePathWithRanges, parseRanges, type ReadRange } from "../parse.ts";
+import { mergeSortedRanges, parseFilePathWithRanges, parseRanges, type ReadRange } from "../parse.ts";
 import {
   binaryFileError,
   displayPath,
@@ -33,16 +33,7 @@ function expandRanges(ranges: ReadRange[]): ReadRange[] {
     start: r.start > 1 ? r.start - 1 : r.start,
     end: r.end !== Infinity ? r.end + 1 : r.end,
   }));
-  for (let i = 1; i < expanded.length; i++) {
-    const prev = expanded[i - 1];
-    const curr = expanded[i];
-    if (prev.end === Infinity || curr.start <= prev.end + 1) {
-      prev.end = Math.max(prev.end, curr.end);
-      expanded.splice(i, 1);
-      i--;
-    }
-  }
-  return expanded;
+  return mergeSortedRanges(expanded);
 }
 interface ReadParams {
   file_path: string;
