@@ -209,7 +209,8 @@ function editSummary(ops: StreamEditOp[]): string {
       const rangeStr = op.startLine === op.endLine ? `${op.startLine}` : `${op.startLine}-${op.endLine}`;
 
       if (lines === 0) {
-        const preview = op.deletedContent ? `: ${truncatePreview(op.deletedContent)}` : "";
+        const joined = op.deletedContent?.join("\\n");
+        const preview = joined === undefined ? "" : `: "${joined.length > 80 ? `${joined.slice(0, 80)}…` : joined}"`;
         return `-${rangeStr} (${span})${preview}`;
       }
 
@@ -225,13 +226,6 @@ function editSummary(ops: StreamEditOp[]): string {
 /** Format a hash.line reference for a content string at a given line number. */
 function hl(content: string, lineNumber: number): string {
   return `${hashToLetters(fnv1aHash(content))}${lineNumber}`;
-}
-
-/** Truncated preview of deleted content for the edit summary. */
-function truncatePreview(lines: string[]): string {
-  const MAX = 80;
-  const joined = lines.join("\\n");
-  return joined.length > MAX ? `"${joined.slice(0, MAX)}…"` : `"${joined}"`;
 }
 
 // ==============================================================================
