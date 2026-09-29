@@ -27,12 +27,9 @@ async function writeCache(entry: CachedCheck): Promise<void> {
 
 async function fetchLatestVersion(): Promise<string | null> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REGISTRY_TIMEOUT_MS);
     const res = await fetch(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`, {
-      signal: controller.signal,
+      signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
     });
-    clearTimeout(timeout);
     if (!res.ok) return null;
     const data = (await res.json()) as { version?: string };
     return data.version ?? null;
@@ -56,17 +53,12 @@ export function scheduleUpdateCheck(
   void (async () => {
     const cached = await readCache();
 
-    if (cached && Date.now() - cached.timestamp < CHECK_INTERVAL_MS) {
-      if (compareVersions(cached.latestVersion, currentVersion) > 0) {
-        onUpdate({ current: currentVersion, latest: cached.latestVersion });
-      }
-      return;
+    let latest = cached && Date.now() - cached.timestamp < CHECK_INTERVAL_MS ? cached.latestVersion : null;
+    if (!latest) {
+      latest = await fetchLatestVersion();
+      if (!latest) return;
+      await writeCache({ timestamp: Date.now(), latestVersion: latest });
     }
-
-    const latest = await fetchLatestVersion();
-    if (!latest) return;
-
-    await writeCache({ timestamp: Date.now(), latestVersion: latest });
     if (compareVersions(latest, currentVersion) > 0) {
       onUpdate({ current: currentVersion, latest });
     }
