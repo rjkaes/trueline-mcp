@@ -286,4 +286,55 @@ describe("gitignore-aware globs", () => {
     expect(text).not.toContain("dep");
     expect(text).not.toContain("bundle");
   });
+
+  // MCP tools require absolute paths, so this is the form agents actually send.
+  test("absolute recursive glob expands like its relative form", async () => {
+    const relative = getText(await handleReadMulti({ file_paths: ["src/**/*.ts"], projectDir: gitDir }));
+    const absolute = getText(
+      await handleReadMulti({
+        file_paths: [join(gitDir, "src", "**", "*.ts")],
+        projectDir: gitDir,
+        requireAbsolutePath: true,
+      }),
+    );
+    expect(relative).toContain("--- src/main.ts ---");
+    expect(absolute).toBe(relative);
+  });
+
+  test("absolute recursive glob respects .gitignore", async () => {
+    const text = getText(
+      await handleReadMulti({
+        file_paths: [join(gitDir, "**", "*.ts")],
+        projectDir: gitDir,
+        requireAbsolutePath: true,
+      }),
+    );
+    expect(text).toContain("main");
+    expect(text).toContain("util");
+    expect(text).not.toContain("dep");
+    expect(text).not.toContain("bundle");
+  });
+
+  test("absolute non-recursive glob expands", async () => {
+    const text = getText(
+      await handleReadMulti({
+        file_paths: [join(gitDir, "src", "*.ts")],
+        projectDir: gitDir,
+        requireAbsolutePath: true,
+      }),
+    );
+    expect(text).toContain("--- src/main.ts ---");
+    expect(text).toContain("--- src/util.ts ---");
+  });
+
+  test("absolute recursive glob outside projectDir matches nothing", async () => {
+    const text = getText(
+      await handleReadMulti({
+        file_paths: [join(testDir, "**", "*.ts")],
+        projectDir: gitDir,
+        requireAbsolutePath: true,
+      }),
+    );
+    expect(text).toBe("");
+  });
 });

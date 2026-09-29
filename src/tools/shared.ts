@@ -385,8 +385,12 @@ export async function expandGlobs(filePaths: string[], projectDir: string | unde
       // Recursive glob: use git ls-files to respect .gitignore
       const gitFiles = await gitListFiles(baseDir);
       if (gitFiles) {
+        // git paths are relative to baseDir; an absolute pattern needs absolute candidates.
+        // Candidates still come only from baseDir's tracked files, so the glob cannot escape it.
+        const absolutePattern = isAbsolute(entry);
         for (const f of gitFiles) {
-          if (matchesGlob(f, entry)) add(f);
+          const candidate = absolutePattern ? resolve(baseDir, f) : f;
+          if (matchesGlob(candidate, entry)) add(candidate);
         }
       } else {
         // Fallback: Node glob with common exclusions
