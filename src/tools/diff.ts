@@ -1,6 +1,7 @@
 import { readTextNoFollow } from "../line-splitter.ts";
 import { lcsMiddle, trimCommonEnds } from "../diff-collector.ts";
-import { extname, relative, resolve } from "node:path";
+import { realpath } from "node:fs/promises";
+import { extname, isAbsolute, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
 import { gitExec, isAbsolutePathArg, relativePathError, type ToolContext, validatePath } from "./shared.ts";
@@ -26,6 +27,9 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const sections: string[] = [];
   // Every file shares one repo toplevel; spawn rev-parse once, on first use.
   let toplevel: Promise<string> | undefined;
+  // resolvedPath is canonical, so the base must be too: an aliased projectDir
+  // (symlink, /var vs /private/var, Windows 8.3 RUNNER~1) yields ../ headers.
+  let realProject: Promise<string> | undefined;
 
   for (const filePath of filePaths) {
     if (requireAbsolutePath && filePath !== "*" && !isAbsolutePathArg(filePath)) {
@@ -42,7 +46,8 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 
     const { resolvedPath } = validated;
     const ext = extname(resolvedPath);
-    const relPath = filePath.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : filePath;
+    realProject ??= realpath(projectDir ?? process.cwd());
+    const relPath = isAbsolute(filePath) ? relative(await realProject, resolvedPath) : filePath;
 
     // Unsupported file type: extension has no language config. Checked before
     // any I/O so lockfiles, JSON, and images skip the disk read and git spawns.

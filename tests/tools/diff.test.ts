@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
@@ -166,6 +166,28 @@ describe("semantic trueline_changes", () => {
     const text = result.content[0].text;
     expect(text).toContain("## firmware.ts\n\nBinary file");
     expect(text).toContain("tax");
+  });
+
+  test("headers stay relative when projectDir is a symlinked alias", async () => {
+    // Windows reaches the same mismatch via 8.3 names: realpath expands RUNNER~1.
+    const alias = `${testDir}-alias`;
+    symlinkSync(testDir, alias, "junction");
+    try {
+      const source = writeTestFile(testDir, "invoice.ts", "function total() { return 1; }\n");
+      git("add .");
+      git("commit -m init");
+      writeFileSync(source, "function total() { return 1; }\nfunction tax() { return 2; }\n");
+
+      const result = await handleDiff({
+        file_paths: [join(alias, "invoice.ts")],
+        projectDir: alias,
+        allowedDirs: [alias],
+      });
+
+      expect(result.content[0].text).toContain("## invoice.ts (vs HEAD)");
+    } finally {
+      rmSync(alias, { force: true });
+    }
   });
 
   test("star expands to all unstaged changed files", async () => {
