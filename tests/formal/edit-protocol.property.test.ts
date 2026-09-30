@@ -13,7 +13,10 @@ import { parseChecksum } from "../../src/parse.ts";
 // is sufficient. 500 iterations * up to 1.44 s default backoff would exceed
 // the 30 s test budget on Windows runners where Defender briefly holds handles.
 process.env.TRUELINE_RENAME_DELAYS_MS = "0,0,0,0,0";
-const NUM_RUNS = 500;
+// Each run does a handful of temp-file ops, which Windows runners (Defender scans) make
+// 10-40 ms slower; 500 runs put P2 and P4 at the 30 s timeout there. Linux and macOS
+// keep the full count.
+const NUM_RUNS = process.platform === "win32" ? 200 : 500;
 
 // --- File content ---
 
