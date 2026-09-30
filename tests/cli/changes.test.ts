@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { cleanEnv } from "../helpers.ts";
 import { run, scratch, trueline } from "./helpers.ts";
 
 let tmpDir: string;
@@ -42,6 +43,7 @@ describe("changes from a repo subdirectory", () => {
     const git = (...args: string[]) =>
       spawnSync("git", ["-C", repo, "-c", "user.email=t@example.com", "-c", "user.name=t", ...args], {
         encoding: "utf-8",
+        env: cleanEnv,
       });
     git("init", "-q");
     git("add", "-A");
@@ -62,6 +64,7 @@ describe("changes from a repo subdirectory", () => {
     const git = (...args: string[]) =>
       spawnSync("git", ["-C", repo, "-c", "user.email=t@example.com", "-c", "user.name=t", ...args], {
         encoding: "utf-8",
+        env: cleanEnv,
       });
     git("init", "-q");
     git("add", "-A");
