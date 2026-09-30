@@ -319,54 +319,24 @@ function formatDiffSection(
   ref: string,
   whitespaceMode?: LanguageConfig["whitespaceMode"],
 ): string {
-  const hasChanges =
-    diff.added.length +
-      diff.removed.length +
-      diff.renamed.length +
-      diff.signatureChanged.length +
-      diff.logicChanged.length >
-    0;
+  const groups: [string, string[]][] = [
+    ["+:", diff.added.map((s) => `- \`${s.signature}\``)],
+    ["-:", diff.removed.map((s) => `- \`${s.signature}\``)],
+    ["~:", diff.renamed.map((r) => `- \`${r.oldName}\` \u2192 \`${r.newName}\``)],
+    ["sig:", diff.signatureChanged.map((s) => `- \`${s.name}\`: \`${s.oldSig}\` \u2192 \`${s.newSig}\``)],
+    [
+      "body:",
+      diff.logicChanged.map((s) => {
+        const miniDiff = computeMiniDiff(s.oldBody, s.newBody, whitespaceMode);
+        return miniDiff ? `- \`${s.name}\`:\n${miniDiff}` : `- \`${s.name}\``;
+      }),
+    ],
+  ];
+  const nonEmpty = groups.filter(([, items]) => items.length > 0);
 
-  if (!hasChanges) return `## ${relPath}\n\nNo structural changes.`;
+  if (nonEmpty.length === 0) return `## ${relPath}\n\nNo structural changes.`;
 
-  const parts: string[] = [];
-  parts.push(`## ${relPath} (vs ${ref})`);
-
-  if (diff.added.length > 0) {
-    parts.push("\n+:");
-    for (const s of diff.added) parts.push(`- \`${s.signature}\``);
-  }
-
-  if (diff.removed.length > 0) {
-    parts.push("\n-:");
-    for (const s of diff.removed) parts.push(`- \`${s.signature}\``);
-  }
-
-  if (diff.renamed.length > 0) {
-    parts.push("\n~:");
-    for (const r of diff.renamed) parts.push(`- \`${r.oldName}\` \u2192 \`${r.newName}\``);
-  }
-
-  if (diff.signatureChanged.length > 0) {
-    parts.push("\nsig:");
-    for (const s of diff.signatureChanged) {
-      parts.push(`- \`${s.name}\`: \`${s.oldSig}\` \u2192 \`${s.newSig}\``);
-    }
-  }
-
-  if (diff.logicChanged.length > 0) {
-    parts.push("\nbody:");
-    for (const s of diff.logicChanged) {
-      const miniDiff = computeMiniDiff(s.oldBody, s.newBody, whitespaceMode);
-      if (miniDiff) {
-        parts.push(`- \`${s.name}\`:\n${miniDiff}`);
-      } else {
-        parts.push(`- \`${s.name}\``);
-      }
-    }
-  }
-
-  return parts.join("\n");
+  return [`## ${relPath} (vs ${ref})`, ...nonEmpty.flatMap(([header, items]) => [`\n${header}`, ...items])].join("\n");
 }
 
 /** Compute a mini inline diff if the change is small enough. */

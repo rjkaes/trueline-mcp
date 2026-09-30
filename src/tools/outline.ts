@@ -102,11 +102,11 @@ async function outlineOneFile(
 
   // Streaming extractors (no tree-sitter, no full-file load)
   if (MARKDOWN_EXTENSIONS.has(ext)) {
-    return runStreamingExtractor("Markdown", () => extractMarkdownOutline(resolvedPath, depth));
+    return runExtractor("Markdown outline", () => extractMarkdownOutline(resolvedPath, depth));
   }
 
   if (XML_EXTENSIONS.has(ext)) {
-    return runStreamingExtractor("XML", () => extractXmlOutline(resolvedPath, depth));
+    return runExtractor("XML outline", () => extractXmlOutline(resolvedPath, depth));
   }
 
   let source: string;
@@ -125,16 +125,7 @@ async function outlineOneFile(
     return textResult(`No outline support for "${ext}" files \u2014 use trueline_read to read this file directly.`);
   }
 
-  try {
-    const entries = await extractOutline(source, config, depth);
-    if (entries.length === 0) {
-      return textResult(`(no outline entries found in ${totalLines}-line file)`);
-    }
-    const text = formatOutline(entries, totalLines);
-    return textResult(text);
-  } catch (err: unknown) {
-    return errorResult(`Outline extraction failed: ${(err as Error).message}`);
-  }
+  return runExtractor("Outline", async () => ({ entries: await extractOutline(source, config, depth), totalLines }));
 }
 
 /** Decoded file text via the BOM-aware path trueline_read uses, so UTF-16 is not mistaken for binary. */
@@ -145,8 +136,8 @@ async function readSource(filePath: string): Promise<string> {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
-/** Shared try/format/empty-check/error-label plumbing for the streaming (markdown, XML) extractors. */
-async function runStreamingExtractor(
+/** Shared try/format/empty-check/error-label plumbing for the outline extractors. */
+async function runExtractor(
   label: string,
   extract: () => Promise<{ entries: OutlineEntry[]; totalLines: number }>,
 ): Promise<ToolResult> {
@@ -157,6 +148,6 @@ async function runStreamingExtractor(
     }
     return textResult(formatOutline(entries, totalLines));
   } catch (err: unknown) {
-    return errorResult(`${label} outline extraction failed: ${(err as Error).message}`);
+    return errorResult(`${label} extraction failed: ${(err as Error).message}`);
   }
 }

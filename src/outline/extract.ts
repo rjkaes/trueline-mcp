@@ -192,25 +192,19 @@ export async function extractOutline(
   }
 
   // Track skipped nodes to emit a collapsed summary
-  let skipStart = -1;
-  let skipEnd = -1;
-  let skipCount = 0;
-  let skipType = "";
+  let skipped: { start: number; end: number; count: number; type: string } | null = null;
 
   function flushSkipped(): void {
-    if (skipCount === 0) return;
-    const label = skipCount === 1 ? `1 ${skipType}` : `${skipCount} ${skipType}s`;
+    if (!skipped) return;
+    const label = skipped.count === 1 ? `1 ${skipped.type}` : `${skipped.count} ${skipped.type}s`;
     entries.push({
-      startLine: skipStart,
-      endLine: skipEnd,
+      startLine: skipped.start,
+      endLine: skipped.end,
       depth: 0,
       nodeType: "_skipped",
       text: `(${label})`,
     });
-    skipStart = -1;
-    skipEnd = -1;
-    skipCount = 0;
-    skipType = "";
+    skipped = null;
   }
 
   function trackSkipped(node: SyntaxNode): void {
@@ -222,22 +216,18 @@ export async function extractOutline(
       .replace(/ statement$/, "")
       .replace(/ declaration$/, "");
 
-    if (skipCount > 0 && label !== skipType) flushSkipped();
-    if (skipCount === 0) {
-      skipStart = nodeStart;
-      skipType = label;
-    }
-    skipEnd = nodeEnd;
-    skipCount++;
+    if (skipped && label !== skipped.type) flushSkipped();
+    skipped ??= { start: nodeStart, end: nodeEnd, count: 0, type: label };
+    skipped.end = nodeEnd;
+    skipped.count++;
   }
 
   function visit(node: SyntaxNode, depth: number, isRootChild: boolean): void {
     // Track skipped root children for collapsed summary
-    if (isRootChild && config.skip?.has(node.type)) {
-      trackSkipped(node);
+    if (config.skip?.has(node.type)) {
+      if (isRootChild) trackSkipped(node);
       return;
     }
-    if (config.skip?.has(node.type)) return;
 
     if (config.transparent?.has(node.type)) {
       for (const child of childrenOf(node)) {
@@ -295,15 +285,8 @@ export async function extractOutline(
 
 /** Format outline entries as a compact string. */
 export function formatOutline(entries: OutlineEntry[], totalLines: number): string {
-  const parts: string[] = [];
+  const summary = `(${entries.length} symbols, ${totalLines} source lines)`;
+  const lines = entries.map((entry) => `${"  ".repeat(entry.depth)}${entry.startLine}-${entry.endLine}: ${entry.text}`);
 
-  for (const entry of entries) {
-    const indent = "  ".repeat(entry.depth);
-    parts.push(`${indent}${entry.startLine}-${entry.endLine}: ${entry.text}`);
-  }
-
-  parts.push("");
-  parts.push(`(${entries.length} symbols, ${totalLines} source lines)`);
-
-  return parts.join("\n");
+  return [...lines, "", summary].join("\n");
 }

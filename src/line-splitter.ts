@@ -5,9 +5,6 @@
 // lives in `splitChunks`, which accepts an async iterable of raw byte
 // buffers and yields one RawLine per line.
 //
-// `splitLines` is a convenience wrapper that opens a file and feeds its
-// 64KB chunks into `splitChunks`.
-//
 // Binary detection (null-byte scan) is essentially free during the byte scan
 // for line terminators, so it's offered as an opt-in flag rather than forcing
 // each caller to implement it separately.
@@ -154,14 +151,12 @@ export async function* splitChunks(chunks: AsyncIterable<Buffer>, opts?: SplitCh
 }
 
 // ==============================================================================
-// File-based convenience wrapper
+// File descriptor chunk reader
 // ==============================================================================
 
-const READ_BUF_SIZE = 65536;
-
 /**
- * Reads chunks from an open fd until EOF, closing it when done. Shared by
- * splitLines and the encoding-aware transcoding paths in encoding.ts.
+ * Reads chunks from an open fd until EOF, closing it when done. Used by the
+ * encoding-aware transcoding paths in encoding.ts.
  *
  * `leadingChunk` (already read by the caller, e.g. for BOM sniffing) is
  * yielded inside the try so an early `return()` still closes the fd.
@@ -198,25 +193,4 @@ export async function readTextNoFollow(filePath: string): Promise<string | null>
   const fh = await openNoFollow(filePath);
   const buf = await fh.readFile().finally(() => fh.close());
   return buf.includes(0) ? null : stripUtf8Bom(buf).toString("utf-8");
-}
-
-/**
- * Stream lines from a file as raw Buffers without decoding to JS strings.
- *
- * Opens the file, reads it in 64KB chunks (dropping a leading UTF-8 BOM), and
- * delegates to `splitChunks`.
- * When `detectBinary` is true, throws if a null byte (0x00) is encountered.
- */
-export async function* splitLines(filePath: string, opts?: { detectBinary?: boolean }): AsyncGenerator<RawLine> {
-  async function* fileChunks(): AsyncGenerator<Buffer> {
-    const fd = await openNoFollow(filePath);
-    const readBuf = Buffer.allocUnsafe(READ_BUF_SIZE);
-    let first = true;
-    for await (const chunk of readFdChunks(fd, readBuf)) {
-      yield first ? stripUtf8Bom(chunk) : chunk;
-      first = false;
-    }
-  }
-
-  yield* splitChunks(fileChunks(), opts);
 }

@@ -6,15 +6,11 @@ export interface DecodedLine {
   isMatch: boolean;
 }
 
-// A contiguous block of matches + context, ready for formatting.
-export interface SearchMatch {
-  lines: DecodedLine[];
-}
-
 // Result of searching a single file.
 export interface FileSearchResult {
   filePath: string;
-  matches: SearchMatch[];
+  // Each match is a contiguous block of matches + context, ready for formatting.
+  matches: DecodedLine[][];
   totalMatches: number;
   capped: boolean;
   // Multiline matches skipped for spanning more than max_match_lines.

@@ -168,17 +168,9 @@ export function parseChecksum(checksum: string): ChecksumRef {
   // immediately preceded by a digit (not a letter) is the range separator.
   const dashIdx = rangePart.search(/(?<=\d)-/);
 
-  let startRef: string;
-  let endRef: string;
-
-  if (dashIdx === -1) {
-    // Single-line reference: start = end.
-    startRef = rangePart;
-    endRef = rangePart;
-  } else {
-    startRef = rangePart.slice(0, dashIdx);
-    endRef = rangePart.slice(dashIdx + 1);
-  }
+  // No dash is a single-line reference: start = end.
+  const [startRef, endRef] =
+    dashIdx === -1 ? [rangePart, rangePart] : [rangePart.slice(0, dashIdx), rangePart.slice(dashIdx + 1)];
 
   const startLine = extractLineNumber(startRef, checksum, "start");
   const endLine = extractLineNumber(endRef, checksum, "end");

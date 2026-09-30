@@ -245,28 +245,22 @@ function formatResults(
     }
 
     for (let i = 0; i < result.matches.length; i++) {
-      const match = result.matches[i];
-      let checksumHash = FNV_OFFSET_BASIS;
-      let firstLetters = "";
-      let lastLetters = "";
-      const firstLine = match.lines[0].lineNumber;
-      const lastLine = match.lines[match.lines.length - 1].lineNumber;
+      const lines = result.matches[i];
+      const first = lines[0];
+      const last = lines[lines.length - 1];
 
       if (!multiFile && i > 0) parts.push("");
 
-      for (const line of match.lines) {
-        const letters = hashToLetters(line.hash);
-        checksumHash = foldHash(checksumHash, line.hash);
-        if (!firstLetters) firstLetters = letters;
-        lastLetters = letters;
-
+      for (const line of lines) {
         const prefix = line.isMatch ? "->" : "";
-        parts.push(`${prefix}${letters}${line.lineNumber}\t${line.text}`);
+        parts.push(`${prefix}${hashToLetters(line.hash)}${line.lineNumber}\t${line.text}`);
       }
 
-      const ck = checksumToLetters(checksumHash);
+      const ck = checksumToLetters(lines.reduce((hash, line) => foldHash(hash, line.hash), FNV_OFFSET_BASIS));
       parts.push("");
-      parts.push(`ref: ${firstLetters}${firstLine}-${lastLetters}${lastLine}/${ck}`);
+      parts.push(
+        `ref: ${hashToLetters(first.hash)}${first.lineNumber}-${hashToLetters(last.hash)}${last.lineNumber}/${ck}`,
+      );
     }
   }
 

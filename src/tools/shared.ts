@@ -89,7 +89,7 @@ const failed = (msg: string) => ({ ok: false as const, error: errorResult(msg) }
 // The one answer for a path outside the boundary, whatever exists there.
 const outsideBoundary = (file_path: string) => failed(`Access denied: "${file_path}" is outside the project directory`);
 
-type ValidatePathResult = Result<{ resolvedPath: string; size: number; mtimeMs: number }>;
+type ValidatePathResult = Result<{ resolvedPath: string }>;
 
 /**
  * Containment and deny-pattern gate for a resolved path. validatePath and the
@@ -120,15 +120,7 @@ export async function checkPathBoundary(
   }
   // Resolve allowedDirs through realpath too, so short 8.3 names and
   // inconsistent casing (Windows drive letters) match the file's realPath.
-  const resolvedAllowed = await Promise.all(
-    allowedDirs.map(async (d) => {
-      try {
-        return await realpath(d);
-      } catch {
-        return d;
-      }
-    }),
-  );
+  const resolvedAllowed = await Promise.all(allowedDirs.map((d) => realpath(d).catch(() => d)));
   const allBases = [realBase, ...resolvedAllowed];
   if (!isContained(realPath, allBases)) {
     return outsideBoundary(file_path);
@@ -201,19 +193,14 @@ export async function validatePath(
     return failed(`"${file_path}" exceeds the 10 MB size limit (${(fileStat.size / 1024 / 1024).toFixed(1)} MB)`);
   }
 
-  return {
-    ok: true,
-    resolvedPath: realPath,
-    size: fileStat.size,
-    mtimeMs: fileStat.mtimeMs,
-  };
+  return { ok: true, resolvedPath: realPath };
 }
 
 // ==============================================================================
 // Binary file detection helper
 // ==============================================================================
 
-/** Check whether an error from `splitLines` indicates a binary file. */
+/** Check whether an error from `transcodedLines` indicates a binary file. */
 export function isBinaryError(err: unknown): err is Error {
   return err instanceof Error && err.message.includes("binary");
 }

@@ -439,7 +439,7 @@ export async function streamingEdit(
       }
     }
   } catch (err: unknown) {
-    // Binary detection throws from splitLines — convert to a structured
+    // Binary detection throws from transcodedLines — convert to a structured
     // error result so callers get { ok: false } instead of an exception.
     if (err instanceof Error && err.message.includes("binary")) {
       return await fail(err.message);

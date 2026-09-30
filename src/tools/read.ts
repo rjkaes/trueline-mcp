@@ -1,7 +1,7 @@
 // ==============================================================================
 // trueline_read handler
 //
-// Streams the file line-by-line via `splitLines` — the file is never loaded
+// Streams the file line-by-line via `transcodedLines` — the file is never loaded
 // into memory as a whole.  Supports reading multiple disjoint ranges in a
 // single call, each producing its own inline ref.
 //

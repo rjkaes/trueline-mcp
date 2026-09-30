@@ -136,7 +136,7 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   let contextBlock = "";
   const effectiveContextLines = context_lines ?? (built.ops.length >= 2 ? 2 : 0);
   if (effectiveContextLines > 0 && result.newLineCount > 0) {
-    const ctx = await readEditContext(resolvedPath, built.ops, effectiveContextLines, enc);
+    const ctx = await readEditContext(resolvedPath, built.ops, effectiveContextLines, result.textEncoding);
     if (ctx) contextBlock = `\n\n${ctx}`;
   }
 
@@ -237,7 +237,7 @@ async function readEditContext(
   resolvedPath: string,
   ops: StreamEditOp[],
   contextLines: number,
-  encoding: BufferEncoding,
+  textEncoding: BufferEncoding,
 ): Promise<string> {
   const sites = computeEditSites(ops);
 
@@ -251,9 +251,7 @@ async function readEditContext(
   const collected = new Map<number, string>();
   const maxLine = Math.max(...collectRanges.map((r) => r.to));
 
-  const { lines, bomInfo } = await transcodedLines(resolvedPath, { detectBinary: false });
-  // UTF-16 lines are already UTF-8; the caller's encoding applies to UTF-8 files only.
-  const textEncoding = bomInfo.encoding === "utf-8" ? encoding : "utf-8";
+  const { lines } = await transcodedLines(resolvedPath, { detectBinary: false });
   for await (const { lineBytes, lineNumber } of lines) {
     if (lineNumber > maxLine) break;
     for (const range of collectRanges) {

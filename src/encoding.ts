@@ -87,7 +87,7 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
     await fd.close();
     // "binary" routes it through isBinaryError, so search and verify skip the file
     // as they did when UTF-32BE's NUL bytes tripped binary detection.
-    // No path: callers name the file, as for splitLines' binary error.
+    // No path: callers name the file, as for splitChunks' binary error.
     throw new Error("UTF-32 is not supported; the file is treated as binary");
   }
   const bomInfo: BOMInfo = BOMS.find(({ bom }) => firstChunk.subarray(0, bom.length).equals(bom)) ?? {

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { splitLines, readTextNoFollow, LF_BUF, EMPTY_BUF } from "../src/line-splitter.ts";
+import { readTextNoFollow, LF_BUF, EMPTY_BUF } from "../src/line-splitter.ts";
+import { transcodedLines } from "../src/encoding.ts";
 
 const CRLF_BUF = Buffer.from("\r\n");
 const CR_BUF = Buffer.from("\r");
@@ -30,13 +31,13 @@ function writeFile(name: string, content: Buffer | string): string {
 
 async function collect(filePath: string, opts?: { detectBinary?: boolean }) {
   const lines: { lineBytes: Buffer; eolBytes: Buffer; lineNumber: number }[] = [];
-  for await (const line of splitLines(filePath, opts)) {
+  for await (const line of (await transcodedLines(filePath, opts)).lines) {
     lines.push(line);
   }
   return lines;
 }
 
-describe("splitLines", () => {
+describe("transcodedLines", () => {
   test("LF line endings", async () => {
     const p = writeFile("lf.txt", "alpha\nbeta\ngamma\n");
     const lines = await collect(p);
@@ -187,24 +188,24 @@ describe("splitLines", () => {
 
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 
-// splitLines (markdown/XML outlines) and readTextNoFollow (tree-sitter outline,
+// transcodedLines (markdown/XML outlines) and readTextNoFollow (tree-sitter outline,
 // semantic diff) hand text to parsers that treat a leading U+FEFF as content.
 describe("leading UTF-8 BOM", () => {
-  test("splitLines drops the BOM from line 1", async () => {
+  test("transcodedLines drops the BOM from line 1", async () => {
     const p = writeFile("bom.md", Buffer.concat([UTF8_BOM, Buffer.from("# Invoice Guide\nBody\n")]));
     const lines = await collect(p);
 
     expect(lines.map((l) => l.lineBytes.toString())).toEqual(["# Invoice Guide", "Body"]);
   });
 
-  test("splitLines keeps a BOM that is not at the start of the file", async () => {
+  test("transcodedLines keeps a BOM that is not at the start of the file", async () => {
     const p = writeFile("inner-bom.md", Buffer.concat([UTF8_BOM, Buffer.from("a\n\uFEFFb\n")]));
     const lines = await collect(p);
 
     expect(lines.map((l) => l.lineBytes.toString())).toEqual(["a", "\uFEFFb"]);
   });
 
-  test("splitLines on a BOM-only file yields no lines", async () => {
+  test("transcodedLines on a BOM-only file yields no lines", async () => {
     const p = writeFile("only-bom.md", UTF8_BOM);
 
     expect(await collect(p)).toHaveLength(0);

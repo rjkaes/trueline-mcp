@@ -59,10 +59,6 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
     for await (const { lineBytes, lineNumber } of lines) {
       totalLines = lineNumber;
 
-      if (accIdx >= accs.length) break;
-
-      if (lineNumber < accs[accIdx].startLine) continue;
-
       while (accIdx < accs.length && lineNumber > accs[accIdx].endLine) accIdx++;
       if (accIdx >= accs.length) break;
       if (lineNumber < accs[accIdx].startLine) continue;

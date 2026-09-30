@@ -35,19 +35,12 @@ export interface SymbolDiff {
 // ==============================================================================
 
 export function normalizeBody(text: string, mode: "collapse" | "preserve-indent" = "collapse"): string {
-  const lines = text.split("\n");
+  const normalizeLine =
+    mode === "preserve-indent"
+      ? (l: string) => l.replace(/\s+$/, "").replace(/(?<=\S)\s{2,}(?=\S)/g, " ")
+      : (l: string) => l.trim().replace(/\s+/g, " ");
   // Blank lines carry no meaning: adding one must not read as a logic change.
-  if (mode === "preserve-indent") {
-    return lines
-      .map((l) => l.replace(/\s+$/, "").replace(/(?<=\S)\s{2,}(?=\S)/g, " "))
-      .filter(Boolean)
-      .join("\n");
-  }
-  // collapse mode
-  return lines
-    .map((l) => l.trim().replace(/\s+/g, " "))
-    .filter(Boolean)
-    .join("\n");
+  return text.split("\n").map(normalizeLine).filter(Boolean).join("\n");
 }
 
 // ==============================================================================

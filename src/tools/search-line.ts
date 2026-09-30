@@ -1,13 +1,13 @@
 import { transcodedLines } from "../encoding.ts";
 import { fnv1aHashBytes } from "../hash.ts";
-import type { DecodedLine, EngineParams, FileSearchResult, SearchMatch } from "./search-types.ts";
+import type { DecodedLine, EngineParams, FileSearchResult } from "./search-types.ts";
 
 const POST_LIMIT_SCAN_CAP = 1000;
 
 export async function searchLineByLine(params: EngineParams): Promise<FileSearchResult> {
   const { resolvedPath, matchLine, contextLines, maxMatches } = params;
 
-  const matches: SearchMatch[] = [];
+  const matches: DecodedLine[][] = [];
   let totalMatches = 0;
   let matchesCaptured = 0;
 
@@ -21,7 +21,7 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
   let postLimitCapped = false;
 
   const flush = (): void => {
-    if (currentLines !== null) matches.push({ lines: currentLines });
+    if (currentLines !== null) matches.push(currentLines);
     currentLines = null;
   };
 

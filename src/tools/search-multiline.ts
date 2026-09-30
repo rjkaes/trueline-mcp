@@ -1,6 +1,6 @@
 import { transcodedLines } from "../encoding.ts";
 import { fnv1aHashBytes } from "../hash.ts";
-import type { DecodedLine, FileSearchResult, SearchMatch } from "./search-types.ts";
+import type { DecodedLine, FileSearchResult } from "./search-types.ts";
 
 export interface MultilineEngineParams {
   resolvedPath: string;
@@ -69,7 +69,7 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
 
   // One window per run of hits whose context touches or overlaps, as in line
   // mode, so no line or ref repeats.
-  const matches: SearchMatch[] = [];
+  const matches: DecodedLine[][] = [];
   let first = 0;
   while (first < hits.length) {
     const ctxStart = Math.max(0, hits[first].startIdx - contextLines);
@@ -89,7 +89,7 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
       for (let i = hit.startIdx; i <= hit.endIdx; i++) windowLines[i - ctxStart].isMatch = true;
     }
 
-    matches.push({ lines: windowLines });
+    matches.push(windowLines);
     first = next;
   }
 
