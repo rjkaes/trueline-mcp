@@ -35,6 +35,15 @@ function expandRanges(ranges: ReadRange[]): ReadRange[] {
   }));
   return mergeSortedRanges(expanded);
 }
+
+// Node fs errors (EACCES, EIO, ...) belong to one file, so a batch keeps its other files. Only the
+// errno code is shown: the error message carries the resolved absolute path.
+function unreadableFileError(file_path: string, err: unknown): ToolResult {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code;
+  if (typeof code !== "string") throw err;
+  return errorResult(`"${file_path}" could not be read (${code})`);
+}
+
 interface ReadParams {
   file_path: string;
   encoding?: string;
@@ -94,6 +103,8 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   let rangeLastLetters = "";
   let totalLines = 0;
   let outputLines = 0;
+  // Where the open chunk began, so a chunk of only boundary context can be dropped once EOF is known.
+  let chunkStart = { chunks: 0, len: 0 };
   let truncated = false;
 
   // Resolve encoding before streaming — transcodedLines peeks at the BOM.
@@ -103,7 +114,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
   } catch (err: unknown) {
     if (isBinaryError(err)) return errorResult(`"${file_path}": ${err.message}`);
-    throw err;
+    return unreadableFileError(file_path, err);
   }
   const { bomInfo } = transcoded;
 
@@ -144,15 +155,19 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       const prefix = Buffer.from(`${letters}${lineNumber}\t`);
       const lineLen = prefix.length + lineBytes.length + 1;
 
+      // Boundary context is not a requested line: it does not count toward the line cap,
+      // and dropping it at a cap is not truncation.
+      const isRequested = requestedRanges.some((r) => lineNumber >= r.start && lineNumber <= r.end);
+
       // Check output limits before committing this line
       if (outputLines >= MAX_OUTPUT_LINES || outputLen + lineLen > MAX_OUTPUT_BYTES) {
-        // Boundary context is not a requested line, so dropping it is not truncation.
-        if (!requestedRanges.some((r) => lineNumber >= r.start && lineNumber <= r.end)) continue;
+        if (!isRequested) continue;
         truncated = true;
         break;
       }
-      outputLines++;
+      if (isRequested) outputLines++;
       if (rangeFirstLine === 0) {
+        chunkStart = { chunks: outputChunks.length, len: outputLen };
         rangeFirstLine = lineNumber;
         rangeFirstLetters = letters;
       }
@@ -165,7 +180,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     }
   } catch (err: unknown) {
     if (isBinaryError(err)) return binaryFileError(file_path);
-    throw err;
+    return unreadableFileError(file_path, err);
   }
 
   // Empty file
@@ -181,6 +196,18 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   // valid ranges are returned and each past-EOF one is named in the trailer.
   if (pastEof.length === requestedRanges.length) {
     return errorResult(`start_line ${pastEof[0].start} out of range (file has ${totalLines} lines)`);
+  }
+
+  // A range starting one line past EOF still pulled in the last line as its leading boundary.
+  // A chunk with no requested line is that leak: drop it.
+  if (
+    !truncated &&
+    rangeFirstLine > 0 &&
+    !requestedRanges.some((r) => r.start <= rangeLastLine && r.end >= rangeFirstLine)
+  ) {
+    outputChunks.length = chunkStart.chunks;
+    outputLen = chunkStart.len;
+    rangeFirstLine = 0;
   }
 
   // Emit inline ref for the last range (only if we output any lines in it)
@@ -246,8 +273,15 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
   const literalEntries = new Set(
     candidates.map((entry) => (process.platform === "win32" ? entry.replaceAll("\\", "/") : entry)),
   );
-  const parsed = expanded.map((entry) =>
-    literalEntries.has(entry) ? parseFilePathWithRanges(entry) : { path: entry, rangeSpecs: undefined },
+  const parsed = await Promise.all(
+    expanded.map(async (entry) => {
+      if (!literalEntries.has(entry)) return { path: entry, rangeSpecs: undefined };
+      const split = parseFilePathWithRanges(entry);
+      // An existing file named "snapshot-10:30" is that file, not line 30 of "snapshot-10".
+      const namedFile =
+        split.rangeSpecs !== undefined && (await validatePath(entry, "Read", rest.projectDir, rest.allowedDirs)).ok;
+      return namedFile ? { path: entry, rangeSpecs: undefined } : split;
+    }),
   );
 
   // Top-level ranges with multiple files is ambiguous; reject it. Rejected

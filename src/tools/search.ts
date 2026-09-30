@@ -60,7 +60,9 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   const filePaths = await expandGlobs(candidatePaths, projectDir, allowedDirs);
   if (filePaths.length === 0) {
     if (rejectedSections.length > 0) return textResult(rejectedSections.join("\n"));
-    return errorResult("file_paths must be a non-empty array");
+    if (rawPaths.length === 0) return errorResult("file_paths must be a non-empty array");
+    // Entries are not echoed: output must not name a glob outside the allowed dirs.
+    return errorResult("No file matched file_paths");
   }
 
   // Search each file, tracking global match budget
@@ -120,8 +122,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     try {
       fileResult = await searchFile(resolvedPath, matchBudget);
     } catch (err) {
-      if (!isBinaryError(err)) throw err;
-      fileResult = failedSearchResult(fp, "binary file");
+      fileResult = failedSearchResult(fp, isBinaryError(err) ? "binary file" : unreadableReason(err));
     }
     fileResult.filePath = fp;
     results.push(fileResult);
@@ -137,6 +138,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     multiFile,
     projectDir,
     params.regex || params.multiline,
+    !params.multiline && params.regex === true && NEWLINE_ESCAPE.test(pattern),
   );
   if (rejectedSections.length === 0) return formatted;
 
@@ -149,6 +151,17 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// Escape of a newline in a regex; an escaped backslash followed by n (`\\n`) is not one.
+const NEWLINE_ESCAPE = /(?<!\\)(?:\\\\)*\\[nr]/;
+
+// Node fs errors (EACCES, EIO, ...) belong to one file, so a batch keeps its other files. Only the
+// errno code is shown: the error message carries the resolved absolute path.
+function unreadableReason(err: unknown): string {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code;
+  if (typeof code !== "string") throw err;
+  return `unreadable file (${code})`;
+}
 
 function buildMatcher(
   pattern: string,
@@ -178,6 +191,7 @@ function formatResults(
   multiFile: boolean,
   projectDir: string | undefined,
   isRegex?: boolean,
+  newlineEscape?: boolean,
 ): ToolResult {
   const grandTotal = results.reduce((sum, r) => sum + r.totalMatches, 0);
   const anyCapped = results.some((r) => r.capped);
@@ -199,6 +213,11 @@ function formatResults(
     if (!isRegex && /[.*+?^${}()|[\]\\]/.test(pattern)) {
       msg +=
         "\n\n(hint: pattern contains regex metacharacters but was searched literally — add regex=true for regex matching)";
+    }
+    // A line never contains a newline, so the escape can only match in multiline mode.
+    if (newlineEscape) {
+      msg +=
+        "\n\n(hint: pattern has a \\n or \\r escape, but lines are matched one at a time — add multiline=true for patterns spanning lines)";
     }
     // The summary must not hide per-file failures (e.g. a binary file).
     for (const result of results) {

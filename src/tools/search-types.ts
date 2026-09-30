@@ -22,7 +22,7 @@ export interface FileSearchResult {
   error?: string;
 }
 
-// Result for a file that couldn't be scanned (binary, or rejected by path validation).
+// Result for a file that couldn't be scanned (binary, unreadable, or rejected by path validation).
 export function failedSearchResult(path: string, error: string): FileSearchResult {
   return { filePath: path, matches: [], totalMatches: 0, capped: false, error };
 }
