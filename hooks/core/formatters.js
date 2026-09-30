@@ -35,15 +35,12 @@ const formatters = {
  * Format a routing decision for a specific platform.
  *
  * @param {string} platform
- * @param {{ action: "block"; reason: string } | null} routing
+ * @param {{ action: "block" | "advise"; reason: string } | null} routing
  * @returns {Record<string, unknown> | null} JSON to write to stdout, or null for passthrough
  */
 export function formatDecision(platform, routing) {
   // vscode-copilot has no entry here — it falls back to claude-code's formatters.
   const fmt = formatters[platform] ?? formatters["claude-code"];
 
-  if (!routing) return fmt.approve();
-  if (routing.action === "block") return fmt.block(routing.reason);
-  if (routing.action === "advise") return fmt.advise(routing.reason);
-  return fmt.approve();
+  return routing ? fmt[routing.action](routing.reason) : fmt.approve();
 }

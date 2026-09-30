@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
+import { text } from "node:stream/consumers";
 import { type ParseArgsConfig, type ParseArgsOptionsConfig, parseArgs } from "node:util";
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
@@ -32,12 +33,7 @@ export interface CliSubcommand {
 // User-facing errors that map to exit code 3 (usage / parse error)
 // ---------------------------------------------------------------------------
 
-export class UsageError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "UsageError";
-  }
-}
+export class UsageError extends Error {}
 
 /** Thrown by parseCliArgs for a --help/-h option token; cli.ts prints the subcommand's usage. */
 export class HelpRequested extends Error {}
@@ -129,14 +125,6 @@ async function assertNotDenied(filePath: string): Promise<void> {
   }
 }
 
-// Not readFileSync(0): under node, asking process.stdin about a TTY puts a pipe fd in non-blocking
-// mode, and the synchronous read then fails with EAGAIN whenever the producer is slower than the CLI.
-async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
-  return Buffer.concat(chunks).toString("utf-8");
-}
-
 function stripBom(text: string): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
@@ -174,7 +162,8 @@ export async function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"
       throw new UsageError("stdin is a TTY; pipe data in or use @file");
     }
     try {
-      raw = stripBom(await readStdin());
+      // Not readFileSync(0): under node it fails with EAGAIN when the producer is slower than the CLI.
+      raw = stripBom(await text(process.stdin));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new UsageError(`cannot read stdin: ${msg}`);

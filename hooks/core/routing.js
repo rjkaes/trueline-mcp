@@ -14,9 +14,7 @@ import { extname } from "node:path";
 const TOOL_ALIASES = {
   // Gemini CLI
   read_file: "Read",
-  read_many_files: "Read",
   edit_file: "Edit",
-  write_file: "Write",
   run_shell_command: "Bash",
   // VS Code Copilot
   replace_string_in_file: "Edit",
@@ -46,7 +44,7 @@ const BASH_PEEK_DETECTORS = [
 ];
 
 // Different platforms use different field names for file paths in tool input.
-const FILE_PATH_FIELDS = ["file_path", "path", "target_file"];
+const FILE_PATH_FIELDS = ["file_path", "path"];
 
 // Fields that indicate a partial/ranged read across platforms:
 //   Claude Code / OpenCode: offset, limit
@@ -65,15 +63,7 @@ const MEDIUM_FILE_THRESHOLD = 3072; // 3KB
 const NATIVE_MEDIA_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"]);
 
 /**
- * Check whether a Read tool call is requesting a partial/ranged read.
- *
- * Partial reads already limit context consumption, which is what trueline_read
- * with targeted ranges accomplishes. Passing them through avoids blocking
- * reads that are already well-scoped.
- *
- * Platform conventions:
- *   Claude Code / OpenCode: offset (line number), limit (line count)
- *   Gemini CLI: start_line, end_line (1-based, inclusive)
+ * Partial reads already limit context the way ranged trueline_read does, so they pass through.
  *
  * @param {Record<string, unknown> | undefined} toolInput
  * @returns {boolean}
@@ -124,33 +114,8 @@ function detectBashFilePeek(command) {
 }
 
 /**
- * Route a pre-tool-use event.
- *
- * Routing logic by tool, file size, and edit token cost:
- *
- * - Read, large file (>= LARGE_FILE_THRESHOLD): **block** and redirect
- *   to trueline_read. Full reads of large files waste context; the agent
- *   should use trueline_outline or targeted trueline_read ranges instead.
- *
- * - Read, medium file (>= MEDIUM_FILE_THRESHOLD): **block** with concise
- *   redirect including estimated token cost.
- *
- * - Read, small file (< MEDIUM_FILE_THRESHOLD): **pass** silently.
- *   No advisory overhead; built-in Read is fine for small files.
- *
- * - Read, image or PDF (any size): **pass** silently. Only the built-in Read
- *   can render them; trueline_read would return nothing usable.
- *
- * - Edit/MultiEdit: **block** and redirect to trueline_search ->
- *   trueline_edit. Hash-verified edits prevent stale-content mismatches
- *   that built-in Edit can't detect.
- *
- * - Bash (canonical): if the command looks like a file-peek (`cat`, `sed -n`,
- *   `head`, `tail`, or single-file `grep`) on an accessible file, **advise**
- *   (non-blocking) with a nudge toward trueline_read/trueline_search.
- *
- * Returns null for silent pass-through, { action: "block", reason } to redirect,
- * or { action: "advise", reason } to inject context without blocking.
+ * Route a pre-tool-use event: null passes through, "block" redirects, "advise" injects context
+ * without blocking (Bash file peeks only). Thresholds and exemptions are explained at each check.
  *
  * @param {string} toolName - Raw tool name from the platform
  * @param {Record<string, unknown> | undefined} toolInput

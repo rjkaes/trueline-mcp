@@ -1,4 +1,4 @@
-import { readFileSync, unlinkSync, existsSync } from "node:fs";
+import { readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -103,7 +103,6 @@ export async function processPostToolUseEvent(event) {
 
   const cwdHash = createHash("sha256").update(`${cwd}\0${filePath}`).digest("hex").slice(0, 12);
   const diffPath = join(tmpdir(), `trueline-edit-${cwdHash}.diff`);
-  if (!existsSync(diffPath)) return null;
 
   let diff;
   try {

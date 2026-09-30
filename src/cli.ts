@@ -1,12 +1,5 @@
-// CLI entry point and root command dispatcher for the trueline command.
-//
-// This file stays at src/cli.ts so the existing build script
-// (`bun build src/cli.ts --target=node --outfile dist/cli.js`) and the
-// bun-launcher path in scripts/resolve-binary.cjs (invoked with the "cli" entry arg)
-// work without any changes.
-//
-// Subcommands are registered as lazy imports so the CLI starts quickly
-// regardless of which subcommand is invoked.
+// Root dispatcher for the trueline command. Stays at src/cli.ts: the build script and
+// scripts/resolve-binary.cjs both point at this path. Subcommands load lazily to keep startup fast.
 
 import pkg from "../package.json";
 import { type CliSubcommand, HelpRequested, UsageError } from "./cli/io.ts";
