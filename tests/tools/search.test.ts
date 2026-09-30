@@ -375,3 +375,22 @@ describe("context_lines=0 non-adjacent matches", () => {
     expect(ref2.endLine).toBe(11);
   });
 });
+
+function write(name: string, content: string | Buffer): string {
+  const path = join(testDir, name);
+  writeFileSync(path, content);
+  return path;
+}
+
+describe("batch error reporting", () => {
+  // search.ts:188 returns the "No matches" summary before per-file errors are
+  // formatted, so a binary/denied file is reported as merely "no match".
+  test("surfaces a binary file's error when no file has a match", async () => {
+    const binary = write("ledger.bin", Buffer.from([0x50, 0x4b, 0x00, 0x01, 0x02, 0x00]));
+    const text = write("notes.txt", "nothing relevant here\n");
+
+    const result = await handleSearch({ file_paths: [binary, text], pattern: "needle", projectDir: testDir });
+
+    expect(getText(result)).toContain("binary");
+  });
+});

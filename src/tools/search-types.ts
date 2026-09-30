@@ -17,6 +17,8 @@ export interface FileSearchResult {
   matches: SearchMatch[];
   totalMatches: number;
   capped: boolean;
+  // Multiline matches skipped for spanning more than max_match_lines.
+  oversizeMatches?: number;
   error?: string;
 }
 

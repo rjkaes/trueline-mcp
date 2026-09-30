@@ -41,7 +41,8 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
   }
 
   let totalMatches = 0;
-  const matches: SearchMatch[] = [];
+  let oversizeMatches = 0;
+  const hits: { startIdx: number; endIdx: number }[] = [];
 
   for (const m of joined.matchAll(regex)) {
     // A zero-length match covers no line
@@ -51,31 +52,44 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
     const startIdx = charOffsetToLineIndex(lineOffsets, m.index);
     const endIdx = charOffsetToLineIndex(lineOffsets, m.index + m[0].length - 1);
 
-    // Skip matches that span more than maxMatchLines
-    if (endIdx - startIdx + 1 > maxMatchLines) continue;
+    // Skip matches that span more than maxMatchLines, but count them so the
+    // caller is told instead of seeing "No matches".
+    if (endIdx - startIdx + 1 > maxMatchLines) {
+      oversizeMatches++;
+      continue;
+    }
 
     totalMatches++;
-    if (matches.length >= maxMatches) continue;
+    if (hits.length < maxMatches) hits.push({ startIdx, endIdx });
+  }
 
-    const ctxStart = Math.max(0, startIdx - contextLines);
-    const ctxEnd = Math.min(lines.length - 1, endIdx + contextLines);
+  // One window per run of hits whose context touches or overlaps, as in line
+  // mode, so no line or ref repeats.
+  const matches: SearchMatch[] = [];
+  let first = 0;
+  while (first < hits.length) {
+    const ctxStart = Math.max(0, hits[first].startIdx - contextLines);
+    let ctxEnd = Math.min(lines.length - 1, hits[first].endIdx + contextLines);
+    let next = first + 1;
+    while (next < hits.length && hits[next].startIdx - contextLines <= ctxEnd + 1) {
+      ctxEnd = Math.min(lines.length - 1, hits[next].endIdx + contextLines);
+      next++;
+    }
 
     const windowLines: DecodedLine[] = [];
     for (let i = ctxStart; i <= ctxEnd; i++) {
       const l = lines[i];
-      const h = fnv1aHashBytes(l.bytes);
-      windowLines.push({
-        lineNumber: l.lineNumber,
-        text: l.text,
-        hash: h,
-        isMatch: i >= startIdx && i <= endIdx,
-      });
+      windowLines.push({ lineNumber: l.lineNumber, text: l.text, hash: fnv1aHashBytes(l.bytes), isMatch: false });
+    }
+    for (const hit of hits.slice(first, next)) {
+      for (let i = hit.startIdx; i <= hit.endIdx; i++) windowLines[i - ctxStart].isMatch = true;
     }
 
     matches.push({ lines: windowLines });
+    first = next;
   }
 
-  return { filePath: resolvedPath, matches, totalMatches, capped: false };
+  return { filePath: resolvedPath, matches, totalMatches, capped: false, oversizeMatches };
 }
 
 // Binary search for the line index containing a character offset.

@@ -69,11 +69,9 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   const multiFile = filePaths.length > 1 || rejectedSections.length > 0;
 
   let searchFile: (resolvedPath: string, maxMatches: number) => Promise<FileSearchResult>;
-  // Multiline windows count once each; line-mode windows count every marked line.
-  let countCaptured: (result: FileSearchResult) => number;
 
   if (params.multiline) {
-    // Multiline mode: build regex with global + dotAll flags, delegate to multiline engine
+    // Multiline mode: global + dotAll + multiline flags (^/$ anchor at each line), delegate to multiline engine
     const maxMatchLines = params.max_match_lines ?? 50;
 
     if (pattern === "") {
@@ -82,14 +80,13 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 
     let regex: RegExp;
     try {
-      regex = new RegExp(pattern, `gs${params.case_insensitive ? "i" : ""}`);
+      regex = new RegExp(pattern, `gsm${params.case_insensitive ? "i" : ""}`);
     } catch {
       return errorResult(`Invalid regex pattern: "${pattern}"`);
     }
 
     searchFile = (resolvedPath, maxMatches) =>
       searchMultiline({ resolvedPath, regex, contextLines, maxMatches, maxMatchLines });
-    countCaptured = (result) => result.matches.length;
   } else {
     // Line-by-line mode: reject newline patterns, build line matcher
     if (pattern.includes("\n") || pattern.includes("\r")) {
@@ -104,7 +101,6 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     const matchLine = matcherResult.matcher;
 
     searchFile = (resolvedPath, maxMatches) => searchLineByLine({ resolvedPath, matchLine, contextLines, maxMatches });
-    countCaptured = (result) => result.matches.reduce((sum, m) => sum + m.lines.filter((l) => l.isMatch).length, 0);
   }
 
   for (const fp of filePaths) {
@@ -124,7 +120,8 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     }
     fileResult.filePath = fp;
     results.push(fileResult);
-    matchBudget = Math.max(0, matchBudget - countCaptured(fileResult));
+    // The engine captured min(totalMatches, matchBudget) matches.
+    matchBudget = Math.max(0, matchBudget - fileResult.totalMatches);
   }
 
   const formatted = formatResults(
@@ -179,6 +176,8 @@ function formatResults(
 ): ToolResult {
   const grandTotal = results.reduce((sum, r) => sum + r.totalMatches, 0);
   const anyCapped = results.some((r) => r.capped);
+  const oversize = results.reduce((sum, r) => sum + (r.oversizeMatches ?? 0), 0);
+  const oversizeNote = `${oversize} match(es) span more than max_match_lines lines and were skipped — increase max_match_lines to see them`;
 
   // Single-file mode: if the only file had a validation/binary error, propagate it as an error result
   if (!multiFile && results.length === 1 && results[0].error) {
@@ -189,15 +188,20 @@ function formatResults(
     let msg = multiFile
       ? `No matches for pattern "${pattern}" across ${filePaths.length} files`
       : `No matches for pattern "${pattern}" in ${displayPath(filePaths[0], projectDir)}`;
+    // Every match was skipped for length, so "No matches" would be false.
+    if (oversize > 0) msg = `Pattern "${pattern}" matched, but ${oversizeNote}`;
     if (!isRegex && /[.*+?^${}()|[\]\\]/.test(pattern)) {
       msg +=
         "\n\n(hint: pattern contains regex metacharacters but was searched literally — add regex=true for regex matching)";
+    }
+    // The summary must not hide per-file failures (e.g. a binary file).
+    for (const result of results) {
+      if (result.error) msg += `\n\n${displayPath(result.filePath, projectDir)}:\nerror: ${result.error}`;
     }
     return textResult(msg);
   }
 
   const parts: string[] = [];
-  let matchesEmitted = 0;
 
   for (const result of results) {
     if (result.error) {
@@ -231,9 +235,7 @@ function formatResults(
         if (!firstLetters) firstLetters = letters;
         lastLetters = letters;
 
-        const isMarked = line.isMatch && matchesEmitted < maxMatches;
-        if (isMarked) matchesEmitted++;
-        const prefix = isMarked ? "->" : "";
+        const prefix = line.isMatch ? "->" : "";
         parts.push(`${prefix}${letters}${line.lineNumber}\t${line.text}`);
       }
 
@@ -243,7 +245,13 @@ function formatResults(
     }
   }
 
-  if (grandTotal > maxMatches) {
+  if (oversize > 0) {
+    parts.push("");
+    parts.push(`(${oversizeNote})`);
+  }
+
+  // A capped post-limit scan stopped early, so more matches may exist even at total == max.
+  if (grandTotal > maxMatches || anyCapped) {
     parts.push("");
     const countLabel = anyCapped ? `${grandTotal}+` : `${grandTotal}`;
     const scope = multiFile ? ` across ${filePaths.length} files` : "";

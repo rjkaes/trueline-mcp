@@ -41,11 +41,13 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
     const h = fnv1aHashBytes(lineBytes);
     const text = lineBytes.toString("utf-8");
     const isMatch = matchLine(text);
-    const decoded: DecodedLine = { lineNumber, text, hash: h, isMatch };
-
     if (isMatch) totalMatches++;
 
-    if (isMatch && matchesCaptured < maxMatches) {
+    // Only captured matches are marked; a later match inside trailing context is not.
+    const captured = isMatch && matchesCaptured < maxMatches;
+    const decoded: DecodedLine = { lineNumber, text, hash: h, isMatch: captured };
+
+    if (captured) {
       matchesCaptured++;
 
       if (currentLines === null) {

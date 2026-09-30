@@ -39,3 +39,68 @@ describe("trueline_search max_matches strictness", () => {
     expect(text).toContain("(showing 1 of 3 matches");
   });
 });
+
+function write(name: string, content: string | Buffer): string {
+  const path = join(testDir, name);
+  writeFileSync(path, content);
+  return path;
+}
+
+describe("trueline_search max_matches truncation notice and budget", () => {
+  // search.ts:246 emits the "showing N of M" notice only when grandTotal >
+  // maxMatches. When the post-cap scan stops at POST_LIMIT_SCAN_CAP (1000
+  // lines), total == max even though further matches exist, so the caller is
+  // never told the result is incomplete.
+  test("flags possible further matches when the post-cap scan was capped", async () => {
+    const lines = ["needle first", ...Array.from({ length: 1500 }, (_, i) => `filler ${i}`), "needle far away"];
+    const file = write("far-match.txt", lines.join("\n"));
+
+    const result = await handleSearch({
+      file_paths: [file],
+      pattern: "needle",
+      max_matches: 1,
+      context_lines: 0,
+      projectDir: testDir,
+    });
+
+    expect(getText(result)).toContain("increase max_matches");
+  });
+
+  // The cross-file budget shrinks by matches found, not windows returned: adjacent
+  // matches share one window, so counting windows would over-grant the next file.
+  test("max_matches is a global budget counted in matches, not windows", async () => {
+    const adjacent = write("budget-adjacent.txt", "needle a1\nneedle a2\nfiller\n");
+    const spread = write("budget-spread.txt", ["needle b1", "filler", "needle b2", "filler", "needle b3"].join("\n"));
+
+    const result = await handleSearch({
+      file_paths: [adjacent, spread],
+      pattern: "needle",
+      max_matches: 3,
+      context_lines: 0,
+      projectDir: testDir,
+    });
+
+    const marked = getText(result)
+      .split("\n")
+      .filter((line) => line.startsWith("->"));
+    expect(marked).toHaveLength(3);
+  });
+
+  // A later match in the trailing context of the last captured match is shown as
+  // context but is not one of the max_matches results, so it gets no marker.
+  test("does not mark an uncaptured match that falls in trailing context", async () => {
+    const file = write("trailing-match.txt", "needle one\nneedle two\nfiller\nfiller\n");
+
+    const result = await handleSearch({
+      file_paths: [file],
+      pattern: "needle",
+      max_matches: 1,
+      context_lines: 2,
+      projectDir: testDir,
+    });
+
+    const text = getText(result);
+    expect(text.split("\n").filter((line) => line.startsWith("->"))).toHaveLength(1);
+    expect(text).toMatch(/^[a-z]{2}2\tneedle two$/m);
+  });
+});
