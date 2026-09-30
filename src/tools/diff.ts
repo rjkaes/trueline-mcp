@@ -1,11 +1,18 @@
 import { readTextNoFollow } from "../line-splitter.ts";
 import { lcsMiddle, trimCommonEnds } from "../diff-collector.ts";
-import { realpath } from "node:fs/promises";
-import { extname, isAbsolute, relative, resolve } from "node:path";
+import { lstat, realpath } from "node:fs/promises";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
 import { getLanguageConfig } from "../outline/languages.ts";
-import { gitExec, isAbsolutePathArg, relativePathError, type ToolContext, validatePath } from "./shared.ts";
-import { type ToolResult, textResult } from "./types.ts";
+import {
+  checkPathBoundary,
+  gitExec,
+  isAbsolutePathArg,
+  relativePathError,
+  type ToolContext,
+  validatePath,
+} from "./shared.ts";
+import { type ToolResult, errorResult, textResult } from "./types.ts";
 
 interface DiffParams extends ToolContext {
   file_paths: string[];
@@ -14,11 +21,27 @@ interface DiffParams extends ToolContext {
 
 export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const { compare_against = "HEAD", projectDir, allowedDirs, requireAbsolutePath } = params;
+  const cwd = projectDir ?? process.cwd();
   let filePaths = params.file_paths;
+  // Old cwd-relative path of each file git reports as renamed, keyed by its new absolute path.
+  let renamedFrom = new Map<string, string>();
+
+  // The ref goes straight into git argv, where a leading dash is an option:
+  // --output=<path> would write outside allowedDirs.
+  if (compare_against.startsWith("-")) {
+    return errorResult(`Invalid compare_against "${compare_against}": a git ref cannot start with "-".`);
+  }
+  // An unresolvable ref must fail loudly: as an empty baseline it reports every symbol as added.
+  // Checked on first use, so per-file notes (unsupported, binary, denied) still work outside a repo.
+  const invalidRef = errorResult(`compare_against "${compare_against}" is not a commit in this git repository.`);
+  let refKind: Promise<"commit" | "unborn" | "invalid"> | undefined;
+  const checkRefOnce = () => (refKind ??= checkRef(compare_against, cwd));
 
   // Expand "*" to all changed files
   if (filePaths.length === 1 && filePaths[0] === "*") {
-    filePaths = await getChangedFiles(projectDir ?? process.cwd(), compare_against);
+    const kind = await checkRefOnce();
+    if (kind === "invalid") return invalidRef;
+    ({ files: filePaths, renamedFrom } = await getChangedFiles(cwd, kind === "unborn" ? undefined : compare_against));
     if (filePaths.length === 0) {
       return textResult("No changed files found.");
     }
@@ -38,15 +61,38 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
       continue;
     }
 
+    realProject ??= realpath(cwd);
+    let resolvedPath: string;
+    let deletedOnDisk = false;
     const validated = await validatePath(filePath, "Read", projectDir, allowedDirs);
-    if (!validated.ok) {
-      sections.push(`## ${filePath}\n\nAccess denied.`);
-      continue;
+    if (validated.ok) {
+      resolvedPath = validated.resolvedPath;
+    } else {
+      // validatePath realpaths its target, so it rejects a file deleted since the
+      // ref. Rerun its boundary checks (checkPathBoundary) on the nearest existing
+      // ancestor plus the missing tail; content then comes from git, not disk.
+      const absolute = resolve(cwd, filePath);
+      // Something is on disk (denied, oversize, not a regular file), so this is not a deletion. "*" never is.
+      if (
+        filePath === "*" ||
+        (await lstat(absolute).then(
+          () => true,
+          () => false,
+        ))
+      ) {
+        sections.push(`## ${filePath}\n\nAccess denied.`);
+        continue;
+      }
+      resolvedPath = await resolveMissingPath(absolute);
+      const boundary = await checkPathBoundary(filePath, absolute, resolvedPath, "Read", projectDir, allowedDirs);
+      if (!boundary.ok) {
+        sections.push(`## ${filePath}\n\nAccess denied.`);
+        continue;
+      }
+      deletedOnDisk = true;
     }
 
-    const { resolvedPath } = validated;
-    const ext = extname(resolvedPath);
-    realProject ??= realpath(projectDir ?? process.cwd());
+    const ext = extname(resolvedPath).toLowerCase();
     const relPath = isAbsolute(filePath) ? relative(await realProject, resolvedPath) : filePath;
 
     // Unsupported file type: extension has no language config. Checked before
@@ -59,7 +105,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     // Read disk content
     let diskContent: string | null;
     try {
-      diskContent = await readTextNoFollow(resolvedPath);
+      diskContent = deletedOnDisk ? "" : await readTextNoFollow(resolvedPath);
     } catch {
       sections.push(`## ${relPath}\n\nFile not readable.`);
       continue;
@@ -70,12 +116,54 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     }
 
     // Read git content
-    toplevel ??= gitExec(["rev-parse", "--show-toplevel"], projectDir ?? process.cwd()).then((out) => out.trim());
-    const gitContent = await getGitContent(resolvedPath, compare_against, projectDir ?? process.cwd(), toplevel);
+    const refState = await checkRefOnce();
+    if (refState === "invalid") return invalidRef;
+    const oldPath = renamedFrom.get(filePath);
+    if (oldPath !== undefined) {
+      // The old side is historical content of a path the caller never named: it needs its own boundary and deny check.
+      const oldAbsolute = resolve(cwd, oldPath);
+      const oldBoundary = await checkPathBoundary(
+        oldPath,
+        oldAbsolute,
+        await resolveMissingPath(oldAbsolute),
+        "Read",
+        projectDir,
+        allowedDirs,
+      );
+      if (!oldBoundary.ok) {
+        sections.push(`## ${relPath}\n\nRenamed from a path that is not readable; not diffed.`);
+        continue;
+      }
+    }
+    let gitContent: string | null = null;
+    try {
+      // An unborn HEAD has no tree: every file is new. Spawning rev-parse there would leave its promise unawaited.
+      if (refState !== "unborn") {
+        toplevel ??= gitExec(["rev-parse", "--show-toplevel"], cwd).then((out) => out.trim());
+        gitContent = await getGitContent(
+          oldPath ? join(await realProject, oldPath) : resolvedPath,
+          compare_against,
+          cwd,
+          toplevel,
+        );
+      }
+    } catch (err) {
+      const { code, stderr = "", message } = err as Error & { code?: string; stderr?: string };
+      const reason =
+        code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+          ? "it is over the 10 MB limit"
+          : (stderr || message).trim().split("\n")[0];
+      sections.push(`## ${relPath}\n\nCould not read the ${compare_against} version: ${reason}.`);
+      continue;
+    }
+    if (gitContent === null && deletedOnDisk) {
+      sections.push(`## ${relPath}\n\nFile not found.`);
+      continue;
+    }
 
     // Extract symbols from both
     const [oldSymbols, newSymbols] = await Promise.all([
-      extractSymbols(gitContent, ext),
+      extractSymbols(gitContent ?? "", ext),
       extractSymbols(diskContent, ext),
     ]);
 
@@ -90,29 +178,81 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 // Git helpers
 // ==============================================================================
 
-async function getGitContent(filePath: string, ref: string, cwd: string, toplevel: Promise<string>): Promise<string> {
+/** "unborn" is HEAD in a repo with no commits, where every file is new. */
+async function checkRef(ref: string, cwd: string): Promise<"commit" | "unborn" | "invalid"> {
   try {
-    // Use git's own toplevel to compute the relative path, so that
-    // Windows 8.3 short-name mismatches between realpath() and the
-    // test's realpathSync() don't produce wrong relative paths.
-    const relPath = relative(await toplevel, filePath).replace(/\\/g, "/");
-    return await gitExec(["show", `${ref}:${relPath}`], cwd);
+    await gitExec(["rev-parse", "--verify", `${ref}^{commit}`], cwd);
+    return "commit";
   } catch {
-    return ""; // untracked or not in git
+    const onBranch = await gitExec(["symbolic-ref", "--quiet", "HEAD"], cwd).then(
+      () => true,
+      () => false,
+    );
+    return ref === "HEAD" && onBranch ? "unborn" : "invalid";
   }
 }
 
-async function getChangedFiles(cwd: string, ref: string): Promise<string[]> {
-  try {
-    const output = await gitExec(["diff", "--name-only", ref], cwd);
-    const untrackedOutput = await gitExec(["ls-files", "--others", "--exclude-standard"], cwd);
-    const files = [...output.trim().split("\n"), ...untrackedOutput.trim().split("\n")]
-      .filter(Boolean)
-      .map((f) => resolve(cwd, f));
-    return [...new Set(files)];
-  } catch {
-    return [];
+/**
+ * Canonical location of a path that may be gone from disk: the realpath of its nearest
+ * existing ancestor plus the missing tail. What checkPathBoundary expects as `realPath`.
+ */
+async function resolveMissingPath(absolute: string): Promise<string> {
+  let ancestor = absolute;
+  let realAncestor = await realpath(ancestor).catch(() => null);
+  while (realAncestor === null) {
+    ancestor = dirname(ancestor);
+    realAncestor = await realpath(ancestor).catch(() => null);
   }
+  return join(realAncestor, relative(ancestor, absolute));
+}
+
+/**
+ * Content of `filePath` at `ref`; null when the ref has no such file (new or untracked).
+ * Every other git failure throws: an empty baseline would report every symbol as added.
+ */
+async function getGitContent(
+  filePath: string,
+  ref: string,
+  cwd: string,
+  toplevel: Promise<string>,
+): Promise<string | null> {
+  // Use git's own toplevel to compute the relative path, so that
+  // Windows 8.3 short-name mismatches between realpath() and the
+  // test's realpathSync() don't produce wrong relative paths.
+  const relPath = relative(await toplevel, filePath).replace(/\\/g, "/");
+  // Not `git show <ref>:<path>`: for a glob-ish path (`zz*`, `[id]`) it exits 0 and prints the commit.
+  // ls-tree matches the path literally, and cat-file reads the blob by id, so no path is re-parsed.
+  // The `./` keeps a leading `:` from being read as pathspec magic.
+  const listing = await gitExec(["ls-tree", "-z", "--full-tree", ref, "--", `./${relPath}`], cwd);
+  const blobId = /^\d+ blob (\w+)\t/.exec(listing)?.[1];
+  if (blobId === undefined) return null;
+  const content = await gitExec(["cat-file", "blob", blobId], cwd);
+  // The disk side is read without its BOM; match it so a BOM-prefixed file does not differ on its first symbol.
+  return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+}
+
+/** Files changed since `ref` (undefined: no commits yet, so staged files count) plus untracked ones, as absolute paths. */
+async function getChangedFiles(
+  cwd: string,
+  ref: string | undefined,
+): Promise<{ files: string[]; renamedFrom: Map<string, string> }> {
+  // -z: git octal-quotes non-ASCII names otherwise. --relative: names are relative to
+  // cwd, not the repo root, so they resolve against cwd from a repo subdirectory.
+  const baseline = ref ?? "--cached";
+  const changes = (await gitExec(["diff", "--name-status", "-z", "-M", "--relative", baseline, "--"], cwd)).split("\0");
+  const untracked = (await gitExec(["ls-files", "--others", "--exclude-standard", "-z"], cwd)).split("\0");
+  const files = new Set<string>();
+  const renamedFrom = new Map<string, string>();
+  // Records are `<status>\0<path>\0`, or `R<score>\0<old>\0<new>\0` for a rename; the last split entry is empty.
+  let i = 0;
+  while (i < changes.length - 1) {
+    const oldName = changes[i++].startsWith("R") ? changes[i++] : undefined;
+    const file = resolve(cwd, changes[i++]);
+    files.add(file);
+    if (oldName !== undefined) renamedFrom.set(file, oldName);
+  }
+  for (const name of untracked.filter(Boolean)) files.add(resolve(cwd, name));
+  return { files: [...files], renamedFrom };
 }
 
 // ==============================================================================
