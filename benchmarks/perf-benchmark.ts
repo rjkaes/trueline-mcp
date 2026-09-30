@@ -96,77 +96,28 @@ function generateLargeFile(): void {
 // Benchmarks
 // ===========================================================================
 
-async function benchReadLargeFile(): Promise<BenchResult> {
-  return bench("read-large-file", 20, async () => {
-    await handleRead({ file_path: LARGE_FILE, projectDir: tmpDir, allowedDirs: [tmpDir] });
-  });
-}
+const scope = { projectDir: tmpDir, allowedDirs: [tmpDir] };
 
-async function benchReadRanged(): Promise<BenchResult> {
-  return bench("read-ranged", 50, async () => {
-    await handleRead({
-      file_path: LARGE_FILE,
-      ranges: ["5000-5050"],
-      projectDir: tmpDir,
-      allowedDirs: [tmpDir],
-    });
-  });
-}
-
-async function benchSearchFewMatches(): Promise<BenchResult> {
-  return bench("search-large-file", 30, async () => {
-    await handleSearch({
-      file_paths: [LARGE_FILE],
-      pattern: "MARKER",
-      max_matches: 10,
-      projectDir: tmpDir,
-      allowedDirs: [tmpDir],
-    });
-  });
-}
-
-async function benchSearchManyMatches(): Promise<BenchResult> {
-  return bench("search-many-matches", 30, async () => {
-    await handleSearch({
-      file_paths: [LARGE_FILE],
-      pattern: "const line_",
-      max_matches: 500,
-      projectDir: tmpDir,
-      allowedDirs: [tmpDir],
-    });
-  });
-}
-
-async function benchEditSingleLine(): Promise<BenchResult> {
-  const readResult = await handleRead({
-    file_path: LARGE_FILE,
-    ranges: ["100-100"],
-    projectDir: tmpDir,
-    allowedDirs: [tmpDir],
-  });
+// trueline_read pads a range with one context line per side. The dry-run edit
+// replaces only the first returned line, or every returned line if `wholeRead`.
+async function editBench(name: string, range: string, content: string[], wholeRead: boolean): Promise<BenchResult> {
+  const readResult = await handleRead({ file_path: LARGE_FILE, ranges: [range], ...scope });
   const text = readResult.content[0].text;
   const refMatch = text.match(/^ref: (\S+)$/m);
-  const lineMatch = text.match(/^([a-z]{2})(\d+)\t(.*)$/m);
-  if (!refMatch || !lineMatch) throw new Error("Failed to parse read result for edit benchmark");
+  const hashLines = [...text.matchAll(/^([a-z]{2})(\d+)\t/gm)];
+  if (!refMatch || hashLines.length === 0) throw new Error(`Failed to parse read result for ${name} benchmark`);
 
-  const hash = lineMatch[1];
-  const lineNum = Number.parseInt(lineMatch[2], 10);
   const { startLine: csStart, endLine: csEnd, hash: csHash } = parseChecksum(refMatch[1]);
+  const first = hashLines[0];
+  const last = wholeRead ? hashLines[hashLines.length - 1] : first;
+  const startLine = Number.parseInt(first[2], 10);
+  const endLine = Number.parseInt(last[2], 10);
 
-  return bench("edit-single-line", 20, async () => {
+  return bench(name, 20, async () => {
     const mtimeMs = statSync(LARGE_FILE).mtimeMs;
     await streamingEdit(
       LARGE_FILE,
-      [
-        {
-          startLine: lineNum,
-          endLine: lineNum,
-          startHash: hash,
-          endHash: hash,
-          content: ["const replaced = true;"],
-          insertAfter: false,
-        },
-      ],
+      [{ startLine, endLine, startHash: first[1], endHash: last[1], content, insertAfter: false }],
       [{ startLine: csStart, endLine: csEnd, hash: csHash }],
       mtimeMs,
       true, // dryRun — don't modify the file
@@ -174,133 +125,99 @@ async function benchEditSingleLine(): Promise<BenchResult> {
   });
 }
 
-async function benchEditMultiLine(): Promise<BenchResult> {
-  const readResult = await handleRead({
-    file_path: LARGE_FILE,
-    ranges: ["100-119"],
-    projectDir: tmpDir,
-    allowedDirs: [tmpDir],
-  });
-  const text = readResult.content[0].text;
-  const refMatch = text.match(/^ref: (\S+)$/m);
-  const lines = text.split("\n").filter((l) => /^[a-z]{2}\d+\t/.test(l));
-  if (!refMatch || lines.length === 0) throw new Error("Failed to parse read result for multi-line edit benchmark");
-
-  const { startLine: csStart, endLine: csEnd, hash: csHash } = parseChecksum(refMatch[1]);
-
-  const firstMatch = lines[0].match(/^([a-z]{2})(\d+)\t/);
-  const lastMatch = lines[lines.length - 1].match(/^([a-z]{2})(\d+)\t/);
-  if (!firstMatch || !lastMatch) throw new Error("Failed to parse line hashes");
-
-  const replacement = Array.from({ length: 20 }, (_, i) => `const replaced_${i} = ${i};`);
-
-  return bench("edit-multi-line", 20, async () => {
-    const mtimeMs = statSync(LARGE_FILE).mtimeMs;
-    await streamingEdit(
-      LARGE_FILE,
-      [
-        {
-          startLine: Number.parseInt(firstMatch[2], 10),
-          endLine: Number.parseInt(lastMatch[2], 10),
-          startHash: firstMatch[1],
-          endHash: lastMatch[1],
-          content: replacement,
-          insertAfter: false,
-        },
-      ],
-      [{ startLine: csStart, endLine: csEnd, hash: csHash }],
-      mtimeMs,
+const benchmarks: Array<() => Promise<BenchResult>> = [
+  () =>
+    bench("read-large-file", 20, async () => {
+      await handleRead({ file_path: LARGE_FILE, ...scope });
+    }),
+  () =>
+    bench("read-ranged", 50, async () => {
+      await handleRead({ file_path: LARGE_FILE, ranges: ["5000-5050"], ...scope });
+    }),
+  () =>
+    bench("search-large-file", 30, async () => {
+      await handleSearch({ file_paths: [LARGE_FILE], pattern: "MARKER", max_matches: 10, ...scope });
+    }),
+  () =>
+    bench("search-many-matches", 30, async () => {
+      await handleSearch({ file_paths: [LARGE_FILE], pattern: "const line_", max_matches: 500, ...scope });
+    }),
+  () => editBench("edit-single-line", "100-100", ["const replaced = true;"], false),
+  () =>
+    editBench(
+      "edit-multi-line",
+      "100-119",
+      Array.from({ length: 20 }, (_, i) => `const replaced_${i} = ${i};`),
       true,
-    );
-  });
-}
+    ),
+  async () => {
+    const buf = Buffer.alloc(10240);
+    for (let i = 0; i < buf.length; i++) buf[i] = (i * 7 + 13) & 0xff;
 
-async function benchHashBytes(): Promise<BenchResult> {
-  const buf = Buffer.alloc(10240);
-  for (let i = 0; i < buf.length; i++) buf[i] = (i * 7 + 13) & 0xff;
-
-  return bench("hash-bytes", 10_000, () => {
-    fnv1aHashBytes(buf);
-  });
-}
-
-async function benchHashToLetters(): Promise<BenchResult> {
-  const hashes = new Uint32Array(1000);
-  for (let i = 0; i < hashes.length; i++) hashes[i] = (i * 2654435761) >>> 0;
-
-  return bench("hash-to-letters", 1000, () => {
-    for (let i = 0; i < hashes.length; i++) hashToLetters(hashes[i]);
-  });
-}
-
-async function benchSemanticDiff(): Promise<BenchResult> {
-  const gitDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-sdiff-")));
-  const testFile = join(gitDir, "app.ts");
-
-  // Set up a small git repo with TypeScript functions
-  const git = (cmd: string) =>
-    execSync(cmd, {
-      cwd: gitDir,
-      stdio: "pipe",
-      env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+    return bench("hash-bytes", 10_000, () => {
+      fnv1aHashBytes(buf);
     });
+  },
+  async () => {
+    const hashes = new Uint32Array(1000);
+    for (let i = 0; i < hashes.length; i++) hashes[i] = (i * 2654435761) >>> 0;
 
-  git("git init");
-  git('git config user.email "bench@test.com"');
-  git('git config user.name "Bench"');
-
-  const baseContent = [
-    "function add(a: number, b: number): number { return a + b; }",
-    "function subtract(a: number, b: number): number { return a - b; }",
-    "function multiply(a: number, b: number): number { return a * b; }",
-    "class Calculator {",
-    "  compute(op: string, a: number, b: number): number {",
-    "    switch (op) {",
-    '      case "add": return add(a, b);',
-    '      case "sub": return subtract(a, b);',
-    '      case "mul": return multiply(a, b);',
-    '      default: throw new Error("unknown");',
-    "    }",
-    "  }",
-    "}",
-  ].join("\n");
-
-  writeFileSync(testFile, `${baseContent}\n`);
-  git("git add .");
-  git("git commit -m initial");
-
-  // Modified version: remove subtract, add divide, change multiply params, add method
-  const modifiedContent = [
-    "function add(a: number, b: number): number { return a + b; }",
-    'function divide(a: number, b: number): number { if (b === 0) throw new Error("zero"); return a / b; }',
-    "function multiply(x: number, y: number): number { return x * y; }",
-    "class Calculator {",
-    "  compute(op: string, a: number, b: number): number {",
-    "    switch (op) {",
-    '      case "add": return add(a, b);',
-    '      case "div": return divide(a, b);',
-    '      case "mul": return multiply(a, b);',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal code content
-    "      default: throw new Error(`unknown: ${op}`);",
-    "    }",
-    "  }",
-    "  getHistory(): number[] { return []; }",
-    "}",
-  ].join("\n");
-
-  writeFileSync(testFile, `${modifiedContent}\n`);
-
-  return bench("semantic-diff", 20, async () => {
-    await handleDiff({
-      file_paths: ["app.ts"],
-      compare_against: "HEAD",
-      projectDir: gitDir,
-      allowedDirs: [gitDir],
+    return bench("hash-to-letters", 1000, () => {
+      for (let i = 0; i < hashes.length; i++) hashToLetters(hashes[i]);
     });
-  }).finally(() => {
-    rmSync(gitDir, { recursive: true, force: true });
-  });
+  },
+  async () => {
+    const gitDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-sdiff-")));
+    const testFile = join(gitDir, "app.ts");
+    const git = (cmd: string) =>
+      execSync(cmd, {
+        cwd: gitDir,
+        stdio: "pipe",
+        env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+      });
+
+    // A small committed file, then a working-tree version that removes, adds and re-signs
+    // functions, changes a body and adds a method.
+    const baseContent = `function add(a: number, b: number): number { return a + b; }
+function subtract(a: number, b: number): number { return a - b; }
+function multiply(a: number, b: number): number { return a * b; }
+class Calculator {
+  compute(op: string, a: number, b: number): number {
+    switch (op) {
+      case "add": return add(a, b);
+      case "sub": return subtract(a, b);
+      case "mul": return multiply(a, b);
+      default: throw new Error("unknown");
+    }
+  }
 }
+`;
+    const modifiedContent = baseContent
+      .replace(
+        /function subtract.*/,
+        'function divide(a: number, b: number): number { if (b === 0) throw new Error("zero"); return a / b; }',
+      )
+      .replace(
+        "multiply(a: number, b: number): number { return a * b; }",
+        "multiply(x: number, y: number): number { return x * y; }",
+      )
+      .replace('"sub": return subtract', '"div": return divide')
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal code content
+      .replace('new Error("unknown")', "new Error(`unknown: ${op}`)")
+      .replace("  }\n}\n", "  }\n  getHistory(): number[] { return []; }\n}\n");
+
+    writeFileSync(testFile, baseContent);
+    git('git init && git config user.email "bench@test.com" && git config user.name "Bench"');
+    git("git add . && git commit -m initial");
+    writeFileSync(testFile, modifiedContent);
+
+    return bench("semantic-diff", 20, async () => {
+      await handleDiff({ file_paths: ["app.ts"], compare_against: "HEAD", projectDir: gitDir, allowedDirs: [gitDir] });
+    }).finally(() => {
+      rmSync(gitDir, { recursive: true, force: true });
+    });
+  },
+];
 
 // ===========================================================================
 // Main
@@ -314,16 +231,7 @@ async function main(): Promise<void> {
   console.log();
 
   const results: BenchResult[] = [];
-
-  results.push(await benchReadLargeFile());
-  results.push(await benchReadRanged());
-  results.push(await benchSearchFewMatches());
-  results.push(await benchSearchManyMatches());
-  results.push(await benchEditSingleLine());
-  results.push(await benchEditMultiLine());
-  results.push(await benchHashBytes());
-  results.push(await benchHashToLetters());
-  results.push(await benchSemanticDiff());
+  for (const run of benchmarks) results.push(await run());
 
   // Cleanup temp dir before printing (semantic-diff already cleans its own)
   rmSync(tmpDir, { recursive: true, force: true });
