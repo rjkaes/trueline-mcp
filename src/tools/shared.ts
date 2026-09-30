@@ -290,6 +290,16 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
       }
     }
 
+    // trueline refuses to read, search or edit a file holding a NUL byte, so writing one
+    // would leave the file out of reach of every trueline tool.
+    if (edit.content.includes("\0")) {
+      return failed(
+        `Edit content for range ${edit.range} contains a NUL character (U+0000). ` +
+          `Files with NUL bytes count as binary and could no longer be read or edited with trueline. ` +
+          `Remove the NUL character and retry.`,
+      );
+    }
+
     // Detect hashLine identifiers leaked into content.  LLMs sometimes confuse
     // the addressing syntax ("zm82") shown in trueline_read output with actual
     // file content, writing it into the replacement text and corrupting the file.
@@ -468,14 +478,21 @@ export async function expandGlobs(
     return real !== null && isContained(real, bases);
   }
 
-  async function exists(path: string): Promise<boolean> {
-    return (await stat(resolve(baseDir, path)).catch(() => null)) !== null;
+  // Inside the boundary only: an outside name with glob characters is dropped like a missing
+  // one. Passing it on would have validatePath answer "Access denied" only when it exists.
+  async function existsInside(path: string): Promise<boolean> {
+    const absolute = resolve(baseDir, path);
+    return (await stat(absolute).catch(() => null)) !== null && (await isInAllowedDir(absolute));
   }
 
   for (const entry of filePaths) {
     // An existing literal path wins over glob syntax, e.g. Next.js "app/[id]/page.tsx",
     // whether or not it carries an inline ":range" (handlers split that off later).
-    if (!GLOB_CHARS.test(entry) || (await exists(entry)) || (await exists(parseFilePathWithRanges(entry).path))) {
+    if (
+      !GLOB_CHARS.test(entry) ||
+      (await existsInside(entry)) ||
+      (await existsInside(parseFilePathWithRanges(entry).path))
+    ) {
       add(entry);
       continue;
     }

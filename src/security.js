@@ -92,7 +92,9 @@ export function fileGlobToRegex(glob, caseInsensitive = false) {
     }
   });
 
-  const re = new RegExp(`^${regexStr}$`, caseInsensitive ? "i" : "");
+  // dotAll: `**` compiles to `.*`, which must span names holding \n, \r, U+2028 or U+2029
+  // just as `[^/]*` does; otherwise a rule covering a directory misses such names.
+  const re = new RegExp(`^${regexStr}$`, caseInsensitive ? "is" : "s");
   regexCache.set(cacheKey, re);
   return re;
 }
@@ -167,11 +169,12 @@ export async function readToolDenyPatterns(toolName, projectDir, globalSettingsP
     const cached = settingsCache.get(cacheKey);
     if (cached && cached.mtime === mtime) return cached.globs;
 
-    // Read and parse in one step — both failures mean "no usable data".
+    // Read and parse in one step — both failures mean "no usable data". A leading BOM
+    // (Windows editors) is stripped first: JSON.parse rejects it, which would drop every rule.
     /** @type {unknown} */
     let parsed;
     try {
-      parsed = JSON.parse(await readFile(path, "utf-8"));
+      parsed = JSON.parse((await readFile(path, "utf-8")).replace(/^\uFEFF/, ""));
     } catch {
       settingsCache.set(cacheKey, { mtime, globs: null });
       return null;
@@ -266,11 +269,16 @@ export function evaluateFilePath(
   denyGlobs,
   caseInsensitive = process.platform === "win32" || process.platform === "darwin",
 ) {
+  // APFS and HFS+ treat NFC and NFD spellings as one name, just as they fold case, so a
+  // rule typed in one form must still match a path reached in the other.
+  /** @param {string} path @returns {string} */
+  const fold = (path) => (caseInsensitive ? path.normalize("NFC") : path);
+
   // Test the path and each of its parent directories, so a rule naming a
   // directory covers its contents.
   /** @type {string[]} */
   const targets = [];
-  for (let path = toPosix(filePath); path; path = path.slice(0, Math.max(path.lastIndexOf("/"), 0))) {
+  for (let path = fold(toPosix(filePath)); path; path = path.slice(0, Math.max(path.lastIndexOf("/"), 0))) {
     targets.push(path);
   }
 
@@ -278,7 +286,7 @@ export function evaluateFilePath(
   const matchesExpanded = (expanded, target) => {
     // A trailing "/" limits a gitignore rule to directories. What kind of path
     // this is isn't known here, so the rule applies to either (fail-closed).
-    const glob = toPosix(expanded).replace(/(?<=.)\/+$/, "");
+    const glob = fold(toPosix(expanded)).replace(/(?<=.)\/+$/, "");
     const re = fileGlobToRegex(glob, caseInsensitive);
     if (re.test(target)) return true;
 
