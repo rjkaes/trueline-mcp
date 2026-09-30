@@ -214,8 +214,11 @@ export class DiffCollector {
         if (e.type !== "del") newCount++;
       }
 
-      const oldRange = oldCount === 1 ? `${oldLine}` : `${oldLine},${oldCount}`;
-      const newRange = newCount === 1 ? `${newLine}` : `${newLine},${newCount}`;
+      // An empty side is anchored at the line before the hunk, as GNU diff prints it (-0,0 for an empty file).
+      const oldStart = oldCount === 0 ? oldLine - 1 : oldLine;
+      const newStart = newCount === 0 ? newLine - 1 : newLine;
+      const oldRange = oldCount === 1 ? `${oldStart}` : `${oldStart},${oldCount}`;
+      const newRange = newCount === 1 ? `${newStart}` : `${newStart},${newCount}`;
       parts.push(`@@ -${oldRange} +${newRange} @@`);
       for (const line of lines) parts.push(line);
     }

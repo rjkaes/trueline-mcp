@@ -115,19 +115,24 @@ interface EditSite {
 }
 
 function computeEditSites(ops: StreamEditOp[]): EditSite[] {
-  const sites: EditSite[] = [];
+  const sites = new Array<EditSite>(ops.length);
   let shift = 0;
-  for (const op of ops) {
+  // Shifts accumulate in file order, whatever order the caller listed the edits in.
+  // On a shared line the replace comes first: an insert_after is emitted after it.
+  const inFileOrder = ops
+    .map((op, index) => ({ op, index }))
+    .sort((a, b) => a.op.startLine - b.op.startLine || Number(a.op.insertAfter) - Number(b.op.insertAfter));
+  for (const { op, index } of inFileOrder) {
     if (op.insertAfter) {
       const newStart = op.startLine + 1 + shift;
       const newEnd = op.startLine + op.content.length + shift;
-      sites.push({ newStart, newEnd, lineCount: op.content.length });
+      sites[index] = { newStart, newEnd, lineCount: op.content.length };
       shift += op.content.length;
     } else {
       const span = op.endLine - op.startLine + 1;
       const newStart = op.startLine + shift;
       const newEnd = op.startLine + op.content.length - 1 + shift;
-      sites.push({ newStart, newEnd, lineCount: op.content.length });
+      sites[index] = { newStart, newEnd, lineCount: op.content.length };
       shift += op.content.length - span;
     }
   }

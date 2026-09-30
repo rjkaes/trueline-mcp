@@ -89,6 +89,60 @@ const failed = (msg: string) => ({ ok: false as const, error: errorResult(msg) }
 type ValidatePathResult = Result<{ resolvedPath: string; size: number; mtimeMs: number }>;
 
 /**
+ * Containment and deny-pattern gate for a resolved path. validatePath and the
+ * deleted-file branch of trueline_changes both go through it, so a boundary
+ * change lands in both. Reads no file content.
+ *
+ * `resolvedPath` is the requested absolute path (symlinks unresolved);
+ * `realPath` is its canonical form, or for a file gone from disk the nearest
+ * existing ancestor's realpath plus the missing tail.
+ */
+export async function checkPathBoundary(
+  file_path: string,
+  resolvedPath: string,
+  realPath: string,
+  toolName: string,
+  projectDir: string | undefined,
+  allowedDirs: string[] = [],
+): Promise<Result<unknown>> {
+  // Build the list of allowed base directories. projectDir (or cwd) is
+  // always included; additional dirs come from the caller (e.g. ~/.claude/,
+  // TRUELINE_ALLOWED_DIRS).  All bases are resolved through realpath so that
+  // short 8.3 names on Windows (e.g. RUNNER~1) match the realpath of the file.
+  let realBase: string;
+  try {
+    realBase = await realpath(projectDir ? projectDir : process.cwd());
+  } catch {
+    return failed("Project directory not found or inaccessible");
+  }
+  // Resolve allowedDirs through realpath too, so short 8.3 names and
+  // inconsistent casing (Windows drive letters) match the file's realPath.
+  const resolvedAllowed = await Promise.all(
+    allowedDirs.map(async (d) => {
+      try {
+        return await realpath(d);
+      } catch {
+        return d;
+      }
+    }),
+  );
+  const allBases = [realBase, ...resolvedAllowed];
+  if (!isContained(realPath, allBases)) {
+    return failed(`Access denied: "${file_path}" is outside the project directory`);
+  }
+  // Deny rules match the requested path and the file it resolves to, so a rule that names
+  // a symlink (`vault/**`) applies as well as one that names its target.
+  const denyGlobs = await readToolDenyPatterns(toolName, projectDir);
+  for (const candidate of new Set([realPath, resolve(resolvedPath)])) {
+    const { denied, matchedPattern } = evaluateFilePath(candidate, denyGlobs);
+    if (denied) {
+      return failed(`Access denied: "${file_path}" matched deny pattern "${matchedPattern}"`);
+    }
+  }
+  return { ok: true };
+}
+
+/**
  * Validate and resolve a file path without reading its content.
  *
  * Performs symlink resolution, containment checks, deny-pattern evaluation,
@@ -122,37 +176,8 @@ export async function validatePath(
   if (!fileStat.isFile()) {
     return failed(`"${file_path}" is not a regular file`);
   }
-  // Build the list of allowed base directories. projectDir (or cwd) is
-  // always included; additional dirs come from the caller (e.g. ~/.claude/,
-  // TRUELINE_ALLOWED_DIRS).  All bases are resolved through realpath so that
-  // short 8.3 names on Windows (e.g. RUNNER~1) match the realpath of the file.
-  let realBase: string;
-  try {
-    realBase = await realpath(projectDir ? projectDir : process.cwd());
-  } catch {
-    return failed("Project directory not found or inaccessible");
-  }
-  // Resolve allowedDirs through realpath too, so short 8.3 names and
-  // inconsistent casing (Windows drive letters) match the file's realPath.
-  const resolvedAllowed = await Promise.all(
-    allowedDirs.map(async (d) => {
-      try {
-        return await realpath(d);
-      } catch {
-        return d;
-      }
-    }),
-  );
-  const allBases = [realBase, ...resolvedAllowed];
-  if (!isContained(realPath, allBases)) {
-    return failed(`Access denied: "${file_path}" is outside the project directory`);
-  }
-  // Evaluate deny patterns against the real path so symlinks can't bypass them.
-  const denyGlobs = await readToolDenyPatterns(toolName, projectDir);
-  const { denied, matchedPattern } = evaluateFilePath(realPath, denyGlobs);
-  if (denied) {
-    return failed(`Access denied: "${file_path}" matched deny pattern "${matchedPattern}"`);
-  }
+  const boundary = await checkPathBoundary(file_path, resolvedPath, realPath, toolName, projectDir, allowedDirs);
+  if (!boundary.ok) return boundary;
 
   // Reject files over 10 MB to avoid unbounded memory/time in downstream tools.
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -273,8 +298,13 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
       startLine: rangeRef.start.line,
       endLine: rangeRef.end.line,
       // "" deletes, except insert_after where it means one blank line. Otherwise
-      // one trailing "\n" is a terminator: "\n" is one blank line, not a delete.
-      content: edit.content === "" && !rangeRef.insertAfter ? [] : edit.content.replace(/\n$/, "").split("\n"),
+      // one trailing line break is a terminator: "\n" is one blank line, not a delete.
+      // CRLF and CR split lines as they do when a file is read; the write side
+      // supplies the file's own EOL.
+      content:
+        edit.content === "" && !rangeRef.insertAfter
+          ? []
+          : edit.content.replace(/(\r\n|\r|\n)$/, "").split(/\r\n|\r|\n/),
       insertAfter: rangeRef.insertAfter,
       startHash: rangeRef.start.hash,
       endHash: rangeRef.end.hash,
@@ -332,7 +362,8 @@ const SUPPORTED_ENCODINGS: Record<string, BufferEncoding> = {
  */
 export function validateEncoding(encoding?: string): BufferEncoding {
   if (encoding === undefined) return "utf-8";
-  const normalized = SUPPORTED_ENCODINGS[encoding.toLowerCase()];
+  const key = encoding.toLowerCase();
+  const normalized = Object.hasOwn(SUPPORTED_ENCODINGS, key) ? SUPPORTED_ENCODINGS[key] : undefined;
   if (normalized === undefined) {
     throw new Error(`Unsupported encoding "${encoding}". Supported: utf-8, ascii, latin1`);
   }
@@ -380,9 +411,12 @@ interface GlobRoot {
 /**
  * Expand glob patterns in a file_paths array.
  *
- * Entries without glob characters pass through unchanged. Globs only ever
- * list projectDir and allowedDirs: a name outside them is never returned,
- * because validatePath denying the read would not undo the listing.
+ * Entries without glob characters pass through unchanged, as does one that
+ * names an existing path, with or without an inline ":range". A pattern with
+ * brackets that matches nothing is retried with them literal, so Next.js
+ * "app/[id]/*.tsx" works. Globs only ever list projectDir and allowedDirs: a
+ * name outside them is never returned, because validatePath denying the read
+ * would not undo the listing.
  * Recursive globs (containing `**`) use `git ls-files` to respect .gitignore,
  * falling back to Node glob with common directory exclusions. Non-recursive
  * globs use Node glob directly (they don't descend into problem directories).
@@ -417,8 +451,14 @@ export async function expandGlobs(
     return real !== null && isContained(real, bases);
   }
 
+  async function exists(path: string): Promise<boolean> {
+    return (await stat(resolve(baseDir, path)).catch(() => null)) !== null;
+  }
+
   for (const entry of filePaths) {
-    if (!GLOB_CHARS.test(entry)) {
+    // An existing literal path wins over glob syntax, e.g. Next.js "app/[id]/page.tsx",
+    // whether or not it carries an inline ":range" (handlers split that off later).
+    if (!GLOB_CHARS.test(entry) || (await exists(entry)) || (await exists(parseFilePathWithRanges(entry).path))) {
       add(entry);
       continue;
     }
@@ -436,29 +476,41 @@ export async function expandGlobs(
     const output = (match: string) =>
       isAbsolute(pattern) || root.label !== baseDir ? resolve(root.label, match) : match;
 
-    if (RECURSIVE_GLOB.test(pattern)) {
-      // Recursive glob: use git ls-files to respect .gitignore
-      const gitFiles = await gitListFiles(root.real);
-      if (gitFiles) {
-        // git paths are relative to root, so matching them against localPattern cannot escape it.
-        for (const f of gitFiles) {
-          if (matchesGlob(f, localPattern)) add(output(f));
+    const listMatches = async (localGlob: string): Promise<string[]> => {
+      const matches: string[] = [];
+      if (RECURSIVE_GLOB.test(pattern)) {
+        // Recursive glob: use git ls-files to respect .gitignore
+        const gitFiles = await gitListFiles(root.real);
+        if (gitFiles) {
+          // git paths are relative to root, so matching them against localGlob cannot escape it.
+          for (const f of gitFiles) {
+            if (matchesGlob(f, localGlob)) matches.push(output(f));
+          }
+        } else {
+          // Fallback: Node glob with common exclusions
+          for await (const match of glob(localGlob, {
+            cwd: root.real,
+            exclude: (name) => FALLBACK_EXCLUDE_DIRS.has(name),
+          })) {
+            if (await isInAllowedDir(resolve(root.real, match))) matches.push(output(match));
+          }
         }
       } else {
-        // Fallback: Node glob with common exclusions
-        for await (const match of glob(localPattern, {
-          cwd: root.real,
-          exclude: (name) => FALLBACK_EXCLUDE_DIRS.has(name),
-        })) {
-          if (await isInAllowedDir(resolve(root.real, match))) add(output(match));
+        // Non-recursive glob: Node glob is safe (won't descend into node_modules)
+        for await (const match of glob(localGlob, { cwd: root.real })) {
+          if (await isInAllowedDir(resolve(root.real, match))) matches.push(output(match));
         }
       }
-    } else {
-      // Non-recursive glob: Node glob is safe (won't descend into node_modules)
-      for await (const match of glob(localPattern, { cwd: root.real })) {
-        if (await isInAllowedDir(resolve(root.real, match))) add(output(match));
-      }
+      return matches;
+    };
+
+    let matched = await listMatches(localPattern);
+    // "[id]" reads as a character class, so "app/[id]/*.tsx" finds nothing. Retry with
+    // the brackets literal; "[[]" is the escape Node and Bun globs both honor, "\[" is not.
+    if (matched.length === 0 && localPattern.includes("[")) {
+      matched = await listMatches(localPattern.replace(/[[\]]/g, (bracket) => `[${bracket}]`));
     }
+    for (const match of matched) add(match);
   }
 
   return [...paths].sort();

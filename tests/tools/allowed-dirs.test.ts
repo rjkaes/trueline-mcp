@@ -112,6 +112,10 @@ describe("isContained", () => {
     expect(isContained(`${base}-archive${sep}app.ts`, [base])).toBe(false);
   });
 
+  test("a filesystem-root base contains every absolute path", () => {
+    expect(isContained(join(sep, "etc", "hosts"), [sep])).toBe(true);
+  });
+
   test("ignores case on win32", () => {
     Object.defineProperty(process, "platform", { value: "win32" });
     expect(isContained(join(sep, "users", "alice", "project", "app.ts"), [base])).toBe(true);

@@ -38,3 +38,28 @@ describe("DiffCollector.format on very large diffs", () => {
     expect(diff.endsWith(" kept line\n")).toBe(true);
   });
 });
+
+// GNU unified diff anchors an empty side at the line before the hunk, so its start is 0 for a whole file.
+describe("DiffCollector.format hunk header for an empty side", () => {
+  test("insert into an empty file", () => {
+    const one = new DiffCollector();
+    one.insert("first");
+    expect(one.format("a/f.txt", "b/f.txt")).toContain("@@ -0,0 +1 @@");
+
+    const two = new DiffCollector();
+    two.insert("first");
+    two.insert("second");
+    expect(two.format("a/f.txt", "b/f.txt")).toContain("@@ -0,0 +1,2 @@");
+  });
+
+  test("delete every line of a file", () => {
+    const one = new DiffCollector();
+    one.delete("first");
+    expect(one.format("a/f.txt", "b/f.txt")).toContain("@@ -1 +0,0 @@");
+
+    const two = new DiffCollector();
+    two.delete("first");
+    two.delete("second");
+    expect(two.format("a/f.txt", "b/f.txt")).toContain("@@ -1,2 +0,0 @@");
+  });
+});

@@ -5,7 +5,9 @@ import {
   writeFileSync,
   readFileSync,
   mkdirSync,
+  readdirSync,
   rmSync,
+  chmodSync,
   statSync,
   symlinkSync,
 } from "node:fs";
@@ -13,9 +15,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { handleEdit } from "../../src/tools/edit.ts";
+import { handleRead } from "../../src/tools/read.ts";
 import type { EditInput } from "../../src/tools/shared.ts";
 import { coerceParams } from "../../src/coerce.ts";
-import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, getText, writeTestFile } from "../helpers.ts";
+import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, getText, writeTestFile, hashLine } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -878,5 +881,323 @@ describe("handleEdit", () => {
     // Clean up
     const { unlinkSync } = await import("node:fs");
     unlinkSync(diffPath);
+  });
+});
+
+// Edit-engine regressions. Refs come from handleRead, as they do for real callers.
+async function holdRefs(file: string) {
+  const text = getText(await handleRead({ file_path: file, projectDir: testDir }));
+  const ref = /^ref: (\S+)$/m.exec(text)?.[1];
+  if (!ref) throw new Error(`setup: no ref in read output:\n${text}`);
+  return { ref, hashLines: [...text.matchAll(/^([a-z]{2}\d+)\t/gm)].map((m) => m[1]) };
+}
+
+type EditSpec = { range: string; content: string; action?: "replace" | "insert_after" };
+
+async function runEdit(
+  file: string,
+  ref: string,
+  edits: EditSpec[],
+  opts: { dry_run?: boolean; context_lines?: number } = {},
+) {
+  return handleEdit({ file_path: file, projectDir: testDir, edits: edits.map((e) => ({ ref, ...e })), ...opts });
+}
+
+const returnedRef = (result: { content: Array<{ text: string }> }) => /^ref: (\S+)/m.exec(getText(result))?.[1];
+
+// A hash prefix that differs from `letters`.
+const otherHash = (letters: string) => (letters === "zz" ? "yy" : "zz");
+
+describe("line-0 insert keeps the file's EOL on every inserted line", () => {
+  const encodings: Record<string, (text: string) => Buffer> = {
+    "utf-8": (text) => Buffer.from(text),
+    "utf-8 BOM": (text) => Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(text)]),
+    "utf-16le": (text) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")]),
+    "utf-16be": (text) => Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(text, "utf16le").swap16()]),
+  };
+
+  for (const [name, encode] of Object.entries(encodings)) {
+    test(`CRLF file, ${name}`, async () => {
+      const file = join(testDir, "prepend.txt");
+      writeFileSync(file, encode("a\r\nb\r\n"));
+      const { ref } = await holdRefs(file);
+
+      const result = await runEdit(file, ref, [{ range: "0", action: "insert_after", content: "h1\nh2\nh3" }]);
+
+      expect(result.isError).toBeUndefined();
+      expect(readFileSync(file).toString("hex")).toBe(encode("h1\r\nh2\r\nh3\r\na\r\nb\r\n").toString("hex"));
+    });
+  }
+});
+
+describe("the last line keeps its own EOL", () => {
+  test("an LF last line in a file whose first line is CRLF stays LF", async () => {
+    const file = writeTestFile(testDir, "mixed.txt", "first\r\nsecond\nthird\n");
+    const { ref, hashLines } = await holdRefs(file);
+
+    await runEdit(file, ref, [{ range: hashLines[0], content: "FIRST" }]);
+
+    expect(readFileSync(file, "utf-8")).toBe("FIRST\r\nsecond\nthird\n");
+  });
+});
+
+describe("a blank last line without a trailing newline is not dropped", () => {
+  test("insert_after the last line with an empty string", async () => {
+    const file = writeTestFile(testDir, "blank-insert.txt", "a\nb");
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [{ range: hashLines[1], action: "insert_after", content: "" }]);
+
+    expect(readFileSync(file, "utf-8")).toBe("a\nb\n\n");
+    expect(returnedRef(result)).toBe((await holdRefs(file)).ref);
+  });
+
+  test("replacing the last line with content ending in a blank line", async () => {
+    const file = writeTestFile(testDir, "blank-replace.txt", "a\nb");
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [{ range: hashLines[1], content: "x\n\n" }]);
+
+    expect(readFileSync(file, "utf-8")).toBe("a\nx\n\n");
+    expect(returnedRef(result)).toBe((await holdRefs(file)).ref);
+  });
+});
+
+describe("line endings inside edit content are normalized to the file's EOL", () => {
+  test("CRLF content into a CRLF file", async () => {
+    const file = writeTestFile(testDir, "crlf.txt", "one\r\ntwo\r\nthree\r\n");
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [{ range: `${hashLines[0]}-${hashLines[1]}`, content: "X\r\nY\r\n" }]);
+
+    expect(readFileSync(file, "utf-8")).toBe("X\r\nY\r\nthree\r\n");
+    expect(returnedRef(result)).toBe((await holdRefs(file)).ref);
+  });
+
+  test("CRLF content into an LF file", async () => {
+    const file = writeTestFile(testDir, "lf.txt", "one\ntwo\nthree\n");
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [{ range: `${hashLines[0]}-${hashLines[1]}`, content: "X\r\nY\r\n" }]);
+
+    expect(readFileSync(file, "utf-8")).toBe("X\nY\nthree\n");
+    expect(returnedRef(result)).toBe((await holdRefs(file)).ref);
+  });
+
+  test("a lone CR in content is a line break, as it is when the file is read", async () => {
+    const file = writeTestFile(testDir, "cr.txt", "one\ntwo\n");
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [{ range: hashLines[0], content: "X\rY" }]);
+
+    expect(readFileSync(file, "utf-8")).toBe("X\nY\ntwo\n");
+    expect(returnedRef(result)).toBe((await holdRefs(file)).ref);
+  });
+});
+
+describe("a single-line range verifies its end hash", () => {
+  test("replace with a valid start hash and a wrong end hash is rejected", async () => {
+    const file = writeTestFile(testDir, "end-hash.txt", "a\nb\nc\n");
+    const { ref, hashLines } = await holdRefs(file);
+    const start = hashLines[1];
+    const wrongEnd = otherHash(start.slice(0, 2));
+
+    const rejected = await runEdit(file, ref, [{ range: `${start}-${wrongEnd}2`, content: "B" }]);
+
+    expect(rejected.isError).toBe(true);
+    expect(readFileSync(file, "utf-8")).toBe("a\nb\nc\n");
+
+    const accepted = await runEdit(file, ref, [{ range: `${start}-${start}`, content: "B" }]);
+    expect(accepted.isError).toBeUndefined();
+    expect(readFileSync(file, "utf-8")).toBe("a\nB\nc\n");
+  });
+
+  test("insert_after with a wrong end hash is rejected", async () => {
+    const file = writeTestFile(testDir, "end-hash-insert.txt", "a\nb\nc\n");
+    const { ref, hashLines } = await holdRefs(file);
+    const start = hashLines[1];
+
+    const rejected = await runEdit(file, ref, [
+      { range: `${start}-${otherHash(start.slice(0, 2))}2`, action: "insert_after", content: "X" },
+    ]);
+
+    expect(rejected.isError).toBe(true);
+    expect(readFileSync(file, "utf-8")).toBe("a\nb\nc\n");
+  });
+});
+
+describe("insert_after verifies its own hash when a replace shares the line", () => {
+  test("single-line replace plus insert_after with a wrong hash", async () => {
+    const file = writeTestFile(testDir, "shared.txt", "a\nb\nc\n");
+    const { ref, hashLines } = await holdRefs(file);
+    const wrong = `${otherHash(hashLines[1].slice(0, 2))}2`;
+
+    const rejected = await runEdit(file, ref, [
+      { range: hashLines[1], content: "B" },
+      { range: wrong, action: "insert_after", content: "X" },
+    ]);
+
+    expect(rejected.isError).toBe(true);
+    expect(readFileSync(file, "utf-8")).toBe("a\nb\nc\n");
+
+    const accepted = await runEdit(file, ref, [
+      { range: hashLines[1], content: "B" },
+      { range: hashLines[1], action: "insert_after", content: "X" },
+    ]);
+    expect(accepted.isError).toBeUndefined();
+    expect(readFileSync(file, "utf-8")).toBe("a\nB\nX\nc\n");
+  });
+
+  test("insert_after at the end line of a multi-line replace with a wrong hash", async () => {
+    const file = writeTestFile(testDir, "shared-multi.txt", "a\nb\nc\nd\n");
+    const { ref, hashLines } = await holdRefs(file);
+    const wrong = `${otherHash(hashLines[2].slice(0, 2))}3`;
+
+    const rejected = await runEdit(file, ref, [
+      { range: `${hashLines[1]}-${hashLines[2]}`, content: "BC" },
+      { range: wrong, action: "insert_after", content: "X" },
+    ]);
+
+    expect(rejected.isError).toBe(true);
+    expect(readFileSync(file, "utf-8")).toBe("a\nb\nc\nd\n");
+  });
+});
+
+describe("edit summary positions do not depend on the order edits are listed", () => {
+  const twelveLines = `${Array.from({ length: 12 }, (_, i) => `line ${i + 1}`).join("\n")}\n`;
+
+  test("a later-in-file edit listed first does not shift an earlier one", async () => {
+    const file = writeTestFile(testDir, "order.txt", twelveLines);
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(
+      file,
+      ref,
+      [
+        { range: hashLines[9], content: "ten a\nten b\nten c" },
+        { range: hashLines[2], content: "three" },
+      ],
+      { context_lines: 1 },
+    );
+
+    const text = getText(result);
+    expect(text).toContain(`~3 -> ${hashLine("three", 3)} (1->1)`);
+    expect(text).toContain(`~10 -> ${hashLine("ten a", 10)}-${hashLine("ten c", 12)} (1->3)`);
+    expect(text).toContain("context near line 3:");
+    expect(text).toContain("context near lines 10-12:");
+    expect(text).not.toContain("context near line 5");
+  });
+
+  test("a line-0 insert listed after another edit is still reported at line 1", async () => {
+    const file = writeTestFile(testDir, "order-start.txt", "a\nb\n");
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [
+      { range: hashLines[0], content: "A1\nA2" },
+      { range: "0", action: "insert_after", content: "top" },
+    ]);
+
+    expect(readFileSync(file, "utf-8")).toBe("top\nA1\nA2\nb\n");
+    const text = getText(result);
+    expect(text).toContain(`+1 @start -> ${hashLine("top", 1)}`);
+    expect(text).toContain(`~1 -> ${hashLine("A1", 2)}-${hashLine("A2", 3)} (1->2)`);
+  });
+
+  test("an insert_after listed before a replace on the same line lands after it", async () => {
+    const file = writeTestFile(testDir, "order-tie.txt", "a\nb\nc\n");
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [
+      { range: hashLines[1], action: "insert_after", content: "X" },
+      { range: hashLines[1], content: "B1\nB2" },
+    ]);
+
+    expect(readFileSync(file, "utf-8")).toBe("a\nB1\nB2\nX\nc\n");
+    const text = getText(result);
+    expect(text).toContain(`+1 @2 -> ${hashLine("X", 4)}`);
+    expect(text).toContain(`~2 -> ${hashLine("B1", 2)}-${hashLine("B2", 3)} (1->2)`);
+  });
+});
+
+describe("unified diff hunk header for an empty side, through dry_run", () => {
+  test("insert into an empty file", async () => {
+    const file = writeTestFile(testDir, "empty.txt", "");
+    const { ref } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [{ range: "0", action: "insert_after", content: "x" }], { dry_run: true });
+
+    expect(getText(result)).toContain("@@ -0,0 +1 @@");
+  });
+
+  test("delete the only line", async () => {
+    const file = writeTestFile(testDir, "only.txt", "only\n");
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [{ range: hashLines[0], content: "" }], { dry_run: true });
+
+    expect(getText(result)).toContain("@@ -1 +0,0 @@");
+  });
+});
+
+describe.skipIf(process.platform === "win32" || process.getuid?.() === 0)("dry_run in a read-only directory", () => {
+  test("returns the diff instead of failing to create a temp file", async () => {
+    const roDir = join(testDir, "ro");
+    mkdirSync(roDir);
+    const file = join(roDir, "f.txt");
+    writeFileSync(file, "a\nb\n");
+    const { ref, hashLines } = await holdRefs(file);
+
+    chmodSync(roDir, 0o555);
+    try {
+      const result = await runEdit(file, ref, [{ range: hashLines[0], content: "A" }], { dry_run: true });
+
+      expect(result.isError).toBeUndefined();
+      expect(getText(result)).toContain("-a\n+A");
+      expect(readdirSync(roDir)).toEqual(["f.txt"]);
+    } finally {
+      chmodSync(roDir, 0o755);
+    }
+  });
+});
+
+describe("checksum-mismatch hint only claims what was verified", () => {
+  test("interior line of a multi-line replace changed", async () => {
+    const file = writeTestFile(testDir, "interior.txt", "l1\nl2\nl3\nl4\nl5\nl6\nl7\n");
+    const { ref, hashLines } = await holdRefs(file);
+    writeFileSync(file, "l1\nl2\nl3\nCHANGED\nl5\nl6\nl7\n");
+
+    const result = await runEdit(file, ref, [{ range: `${hashLines[1]}-${hashLines[5]}`, content: "new" }]);
+
+    expect(result.isError).toBe(true);
+    const text = getText(result);
+    expect(text).not.toContain("appear unchanged");
+    expect(text).toContain(`trueline_read(file_paths=["${file}:2-6"])`);
+  });
+
+  test("line between two separate edits changed", async () => {
+    const file = writeTestFile(testDir, "gap.txt", "l1\nl2\nl3\nl4\nl5\nl6\nl7\n");
+    const { ref, hashLines } = await holdRefs(file);
+    writeFileSync(file, "l1\nl2\nl3\nCHANGED\nl5\nl6\nl7\n");
+
+    const result = await runEdit(file, ref, [
+      { range: hashLines[1], content: "L2" },
+      { range: hashLines[5], content: "L6" },
+    ]);
+
+    expect(result.isError).toBe(true);
+    const text = getText(result);
+    expect(text).not.toContain("appear unchanged");
+    expect(text).toContain(`trueline_read(file_paths=["${file}:2-6"])`);
+  });
+
+  test("still reports the lines as unchanged when every line in the span was verified", async () => {
+    const file = writeTestFile(testDir, "verified.txt", "l1\nl2\nl3\nl4\nl5\n");
+    const { ref, hashLines } = await holdRefs(file);
+    writeFileSync(file, "CHANGED\nl2\nl3\nl4\nl5\n");
+
+    const result = await runEdit(file, ref, [{ range: hashLines[2], content: "L3" }]);
+
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain("lines 3–3 appear unchanged");
   });
 });

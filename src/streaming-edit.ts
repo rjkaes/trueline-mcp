@@ -20,6 +20,7 @@
 
 import { randomBytes } from "node:crypto";
 import { chmod, open, rename, stat, unlink } from "node:fs/promises";
+import { devNull } from "node:os";
 import { dirname, resolve } from "node:path";
 import { FNV_OFFSET_BASIS, checksumToLetters, fnv1aHashBytes, foldHash, hashToLetters } from "./hash.ts";
 import { EMPTY_BUF, LF_BUF } from "./line-splitter.ts";
@@ -90,7 +91,9 @@ export async function streamingEdit(
   const dir = dirname(resolvedPath);
   const tmpName = `.trueline-tmp-${randomBytes(6).toString("hex")}`;
   const tmpPath = resolve(dir, tmpName);
-  const fd = await open(tmpPath, "w");
+  // A dry run keeps nothing, so its output goes to the null device: a read-only
+  // directory must not fail a preview.
+  const fd = await open(dryRun ? devNull : tmpPath, "w");
 
   // transcodedLines handles BOM stripping and UTF-16→UTF-8 transcoding.
   // After this point, lineBytes are always UTF-8 regardless of original encoding.
@@ -145,7 +148,8 @@ export async function streamingEdit(
   let eolDetected = false;
   let contentChanged = false;
   let totalLines = 0;
-  let pendingWrite: Buffer | null = null; // buffered output line (no EOL)
+  // Assigned in closures, so the cast stops TS narrowing it to `null` in the post-stream flush.
+  let pendingWrite = null as Buffer | null; // buffered output line (no EOL)
   let pendingEol: Buffer = LF_BUF; // EOL to use when flushing pendingWrite
   let lastEolBytes: Buffer = EMPTY_BUF; // EOL of the last source line seen
   let outputLineCount = 0;
@@ -213,9 +217,8 @@ export async function streamingEdit(
     }
   }
 
-  // Emits insert_after content anchored at lineNumber. The insert's own
-  // startHash is verified only on insert-only lines (below); on a replace
-  // line the replace's boundary hash check stands in for it.
+  // Emits insert_after content anchored at lineNumber. Their hashes were
+  // already checked when the line streamed by.
   async function emitInserts(lineNumber: number): Promise<void> {
     for (const op of opsByStartLine.get(lineNumber) ?? []) {
       if (!op.insertAfter) continue;
@@ -267,6 +270,12 @@ export async function streamingEdit(
   const line0Ops = opsByStartLine.get(0);
   if (line0Ops) {
     try {
+      // The prepend is written before the stream starts, so the file's EOL comes
+      // from a peek at its first line.
+      const peek = await transcodedLines(resolvedPath);
+      const first = await peek.lines.next();
+      await peek.lines.return(undefined);
+      if (!first.done && first.value.eolBytes.length > 0) detectedEol = first.value.eolBytes;
       for (const op of line0Ops) {
         await writeContentLines(op.content);
       }
@@ -286,8 +295,6 @@ export async function streamingEdit(
       if (!eolDetected && eolBytes.length > 0) {
         detectedEol = eolBytes;
         eolDetected = true;
-        // Update pending EOL for any line-0 content written before EOL detection
-        pendingEol = detectedEol;
       }
 
       // Compute line hash for checksum accumulators and boundary verification
@@ -299,6 +306,16 @@ export async function streamingEdit(
       for (const acc of csAccumulators) {
         if (lineNumber >= acc.ref.startLine && lineNumber <= acc.ref.endLine) {
           acc.hash = foldHash(acc.hash, lineH);
+        }
+      }
+
+      // insert_after hashes are checked here, not left to a replace on the same
+      // line (or ending on it) to vouch for them.
+      for (const op of opsByStartLine.get(lineNumber) ?? []) {
+        if (!op.insertAfter) continue;
+        for (const expected of [op.startHash, op.endHash]) {
+          if (expected !== "" && letters !== expected)
+            return await fail(hashMismatchMsg(lineNumber, expected, letters));
         }
       }
 
@@ -342,7 +359,11 @@ export async function streamingEdit(
           }
 
           if (replaceOp.startLine === replaceOp.endLine) {
-            // Single-line replace: handle immediately
+            // Single-line replace: the start hash is checked above; a range like
+            // "ab2-cd2" must have a matching end hash too.
+            if (replaceOp.endHash !== "" && letters !== replaceOp.endHash) {
+              return await fail(hashMismatchMsg(lineNumber, replaceOp.endHash, letters));
+            }
             await writeReplaceOrOriginal(replaceOp, [lineBytes], [eolBytes]);
 
             await emitInserts(lineNumber);
@@ -358,13 +379,6 @@ export async function streamingEdit(
           }
         } else {
           // No replace op — just write the line and process insert_after
-          // Verify boundary hash for insert_after ops
-          for (const iaOp of opsAtLine) {
-            if (iaOp.startHash !== "" && letters !== iaOp.startHash) {
-              return await fail(hashMismatchMsg(lineNumber, iaOp.startHash, letters));
-            }
-          }
-
           await enqueueLine(lineBytes, lineH, eolBytes.length > 0 ? eolBytes : undefined);
           if (collector) collector.context(lineBytes.toString(textEncoding));
 
@@ -391,9 +405,10 @@ export async function streamingEdit(
   try {
     if (pendingWrite !== null) {
       await writeBytes(encodeBuffer(pendingWrite, targetEncoding));
-      // If the last source line had a non-empty eolBytes, the file had a trailing newline
-      if (lastEolBytes.length > 0) {
-        await writeBytes(encodeBuffer(detectedEol, targetEncoding));
+      // The last line gets an EOL only if the source ended with one, or if the line
+      // is blank: with no EOL it would vanish on the next read.
+      if (lastEolBytes.length > 0 || pendingWrite.length === 0) {
+        await writeBytes(encodeBuffer(pendingEol, targetEncoding));
       }
     }
   } catch (err) {
@@ -449,16 +464,19 @@ export async function streamingEdit(
     if (actual !== expected) {
       await cleanupTmp();
 
-      // If we reached post-stream checksum verification, all boundary
-      // hashes passed during the stream.  That means the edit-target
-      // lines are unchanged — only other lines in the checksum range
-      // changed.  Suggest a narrow re-read of just the target lines.
+      // Reaching post-stream checksum verification means every boundary hash
+      // passed, but only the first and last line of each edit were hashed. Lines
+      // between them may be what changed, so "unchanged" is claimed only when
+      // the whole span consists of hashed lines. Suggest a narrow re-read either way.
       let minLine = Infinity;
       let maxLine = -Infinity;
+      const hashedLines = new Set<number>();
       for (const op of ops) {
         if (op.startLine > 0) {
           minLine = Math.min(minLine, op.startLine);
           maxLine = Math.max(maxLine, op.endLine);
+          hashedLines.add(op.startLine);
+          hashedLines.add(op.endLine);
         }
       }
 
@@ -473,7 +491,9 @@ export async function streamingEdit(
         minLine === Infinity
           ? ""
           : `\n\n` +
-            `However, lines ${minLine}\u2013${maxLine} appear unchanged. ` +
+            (hashedLines.size === maxLine - minLine + 1
+              ? `However, lines ${minLine}–${maxLine} appear unchanged. `
+              : `However, the boundary lines of your edit still match, but lines between them may have changed. `) +
             `Re-read with trueline_read(file_paths=["${resolvedPath}:${minLine}-${maxLine}"]) ` +
             `to get a narrow checksum, then retry the edit.`;
 

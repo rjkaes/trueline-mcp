@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 // ==============================================================================
 // Module-level caches
@@ -16,12 +17,18 @@ const settingsCache = new Map();
 /** @type {Map<string, RegExp>} */
 const regexCache = new Map();
 
+// Home directory spellings for "~/" rules. homedir() is fixed for the
+// process, so its realpath is resolved once.
+/** @type {string[] | undefined} */
+let homeForms;
+
 /**
  * Clear internal caches. Exported for testing only.
  */
 export function clearCaches() {
   settingsCache.clear();
   regexCache.clear();
+  homeForms = undefined;
 }
 
 // ==============================================================================
@@ -90,6 +97,40 @@ export function fileGlobToRegex(glob, caseInsensitive = false) {
   return re;
 }
 
+/**
+ * Forward-slash form used for matching, applied to candidate paths and to
+ * patterns alike. Like Claude Code, a Windows drive letter becomes the first
+ * segment ("C:\Users" -> "/c/Users"), and a UNC root collapses to the
+ * single-slash path its documented "//srv/share" spelling names.
+ * @param {string} path
+ * @returns {string}
+ */
+function toPosix(path) {
+  return path
+    .replace(/\\/g, "/")
+    .replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`)
+    .replace(/^\/{2,}/, "/");
+}
+
+/**
+ * A directory's lexical spelling and its symlink-free realpath, both in
+ * forward-slash form. A rule anchored at one must still match a path that
+ * reaches the directory through the other (a symlinked home or project dir).
+ * realpathSync.native agrees with the async realpath that validatePath uses,
+ * Windows 8.3 short names included.
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function posixForms(dir) {
+  const forms = [toPosix(dir)];
+  try {
+    forms.push(toPosix(realpathSync.native(dir)));
+  } catch {
+    // A directory that does not exist has no other spelling.
+  }
+  return [...new Set(forms)];
+}
+
 // ==============================================================================
 // Settings Reader
 // ==============================================================================
@@ -111,9 +152,9 @@ export function fileGlobToRegex(glob, caseInsensitive = false) {
  * @returns {Promise<string[][]>}
  */
 export async function readToolDenyPatterns(toolName, projectDir, globalSettingsPath) {
-  /** @param {string} path @returns {Promise<string[] | null>} */
-  const extractGlobs = async (path) => {
-    const cacheKey = `${path}:${toolName}`;
+  /** @param {string} path @param {string} anchorDir @returns {Promise<string[] | null>} */
+  const extractGlobs = async (path, anchorDir) => {
+    const cacheKey = `${path}:${toolName}:${anchorDir}`;
     // Check mtime — if unchanged since last call, return cached result.
     /** @type {number} */
     let mtime;
@@ -147,26 +188,36 @@ export async function readToolDenyPatterns(toolName, projectDir, globalSettingsP
     /** @type {string[]} */
     const globs = [];
     if (Array.isArray(denyArr)) {
+      const anchors = posixForms(resolve(anchorDir));
       for (const entry of denyArr) {
         if (typeof entry !== "string") continue;
         const tp = parseToolPattern(entry);
-        if (tp?.tool === toolName) globs.push(tp.glob);
+        if (tp?.tool !== toolName) continue;
+        // A single leading "/" is relative to the settings source, not the filesystem root.
+        if (tp.glob.startsWith("/") && !tp.glob.startsWith("//")) {
+          globs.push(...anchors.map((anchor) => `${anchor}${tp.glob}`));
+        } else {
+          globs.push(tp.glob);
+        }
       }
     }
     settingsCache.set(cacheKey, { mtime, globs });
     return globs;
   };
 
-  /** @type {string[]} */
-  const paths = [];
+  // Each settings file with the directory its "/path" patterns are relative to:
+  // the project for project settings, the file's own directory (~/.claude) for user settings.
+  /** @type {[path: string, anchorDir: string][]} */
+  const sources = [];
   if (projectDir) {
-    paths.push(resolve(projectDir, ".claude", "settings.local.json"));
-    paths.push(resolve(projectDir, ".claude", "settings.json"));
+    sources.push([resolve(projectDir, ".claude", "settings.local.json"), projectDir]);
+    sources.push([resolve(projectDir, ".claude", "settings.json"), projectDir]);
   }
-  paths.push(globalSettingsPath ?? resolve(homedir(), ".claude", "settings.json"));
+  const globalPath = globalSettingsPath ?? resolve(homedir(), ".claude", "settings.json");
+  sources.push([globalPath, dirname(globalPath)]);
 
   // Read all settings files in parallel — they're independent.
-  const allGlobs = await Promise.all(paths.map(extractGlobs));
+  const allGlobs = await Promise.all(sources.map(([path, anchorDir]) => extractGlobs(path, anchorDir)));
   return allGlobs.filter((g) => g !== null);
 }
 
@@ -175,10 +226,30 @@ export async function readToolDenyPatterns(toolName, projectDir, globalSettingsP
 // ==============================================================================
 
 /**
+ * Expand the pattern prefixes whose meaning does not depend on the settings
+ * source: "//path" is absolute, "~/path" sits under the home directory, and
+ * "./path" is relative like a bare "path". A single leading "/" is left alone;
+ * readToolDenyPatterns has already anchored it to its settings source.
+ * https://code.claude.com/docs/en/permissions ("Read and Edit")
+ * @param {string} glob
+ * @returns {string[]}
+ */
+function expandPathPrefix(glob) {
+  if (glob.startsWith("//")) return [glob.slice(1)];
+  if (glob.startsWith("~/")) {
+    homeForms ??= posixForms(homedir());
+    return homeForms.map((home) => `${home}${glob.slice(1)}`);
+  }
+  if (glob.startsWith("./")) return [glob.slice(2)];
+  return [glob];
+}
+
+/**
  * Check if a file path should be denied based on deny globs.
  *
  * Normalizes backslashes to forward slashes before matching so that
- * Windows paths work with Unix-style glob patterns.
+ * Windows paths work with Unix-style glob patterns. As in gitignore, a rule
+ * that matches a directory also denies everything under it.
  *
  * @param {string} filePath
  * @param {string[][]} denyGlobs
@@ -186,28 +257,39 @@ export async function readToolDenyPatterns(toolName, projectDir, globalSettingsP
  * @returns {{ denied: boolean; matchedPattern?: string }}
  */
 export function evaluateFilePath(filePath, denyGlobs, caseInsensitive = process.platform === "win32") {
-  const normalized = filePath.replace(/\\/g, "/");
-  // For globs without path separators, also test just the basename so that
-  // a simple pattern like ".env" matches "/any/path/.env" — the same
-  // gitignore-style semantics Claude Code settings use.
-  const basename = normalized.split("/").pop() ?? normalized;
+  // Test the path and each of its parent directories, so a rule naming a
+  // directory covers its contents.
+  /** @type {string[]} */
+  const targets = [];
+  for (let path = toPosix(filePath); path; path = path.slice(0, Math.max(path.lastIndexOf("/"), 0))) {
+    targets.push(path);
+  }
 
-  /** @param {string} glob @returns {boolean} */
-  const matches = (glob) => {
+  /** @param {string} expanded @returns {boolean} */
+  const matchesExpanded = (expanded) => {
+    // A trailing "/" limits a gitignore rule to directories. What kind of path
+    // this is isn't known here, so the rule applies to either (fail-closed).
+    const glob = toPosix(expanded).replace(/(?<=.)\/+$/, "");
     const re = fileGlobToRegex(glob, caseInsensitive);
-    if (re.test(normalized)) return true;
+    return targets.some((target) => {
+      if (re.test(target)) return true;
 
-    // Glob without "/" — also test the basename (gitignore semantics).
-    if (!glob.includes("/")) return re.test(basename);
+      // Glob without "/" — also test the basename so that a simple pattern like
+      // ".env" matches "/any/path/.env" (gitignore semantics).
+      if (!glob.includes("/")) return re.test(target.slice(target.lastIndexOf("/") + 1));
 
-    // Relative glob with "/" — treat as a suffix match via globstar prefix.
-    // e.g. deny pattern "src/.env" should match "/project/src/.env".
-    if (!glob.startsWith("/") && !glob.startsWith("*")) {
-      return fileGlobToRegex(`**/${glob}`, caseInsensitive).test(normalized);
-    }
+      // Relative glob with "/" — treat as a suffix match via globstar prefix.
+      // e.g. deny pattern "src/.env" should match "/project/src/.env".
+      if (!glob.startsWith("/") && !glob.startsWith("*")) {
+        return fileGlobToRegex(`**/${glob}`, caseInsensitive).test(target);
+      }
 
-    return false;
+      return false;
+    });
   };
+
+  /** @param {string} declared @returns {boolean} */
+  const matches = (declared) => expandPathPrefix(declared).some(matchesExpanded);
 
   const matchedPattern = denyGlobs.flat().find(matches);
   return matchedPattern ? { denied: true, matchedPattern } : { denied: false };

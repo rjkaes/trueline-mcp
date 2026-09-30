@@ -62,6 +62,7 @@ export function isContained(realPath, bases) {
   const target = win ? realPath.toLowerCase() : realPath;
   return bases.some((base) => {
     const b = win ? base.toLowerCase() : base;
-    return target === b || target.startsWith(b + sep);
+    // A root base ("/", C:\) already ends in the separator.
+    return target === b || target.startsWith(b.endsWith(sep) ? b : b + sep);
   });
 }

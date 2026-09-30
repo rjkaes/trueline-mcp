@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { handleReadMulti } from "../../src/tools/read.ts";
 import { handleOutline } from "../../src/tools/outline.ts";
 import { handleSearch } from "../../src/tools/search.ts";
+import { expandGlobs } from "../../src/tools/shared.ts";
 
 let testDir: string;
 
@@ -518,4 +519,85 @@ describe("absolute globs and allowed dirs", () => {
       );
     }
   }
+});
+
+// =============================================================================
+// bracket paths (Next.js-style dynamic routes)
+// =============================================================================
+
+describe("bracket paths in globs and inline ranges", () => {
+  const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+  let plainDir: string;
+  let repoDir: string;
+
+  function writeRoutes(dir: string): void {
+    mkdirSync(join(dir, "app", "[id]", "edit"), { recursive: true });
+    mkdirSync(join(dir, "app", "other"), { recursive: true });
+    writeFileSync(
+      join(dir, "app", "[id]", "page.tsx"),
+      Array.from({ length: 8 }, (_, i) => `export const value${i + 1} = ${i + 1};\n`).join(""),
+    );
+    writeFileSync(join(dir, "app", "[id]", "layout.tsx"), "export default function Layout() {}\n");
+    writeFileSync(join(dir, "app", "[id]", "edit", "form.tsx"), "export default function Form() {}\n");
+    writeFileSync(join(dir, "app", "other", "page.tsx"), "export default function Other() {}\n");
+  }
+
+  beforeAll(() => {
+    const { execSync } = require("node:child_process");
+    plainDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-bracket-plain-")));
+    repoDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-bracket-repo-")));
+    writeRoutes(plainDir);
+    writeRoutes(repoDir);
+    execSync("git init", { cwd: repoDir, env: cleanEnv });
+    execSync("git add -A", { cwd: repoDir, env: cleanEnv });
+  });
+
+  afterAll(() => {
+    rmSync(plainDir, { recursive: true, force: true });
+    rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  // A non-git dir takes the Node glob fallback for recursive globs, a repo takes git ls-files.
+  for (const [kind, dir] of [
+    ["non-git", () => plainDir],
+    ["git", () => repoDir],
+  ] as const) {
+    test(`${kind}: non-recursive glob below a [id] directory`, async () => {
+      expect(await expandGlobs(["app/[id]/*.tsx"], dir())).toEqual(["app/[id]/layout.tsx", "app/[id]/page.tsx"]);
+    });
+
+    test(`${kind}: recursive glob below a [id] directory`, async () => {
+      expect(await expandGlobs(["app/[id]/**/*.tsx"], dir())).toEqual([
+        "app/[id]/edit/form.tsx",
+        "app/[id]/layout.tsx",
+        "app/[id]/page.tsx",
+      ]);
+    });
+
+    test(`${kind}: absolute glob below a [id] directory`, async () => {
+      const root = dir();
+      expect(await expandGlobs([join(root, "app", "[id]", "**", "*.tsx").replaceAll("\\", "/")], root)).toEqual(
+        ["app/[id]/edit/form.tsx", "app/[id]/layout.tsx", "app/[id]/page.tsx"].map((p) =>
+          join(root, p).replaceAll("\\", "/"),
+        ),
+      );
+    });
+  }
+
+  test("a bracket class that matches keeps its glob meaning", async () => {
+    expect(await expandGlobs(["app/[o]ther/page.tsx"], plainDir)).toEqual(["app/other/page.tsx"]);
+  });
+
+  test("a bracket glob with no match returns nothing", async () => {
+    expect(await expandGlobs(["app/[id]/*.xyz"], plainDir)).toEqual([]);
+  });
+
+  test("an inline :range on an existing bracket path is a literal path, not a glob", async () => {
+    expect(await expandGlobs(["app/[id]/page.tsx:1-2"], plainDir)).toEqual(["app/[id]/page.tsx:1-2"]);
+
+    const text = getText(await handleReadMulti({ file_paths: ["app/[id]/page.tsx:2-3"], projectDir: plainDir }));
+    expect(text).toContain("value2");
+    expect(text).toContain("value3");
+    expect(text).not.toContain("value8");
+  });
 });
