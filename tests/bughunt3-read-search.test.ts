@@ -57,12 +57,15 @@ describe("verify: unreadable file", () => {
   // src/tools/verify.ts:76-77 — a non-binary read error is rethrown, so the server answers
   // "Internal error: EACCES ... open '<resolved path>'"; read and search return an error result
   // that carries only the errno code
-  test("verify of an unreadable file returns an error result instead of throwing", () => {
-    const locked = join(testDir(), "locked.txt");
-    writeFileSync(locked, "needle in locked\n");
-    chmodSync(locked, 0o000);
-    try {
-      const script = `
+  // chmod 0o000 does not deny reads on Windows or to root.
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "verify of an unreadable file returns an error result instead of throwing",
+    () => {
+      const locked = join(testDir(), "locked.txt");
+      writeFileSync(locked, "needle in locked\n");
+      chmodSync(locked, 0o000);
+      try {
+        const script = `
         import { handleVerify } from ${VERIFY_URL};
         try {
           const result = await handleVerify({
@@ -74,24 +77,25 @@ describe("verify: unreadable file", () => {
         } catch (err) {
           console.log(JSON.stringify({ threw: String(err.message) }));
         }`;
-      const run = spawnSync(
-        "node",
-        ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", script],
-        {
-          encoding: "utf-8",
-          timeout: 30_000,
-        },
-      );
-      const out = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "{}") as {
-        threw?: string;
-        isError?: boolean;
-        text?: string;
-      };
+        const run = spawnSync(
+          "node",
+          ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", script],
+          {
+            encoding: "utf-8",
+            timeout: 30_000,
+          },
+        );
+        const out = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "{}") as {
+          threw?: string;
+          isError?: boolean;
+          text?: string;
+        };
 
-      expect(out.threw).toBeUndefined();
-      expect(out.isError).toBe(true);
-    } finally {
-      chmodSync(locked, 0o644);
-    }
-  });
+        expect(out.threw).toBeUndefined();
+        expect(out.isError).toBe(true);
+      } finally {
+        chmodSync(locked, 0o644);
+      }
+    },
+  );
 });

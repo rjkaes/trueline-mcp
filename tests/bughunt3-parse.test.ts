@@ -67,7 +67,10 @@ describe("expandGlobs", () => {
     mkdirSync(join(dir, "src"), { recursive: true });
     writeFileSync(join(dir, "src", "orders.ts"), "export const orders = 1;\n");
 
-    expect(await expandGlobs([join(dir, "src", "*.ts")], dir)).toEqual([join(dir, "src", "orders.ts")]);
+    // expandGlobs returns forward slashes on Windows.
+    expect(await expandGlobs([join(dir, "src", "*.ts")], dir)).toEqual([
+      join(dir, "src", "orders.ts").replaceAll("\\", "/"),
+    ]);
   });
 
   // src/tools/shared.ts:504-510,551-557 — a project directory a parent repo ignores makes `git ls-files` print nothing, and that empty list is taken as the answer
