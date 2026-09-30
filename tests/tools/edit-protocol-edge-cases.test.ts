@@ -3,8 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, symlink
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
-import { handleRead } from "../../src/tools/read.ts";
-import { lineHash, issueTestRef, writeTestFile } from "../helpers.ts";
+import { lineHash, issueTestRef, setupFile, writeTestFile } from "../helpers.ts";
 
 // =============================================================================
 // Shared fixture setup
@@ -20,51 +19,193 @@ afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
-function setupFile(name: string, content: string) {
-  const f = writeTestFile(testDir, name, content);
-  const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const ref = lines.length > 0 ? issueTestRef(lines, 1, lines.length) : "0-0/aaaaaa";
-  return { path: f, lines, ref };
-}
-
 function edit(opts: { file_path: string; edits: { ref: string; range: string; content: string }[] }) {
   return handleEdit({ ...opts, projectDir: testDir });
 }
+
+// =============================================================================
+// Single-edit results (one edit call, then the file contents)
+// =============================================================================
+
+interface EditCase {
+  name: string;
+  content: string;
+  // refLines narrows that edit's ref to a line span; omitted means the whole file.
+  edits: { range: string; content: string; refLines?: [number, number] }[];
+  expected: string;
+}
+
+async function expectEditResult({ content, edits, expected }: EditCase) {
+  const { path, lines, ref } = setupFile(testDir, "fixture.txt", content);
+
+  const result = await edit({
+    file_path: path,
+    edits: edits.map(({ refLines, ...e }) => ({ ref: refLines ? issueTestRef(lines, ...refLines) : ref, ...e })),
+  });
+
+  expect(result.isError).toBeUndefined();
+  expect(readFileSync(path, "utf-8")).toBe(expected);
+}
+
+describe("single-edit results", () => {
+  const longLine = "x".repeat(10000);
+
+  test.each<EditCase>([
+    // range format parsing
+    {
+      name: "single-line shorthand (no dash)",
+      content: "aaa\nbbb\nccc\n",
+      edits: [{ range: `${lineHash("bbb")}2`, content: "BBB" }],
+      expected: "aaa\nBBB\nccc\n",
+    },
+    {
+      name: "explicit single-line range (N:hash-N:hash)",
+      content: "aaa\nbbb\nccc\n",
+      edits: [{ range: `${lineHash("bbb")}2-${lineHash("bbb")}2`, content: "BBB" }],
+      expected: "aaa\nBBB\nccc\n",
+    },
+    {
+      name: "+0: prefix for prepend requires no hash",
+      content: "aaa\nbbb\n",
+      edits: [{ range: "+0", content: "header" }],
+      expected: "header\naaa\nbbb\n",
+    },
+    // insert-after (+) semantics
+    {
+      name: "insert after the very last line",
+      content: "aaa\nbbb\n",
+      edits: [{ range: `+${lineHash("bbb")}2`, content: "ccc" }],
+      expected: "aaa\nbbb\nccc\n",
+    },
+    {
+      name: "insert multiple lines after an anchor",
+      content: "aaa\nbbb\n",
+      edits: [{ range: `+${lineHash("aaa")}1`, content: "x\ny\nz" }],
+      expected: "aaa\nx\ny\nz\nbbb\n",
+    },
+    // multi-edit batches
+    {
+      name: "two non-overlapping replacements in one call",
+      content: "aaa\nbbb\nccc\nddd\neee\n",
+      edits: [
+        { range: `${lineHash("aaa")}1`, content: "AAA" },
+        { range: `${lineHash("ccc")}3`, content: "CCC" },
+      ],
+      expected: "AAA\nbbb\nCCC\nddd\neee\n",
+    },
+    {
+      // Edit for line 3 is provided before the edit for line 1
+      name: "edits provided out of order succeed (engine sorts)",
+      content: "aaa\nbbb\nccc\nddd\n",
+      edits: [
+        { range: `${lineHash("ccc")}3`, content: "CCC" },
+        { range: `${lineHash("aaa")}1`, content: "AAA" },
+      ],
+      expected: "AAA\nbbb\nCCC\nddd\n",
+    },
+    {
+      name: "batch with replace + insert-after at different lines",
+      content: "aaa\nbbb\nccc\n",
+      edits: [
+        { range: `${lineHash("aaa")}1`, content: "AAA" },
+        { range: `+${lineHash("ccc")}3`, content: "ddd" },
+      ],
+      expected: "AAA\nbbb\nccc\nddd\n",
+    },
+    {
+      name: "adjacent ranges (non-overlapping) succeed",
+      content: "aaa\nbbb\nccc\nddd\n",
+      edits: [
+        { range: `${lineHash("aaa")}1-${lineHash("bbb")}2`, content: "AA\nBB" },
+        { range: `${lineHash("ccc")}3-${lineHash("ddd")}4`, content: "CC\nDD" },
+      ],
+      expected: "AA\nBB\nCC\nDD\n",
+    },
+    // checksum coverage
+    {
+      name: "checksum from partial read covers insert-after anchor line",
+      content: "aaa\nbbb\nccc\n",
+      edits: [{ range: `+${lineHash("bbb")}2`, content: "inserted", refLines: [1, 2] }],
+      expected: "aaa\nbbb\ninserted\nccc\n",
+    },
+    // content growth and shrinkage
+    {
+      name: "replace one line with many (file grows)",
+      content: "aaa\nbbb\nccc\n",
+      edits: [{ range: `${lineHash("bbb")}2`, content: "x1\nx2\nx3\nx4\nx5" }],
+      expected: "aaa\nx1\nx2\nx3\nx4\nx5\nccc\n",
+    },
+    {
+      name: "replace many lines with one (file shrinks)",
+      content: "aaa\nbbb\nccc\nddd\neee\n",
+      edits: [{ range: `${lineHash("bbb")}2-${lineHash("ddd")}4`, content: "only" }],
+      expected: "aaa\nonly\neee\n",
+    },
+    {
+      name: "delete lines (empty content string)",
+      content: "aaa\nbbb\nccc\nddd\n",
+      edits: [{ range: `${lineHash("bbb")}2-${lineHash("ccc")}3`, content: "" }],
+      expected: "aaa\nddd\n",
+    },
+    {
+      name: "delete all lines leaves empty file",
+      content: "aaa\nbbb\n",
+      edits: [{ range: `${lineHash("aaa")}1-${lineHash("bbb")}2`, content: "" }],
+      expected: "",
+    },
+    // unicode and special content
+    {
+      name: "emoji content hashes and edits correctly",
+      content: "hello\n🎉🎊🎈\nworld\n",
+      edits: [{ range: `${lineHash("🎉🎊🎈")}2`, content: "🚀 launched" }],
+      expected: "hello\n🚀 launched\nworld\n",
+    },
+    {
+      name: "CJK characters",
+      content: "你好\n世界\n测试\n",
+      edits: [{ range: `${lineHash("世界")}2`, content: "地球" }],
+      expected: "你好\n地球\n测试\n",
+    },
+    {
+      // These chars appear in the trueline format itself; ensure they don't
+      // confuse the parser when they're in file content.
+      name: "lines containing colons and pipe characters",
+      content: "key:value|extra\nnormal\n",
+      edits: [{ range: `${lineHash("key:value|extra")}1`, content: "new:val|stuff" }],
+      expected: "new:val|stuff\nnormal\n",
+    },
+    {
+      name: "lines with only whitespace",
+      content: "  \n\t\t\n   \n",
+      edits: [
+        { range: `${lineHash("  ")}1`, content: "trimmed" },
+        { range: `${lineHash("\t\t")}2`, content: "also trimmed" },
+      ],
+      expected: "trimmed\nalso trimmed\n   \n",
+    },
+    {
+      // "\n" is one blank-line terminator, not a separator producing two blanks.
+      name: "single newline in content string produces empty line",
+      content: "aaa\nbbb\nccc\n",
+      edits: [{ range: `${lineHash("bbb")}2`, content: "\n" }],
+      expected: "aaa\n\nccc\n",
+    },
+    {
+      name: "very long line",
+      content: `aaa\n${longLine}\nccc\n`,
+      edits: [{ range: `${lineHash(longLine)}2`, content: "short" }],
+      expected: "aaa\nshort\nccc\n",
+    },
+  ])("$name", expectEditResult);
+});
 
 // =============================================================================
 // Range format parsing
 // =============================================================================
 
 describe("range format parsing", () => {
-  test("single-line shorthand (no dash)", async () => {
-    const { path, ref } = setupFile("single.txt", "aaa\nbbb\nccc\n");
-    const h2 = lineHash("bbb");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2`, content: "BBB" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nBBB\nccc\n");
-  });
-
-  test("explicit single-line range (N:hash-N:hash)", async () => {
-    const { path, ref } = setupFile("explicit.txt", "aaa\nbbb\nccc\n");
-    const h2 = lineHash("bbb");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2-${h2}2`, content: "BBB" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nBBB\nccc\n");
-  });
-
   test("rejects malformed range — missing hash", async () => {
-    const { path, ref } = setupFile("bad.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile(testDir, "bad.txt", "aaa\nbbb\n");
 
     const result = await edit({
       file_path: path,
@@ -75,7 +216,7 @@ describe("range format parsing", () => {
   });
 
   test("rejects malformed range — non-numeric line number", async () => {
-    const { path, ref } = setupFile("bad2.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile(testDir, "bad2.txt", "aaa\nbbb\n");
 
     const result = await edit({
       file_path: path,
@@ -86,7 +227,7 @@ describe("range format parsing", () => {
   });
 
   test("rejects range where start > end", async () => {
-    const { path, ref } = setupFile("rev.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "rev.txt", "aaa\nbbb\nccc\n");
     const h1 = lineHash("aaa");
     const h3 = lineHash("ccc");
 
@@ -99,7 +240,7 @@ describe("range format parsing", () => {
   });
 
   test("rejects line 0 without + prefix", async () => {
-    const { path, ref } = setupFile("zero.txt", "aaa\n");
+    const { path, ref } = setupFile(testDir, "zero.txt", "aaa\n");
 
     const result = await edit({
       file_path: path,
@@ -109,20 +250,8 @@ describe("range format parsing", () => {
     expect(result.isError).toBe(true);
   });
 
-  test("+0: prefix for prepend requires no hash", async () => {
-    const { path, ref } = setupFile("prepend.txt", "aaa\nbbb\n");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: "+0", content: "header" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("header\naaa\nbbb\n");
-  });
-
   test("rejects edit targeting line beyond EOF", async () => {
-    const { path, ref } = setupFile("short.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile(testDir, "short.txt", "aaa\nbbb\n");
     const h = lineHash("aaa");
 
     const result = await edit({
@@ -139,21 +268,8 @@ describe("range format parsing", () => {
 // =============================================================================
 
 describe("insert-after (+) semantics", () => {
-  test("insert after the very last line", async () => {
-    const { path, ref } = setupFile("append.txt", "aaa\nbbb\n");
-    const h2 = lineHash("bbb");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `+${h2}2`, content: "ccc" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nbbb\nccc\n");
-  });
-
   test("multiple inserts at the same anchor preserve order", async () => {
-    const { path, ref } = setupFile("multi-ins.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile(testDir, "multi-ins.txt", "aaa\nbbb\n");
     const h1 = lineHash("aaa");
 
     const result = await edit({
@@ -170,7 +286,7 @@ describe("insert-after (+) semantics", () => {
   });
 
   test("insert-after and replace at the same line", async () => {
-    const { path, ref } = setupFile("ins-rep.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "ins-rep.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
@@ -186,19 +302,6 @@ describe("insert-after (+) semantics", () => {
     // Replace happens, then insert-after the replaced line
     expect(written).toBe("aaa\nBBB\ninserted\nccc\n");
   });
-
-  test("insert multiple lines after an anchor", async () => {
-    const { path, ref } = setupFile("multi-line-ins.txt", "aaa\nbbb\n");
-    const h1 = lineHash("aaa");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `+${h1}1`, content: "x\ny\nz" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nx\ny\nz\nbbb\n");
-  });
 });
 
 // =============================================================================
@@ -206,60 +309,8 @@ describe("insert-after (+) semantics", () => {
 // =============================================================================
 
 describe("multi-edit batches", () => {
-  test("two non-overlapping replacements in one call", async () => {
-    const { path, ref } = setupFile("batch.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    const h1 = lineHash("aaa");
-    const h3 = lineHash("ccc");
-
-    const result = await edit({
-      file_path: path,
-      edits: [
-        { ref, range: `${h1}1`, content: "AAA" },
-        { ref, range: `${h3}3`, content: "CCC" },
-      ],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("AAA\nbbb\nCCC\nddd\neee\n");
-  });
-
-  test("edits provided out of order succeed (engine sorts)", async () => {
-    const { path, ref } = setupFile("unsorted.txt", "aaa\nbbb\nccc\nddd\n");
-    const h3 = lineHash("ccc");
-    const h1 = lineHash("aaa");
-
-    // Provide edit for line 3 before edit for line 1
-    const result = await edit({
-      file_path: path,
-      edits: [
-        { ref, range: `${h3}3`, content: "CCC" },
-        { ref, range: `${h1}1`, content: "AAA" },
-      ],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("AAA\nbbb\nCCC\nddd\n");
-  });
-
-  test("batch with replace + insert-after at different lines", async () => {
-    const { path, ref } = setupFile("mixed.txt", "aaa\nbbb\nccc\n");
-    const h1 = lineHash("aaa");
-    const h3 = lineHash("ccc");
-
-    const result = await edit({
-      file_path: path,
-      edits: [
-        { ref, range: `${h1}1`, content: "AAA" },
-        { ref, range: `+${h3}3`, content: "ddd" },
-      ],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("AAA\nbbb\nccc\nddd\n");
-  });
-
   test("overlapping replace ranges are rejected", async () => {
-    const { path, ref } = setupFile("overlap.txt", "aaa\nbbb\nccc\nddd\n");
+    const { path, ref } = setupFile(testDir, "overlap.txt", "aaa\nbbb\nccc\nddd\n");
     const h1 = lineHash("aaa");
     const h2 = lineHash("bbb");
     const h3 = lineHash("ccc");
@@ -276,27 +327,8 @@ describe("multi-edit batches", () => {
     expect(result.content[0].text).toMatch(/[Oo]verlap/);
   });
 
-  test("adjacent ranges (non-overlapping) succeed", async () => {
-    const { path, ref } = setupFile("adjacent.txt", "aaa\nbbb\nccc\nddd\n");
-    const h1 = lineHash("aaa");
-    const h2 = lineHash("bbb");
-    const h3 = lineHash("ccc");
-    const h4 = lineHash("ddd");
-
-    const result = await edit({
-      file_path: path,
-      edits: [
-        { ref, range: `${h1}1-${h2}2`, content: "AA\nBB" },
-        { ref, range: `${h3}3-${h4}4`, content: "CC\nDD" },
-      ],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("AA\nBB\nCC\nDD\n");
-  });
-
   test("empty edits array is rejected or no-ops gracefully", async () => {
-    const { path } = setupFile("empty-edits.txt", "aaa\n");
+    const { path } = setupFile(testDir, "empty-edits.txt", "aaa\n");
 
     const result = await edit({
       file_path: path,
@@ -315,22 +347,8 @@ describe("multi-edit batches", () => {
 // =============================================================================
 
 describe("checksum coverage", () => {
-  test("narrow checksum covering only the edited line works", async () => {
-    const { path, lines } = setupFile("narrow.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    const narrowRef = issueTestRef(lines, 2, 4);
-    const h3 = lineHash("ccc");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref: narrowRef, range: `${h3}3`, content: "CCC" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nbbb\nCCC\nddd\neee\n");
-  });
-
   test("checksum range must cover all edits in batch", async () => {
-    const { path, lines } = setupFile("partial.txt", "aaa\nbbb\nccc\nddd\neee\n");
+    const { path, lines } = setupFile(testDir, "partial.txt", "aaa\nbbb\nccc\nddd\neee\n");
     // Ref covers lines 1-3 but edit targets line 5
     const narrowRef = issueTestRef(lines, 1, 3);
     const h5 = lineHash("eee");
@@ -344,23 +362,8 @@ describe("checksum coverage", () => {
     expect(result.content[0].text).toContain("does not cover");
   });
 
-  test("checksum from partial read covers insert-after anchor line", async () => {
-    const { path, lines } = setupFile("partial-ins.txt", "aaa\nbbb\nccc\n");
-    // Only cover lines 1-2
-    const narrowRef = issueTestRef(lines, 1, 2);
-    const h2 = lineHash("bbb");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref: narrowRef, range: `+${h2}2`, content: "inserted" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nbbb\ninserted\nccc\n");
-  });
-
   test("empty-file sentinel rejected for non-empty file", async () => {
-    const { path } = setupFile("notempty.txt", "aaa\n");
+    const { path } = setupFile(testDir, "notempty.txt", "aaa\n");
     const emptyRef = "0-0/aaaaaa";
 
     const result = await edit({
@@ -377,63 +380,8 @@ describe("checksum coverage", () => {
 // =============================================================================
 
 describe("content growth and shrinkage", () => {
-  test("replace one line with many (file grows)", async () => {
-    const { path, ref } = setupFile("grow.txt", "aaa\nbbb\nccc\n");
-    const h2 = lineHash("bbb");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2`, content: "x1\nx2\nx3\nx4\nx5" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nx1\nx2\nx3\nx4\nx5\nccc\n");
-  });
-
-  test("replace many lines with one (file shrinks)", async () => {
-    const { path, ref } = setupFile("shrink.txt", "aaa\nbbb\nccc\nddd\neee\n");
-    const h2 = lineHash("bbb");
-    const h4 = lineHash("ddd");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2-${h4}4`, content: "only" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nonly\neee\n");
-  });
-
-  test("delete lines (empty content string)", async () => {
-    const { path, ref } = setupFile("delete.txt", "aaa\nbbb\nccc\nddd\n");
-    const h2 = lineHash("bbb");
-    const h3 = lineHash("ccc");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2-${h3}3`, content: "" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nddd\n");
-  });
-
-  test("delete all lines leaves empty file", async () => {
-    const { path, ref } = setupFile("delall.txt", "aaa\nbbb\n");
-    const h1 = lineHash("aaa");
-    const h2 = lineHash("bbb");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h1}1-${h2}2`, content: "" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("");
-  });
-
   test("replace with empty then chain a second edit using returned ref", async () => {
-    const { path, ref } = setupFile("chain.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "chain.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const r1 = await edit({
@@ -458,104 +406,12 @@ describe("content growth and shrinkage", () => {
 });
 
 // =============================================================================
-// Unicode and special content
-// =============================================================================
-
-describe("unicode and special content", () => {
-  test("emoji content hashes and edits correctly", async () => {
-    const { path, ref } = setupFile("emoji.txt", "hello\n🎉🎊🎈\nworld\n");
-    const h2 = lineHash("🎉🎊🎈");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2`, content: "🚀 launched" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("hello\n🚀 launched\nworld\n");
-  });
-
-  test("CJK characters", async () => {
-    const { path, ref } = setupFile("cjk.txt", "你好\n世界\n测试\n");
-    const h2 = lineHash("世界");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2`, content: "地球" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("你好\n地球\n测试\n");
-  });
-
-  test("lines containing colons and pipe characters", async () => {
-    // These chars appear in the trueline format itself — ensure they
-    // don't confuse the parser when they're in file content.
-    const { path, ref } = setupFile("special.txt", "key:value|extra\nnormal\n");
-    const h1 = lineHash("key:value|extra");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h1}1`, content: "new:val|stuff" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("new:val|stuff\nnormal\n");
-  });
-
-  test("lines with only whitespace", async () => {
-    const { path, ref } = setupFile("ws.txt", "  \n\t\t\n   \n");
-    const h1 = lineHash("  ");
-    const h2 = lineHash("\t\t");
-
-    const result = await edit({
-      file_path: path,
-      edits: [
-        { ref, range: `${h1}1`, content: "trimmed" },
-        { ref, range: `${h2}2`, content: "also trimmed" },
-      ],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("trimmed\nalso trimmed\n   \n");
-  });
-
-  test("single newline in content string produces empty line", async () => {
-    const { path, ref } = setupFile("blank.txt", "aaa\nbbb\nccc\n");
-    const h2 = lineHash("bbb");
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2`, content: "\n" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    // "\n" is one blank-line terminator, not a separator producing two blanks.
-    expect(readFileSync(path, "utf-8")).toBe("aaa\n\nccc\n");
-  });
-
-  test("very long line", async () => {
-    const longLine = "x".repeat(10000);
-    const { path, ref } = setupFile("long.txt", `aaa\n${longLine}\nccc\n`);
-    const h2 = lineHash(longLine);
-
-    const result = await edit({
-      file_path: path,
-      edits: [{ ref, range: `${h2}2`, content: "short" }],
-    });
-
-    expect(result.isError).toBeUndefined();
-    expect(readFileSync(path, "utf-8")).toBe("aaa\nshort\nccc\n");
-  });
-});
-
-// =============================================================================
 // Line ending preservation
 // =============================================================================
 
 describe("line ending edge cases", () => {
   test("CRLF file: replacement uses CRLF", async () => {
-    const { path, ref } = setupFile("crlf.txt", "aaa\r\nbbb\r\nccc\r\n");
+    const { path, ref } = setupFile(testDir, "crlf.txt", "aaa\r\nbbb\r\nccc\r\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
@@ -569,7 +425,7 @@ describe("line ending edge cases", () => {
   });
 
   test("LF file: no CRLF introduced by edit", async () => {
-    const { path, ref } = setupFile("lf.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "lf.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     await edit({
@@ -582,7 +438,7 @@ describe("line ending edge cases", () => {
   });
 
   test("file without trailing newline preserves that after edit", async () => {
-    const { path, ref } = setupFile("notl.txt", "aaa\nbbb");
+    const { path, ref } = setupFile(testDir, "notl.txt", "aaa\nbbb");
     const h1 = lineHash("aaa");
 
     const result = await edit({
@@ -597,7 +453,7 @@ describe("line ending edge cases", () => {
   });
 
   test("file with trailing newline preserves it after edit", async () => {
-    const { path, ref } = setupFile("tl.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile(testDir, "tl.txt", "aaa\nbbb\n");
     const h1 = lineHash("aaa");
 
     const result = await edit({
@@ -618,7 +474,7 @@ describe("line ending edge cases", () => {
 
 describe("no-op detection", () => {
   test("insert-after with content is not a no-op (always changes file)", async () => {
-    const { path, ref } = setupFile("ins-noop.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile(testDir, "ins-noop.txt", "aaa\nbbb\n");
     const h1 = lineHash("aaa");
 
     const result = await edit({
@@ -637,7 +493,7 @@ describe("no-op detection", () => {
 
 describe("returned ref enables chaining", () => {
   test("returned ref works for a subsequent edit", async () => {
-    const { path, ref } = setupFile("chain1.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "chain1.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const r1 = await edit({
@@ -661,7 +517,7 @@ describe("returned ref enables chaining", () => {
   });
 
   test("old ref is rejected after file was edited", async () => {
-    const { path, ref } = setupFile("stale.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "stale.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     await edit({
@@ -683,110 +539,12 @@ describe("returned ref enables chaining", () => {
 });
 
 // =============================================================================
-// Read-then-edit round-trip
-// =============================================================================
-
-describe("read-then-edit round-trip", () => {
-  test("ref from handleRead feeds directly into handleEdit", async () => {
-    const f = writeTestFile(testDir, "roundtrip.txt", "alpha\nbeta\ngamma\n");
-
-    const readResult = await handleRead({
-      file_path: f,
-      projectDir: testDir,
-    });
-    expect(readResult.isError).toBeUndefined();
-
-    // Extract ref from read output
-    const refMatch = readResult.content[0].text.match(/ref: (\S+)/);
-    expect(refMatch).not.toBeNull();
-
-    const hBeta = lineHash("beta");
-    const editResult = await edit({
-      file_path: f,
-      edits: [{ ref: refMatch![1], range: `${hBeta}2`, content: "BETA" }],
-    });
-
-    expect(editResult.isError).toBeUndefined();
-    expect(readFileSync(f, "utf-8")).toBe("alpha\nBETA\ngamma\n");
-  });
-
-  test("partial read ref covers the edit", async () => {
-    const f = writeTestFile(testDir, "partial-rt.txt", "aaa\nbbb\nccc\nddd\neee\n");
-
-    const readResult = await handleRead({
-      file_path: f,
-      start_line: 2,
-      end_line: 4,
-      projectDir: testDir,
-    });
-    expect(readResult.isError).toBeUndefined();
-
-    const refMatch = readResult.content[0].text.match(/ref: (\S+)/);
-    expect(refMatch).not.toBeNull();
-
-    const hCcc = lineHash("ccc");
-    const editResult = await edit({
-      file_path: f,
-      edits: [{ ref: refMatch![1], range: `${hCcc}3`, content: "CCC" }],
-    });
-
-    expect(editResult.isError).toBeUndefined();
-    expect(readFileSync(f, "utf-8")).toBe("aaa\nbbb\nCCC\nddd\neee\n");
-  });
-});
-
-// =============================================================================
-// Stale checksum recovery hints
-// =============================================================================
-
-describe("stale checksum recovery hints", () => {
-  test("suggests narrow re-read when edit-target lines are unchanged", async () => {
-    const f = writeTestFile(testDir, "stale-hint.txt", "aaa\nbbb\nccc\nddd\neee\n");
-
-    const original = ["aaa", "bbb", "ccc", "ddd", "eee"];
-    const ref = issueTestRef(original, 1, 5);
-
-    // External modification of line 5, outside edit target
-    writeFileSync(f, "aaa\nbbb\nccc\nddd\nEEE\n");
-
-    const result = await edit({
-      file_path: f,
-      edits: [{ ref, range: `${lineHash("bbb")}2`, content: "BBB" }],
-    });
-
-    expect(result.isError).toBe(true);
-    const text = result.content[0].text;
-    expect(text).toMatch(/trueline_read\(file_paths=\["[^"]+:2-2"\]\)/);
-    expect(text).not.toContain("{start");
-  });
-
-  test("no narrow re-read hint when edit-target line itself changed", async () => {
-    const f = writeTestFile(testDir, "stale-target.txt", "aaa\nbbb\nccc\n");
-
-    const original = ["aaa", "bbb", "ccc"];
-    const ref = issueTestRef(original, 1, 3);
-
-    // External modification of line 2, which IS the edit target
-    writeFileSync(f, "aaa\nBBB\nccc\n");
-
-    const result = await edit({
-      file_path: f,
-      edits: [{ ref, range: `${lineHash("bbb")}2`, content: "xxx" }],
-    });
-
-    expect(result.isError).toBe(true);
-    const text = result.content[0].text;
-    expect(text).not.toContain("appear unchanged");
-  });
-});
-
-// =============================================================================
 // Hash verification
 // =============================================================================
 
 describe("boundary hash verification", () => {
   test("wrong start hash rejected", async () => {
-    const { path, ref } = setupFile("bad-start.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "bad-start.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
       file_path: path,
@@ -798,7 +556,7 @@ describe("boundary hash verification", () => {
   });
 
   test("wrong end hash rejected", async () => {
-    const { path, ref } = setupFile("bad-end.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "bad-end.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
       file_path: path,
@@ -812,7 +570,7 @@ describe("boundary hash verification", () => {
 
 describe("wrong hash prefix recovery", () => {
   test("bare line number in range tells LLM to re-read", async () => {
-    const { path, ref } = setupFile("bare.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "bare.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
       file_path: path,
@@ -828,7 +586,7 @@ describe("wrong hash prefix recovery", () => {
   });
 
   test("bare line number in insert-after range tells LLM to re-read", async () => {
-    const { path, ref } = setupFile("bare-ia.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile(testDir, "bare-ia.txt", "aaa\nbbb\n");
 
     const result = await edit({
       file_path: path,
@@ -843,7 +601,7 @@ describe("wrong hash prefix recovery", () => {
   });
 
   test("bare line number in multi-line range tells LLM to re-read", async () => {
-    const { path, ref } = setupFile("bare-multi.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "bare-multi.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
       file_path: path,
@@ -858,7 +616,7 @@ describe("wrong hash prefix recovery", () => {
   });
 
   test("invalid hash format tells LLM it must be a non-negative integer", async () => {
-    const { path, ref } = setupFile("bad-fmt.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir, "bad-fmt.txt", "aaa\nbbb\nccc\n");
 
     const result = await edit({
       file_path: path,
@@ -989,7 +747,7 @@ describe("large file edits", () => {
     const lines: string[] = [];
     for (let i = 0; i < 1000; i++) lines.push(`line ${i + 1}`);
     const content = `${lines.join("\n")}\n`;
-    const { path } = setupFile("large.txt", content);
+    const { path } = setupFile(testDir, "large.txt", content);
 
     const target = "line 500";
     const h500 = lineHash(target);
@@ -1011,7 +769,7 @@ describe("large file edits", () => {
     const lines: string[] = [];
     for (let i = 0; i < 500; i++) lines.push(`line ${i + 1}`);
     const content = `${lines.join("\n")}\n`;
-    const { path } = setupFile("scatter.txt", content);
+    const { path } = setupFile(testDir, "scatter.txt", content);
 
     const ref = issueTestRef(lines, 1, 500);
 
@@ -1038,7 +796,7 @@ describe("large file edits", () => {
 
 describe("ref validation", () => {
   test("rejects unknown ref", async () => {
-    const { path } = setupFile("nopfx.txt", "aaa\n");
+    const { path } = setupFile(testDir, "nopfx.txt", "aaa\n");
     const h = lineHash("aaa");
 
     const result = await edit({
@@ -1051,7 +809,7 @@ describe("ref validation", () => {
   });
 
   test("rejects garbled ref", async () => {
-    const { path } = setupFile("garbled.txt", "aaa\n");
+    const { path } = setupFile(testDir, "garbled.txt", "aaa\n");
     const h = lineHash("aaa");
 
     const result = await edit({

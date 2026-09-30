@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -37,8 +37,6 @@ beforeAll(() => {
 afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
-
-beforeEach(() => {});
 
 describe("trueline_search", () => {
   test("finds matching lines with context", async () => {
@@ -373,6 +371,41 @@ describe("context_lines=0 non-adjacent matches", () => {
     expect(ref1.endLine).toBe(1);
     expect(ref2.startLine).toBe(11);
     expect(ref2.endLine).toBe(11);
+  });
+
+  test("rejects excessive context_lines with an error result", async () => {
+    const file = write("context-overflow.txt", "line1\nline2\n");
+
+    // Must be a returned error, not a RangeError thrown while sizing the context window
+    const result = await handleSearch({
+      file_paths: [file],
+      pattern: "line",
+      context_lines: 5_000_000_000,
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain("context_lines");
+  });
+
+  test("dot regex with max_matches does not grow context into the whole file", async () => {
+    // Every line matches, so chained context windows must stop at max_matches.
+    const file = write("fifty-lines.txt", Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join("\n"));
+
+    const result = await handleSearch({
+      file_paths: [file],
+      pattern: ".",
+      regex: true,
+      max_matches: 2,
+      context_lines: 5,
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const outputLines = getText(result)
+      .split("\n")
+      .filter((l) => l.includes("\t"));
+    expect(outputLines.length).toBeLessThan(20);
   });
 });
 

@@ -3,7 +3,7 @@ import fc from "fast-check";
 import { mkdtempSync, writeFileSync, readFileSync, statSync, utimesSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { rangeChecksum, lineHash, issueTestRef, writeTestFile } from "../helpers.ts";
+import { rangeChecksum, lineHash, writeTestFile } from "../helpers.ts";
 import { streamingEdit } from "../../src/streaming-edit.ts";
 import type { StreamEditOp } from "../../src/streaming-edit.ts";
 import { parseChecksum } from "../../src/parse.ts";
@@ -77,7 +77,6 @@ describe("P1: content preservation", () => {
 
             // Compute checksum and ref for the full file
             const checksumStr = rangeChecksum(lines, startLine, endLine);
-            issueTestRef(lines, startLine, endLine);
             const checksumRef = parseChecksum(checksumStr);
 
             // Build an edit op that replaces the whole file
@@ -96,7 +95,6 @@ describe("P1: content preservation", () => {
             writeFileSync(path, `${mutated.join("\n")}\n`);
             const stat3 = statSync(path);
 
-            issueTestRef(lines, startLine, endLine);
             const op2 = buildOp(lines, startLine, endLine, replacementLines, false);
 
             // Edit should fail: checksum no longer matches
@@ -124,7 +122,6 @@ describe("P5: mtime guard", () => {
           const lineCount = fileLines.length;
 
           const checksumStr = rangeChecksum(fileLines, 1, lineCount);
-          issueTestRef(fileLines, 1, lineCount);
           const checksumRef = parseChecksum(checksumStr);
           const op = buildOp(fileLines, 1, lineCount, ["replaced"], false);
 
@@ -163,7 +160,6 @@ describe("P2a: delete isolation", () => {
             if (startLine > endLine || endLine >= lineCount) return; // skip degenerate
 
             const checksumStr = rangeChecksum(lines, 1, lineCount);
-            issueTestRef(lines, 1, lineCount);
             const checksumRef = parseChecksum(checksumStr);
 
             // Delete op: replace range with empty content
@@ -220,7 +216,6 @@ describe("P2b: insert preservation", () => {
             const anchorLine = Math.max(1, Math.floor(lineCount / 2));
 
             const checksumStr = rangeChecksum(lines, 1, lineCount);
-            issueTestRef(lines, 1, lineCount);
             const checksumRef = parseChecksum(checksumStr);
 
             // Insert-after op at the anchor
@@ -295,7 +290,6 @@ describe("P2: edit ordering correctness", () => {
           try {
             const { path, lines, mtimeMs } = writeTestLines(dirA.iterDir, originalLines);
             const checksumStr = rangeChecksum(lines, 1, lineCount);
-            issueTestRef(lines, 1, lineCount);
             const checksumRef = parseChecksum(checksumStr);
 
             const op1 = buildOp(lines, edit1Range.start, edit1Range.end, replacement1, false);
@@ -317,7 +311,6 @@ describe("P2: edit ordering correctness", () => {
 
             // Apply edit2 first (higher range, so it won't shift edit1's range)
             const cs2 = rangeChecksum(lines, 1, lineCount);
-            issueTestRef(lines, 1, lineCount);
             const csRef2 = parseChecksum(cs2);
             const op2 = buildOp(lines, edit2Range.start, edit2Range.end, replacement2, false);
             const r2 = await streamingEdit(path, [op2], [csRef2], mtimeMs);
@@ -329,7 +322,6 @@ describe("P2: edit ordering correctness", () => {
             const stat2 = statSync(path);
 
             const cs1 = rangeChecksum(afterEdit2, 1, afterEdit2.length);
-            issueTestRef(afterEdit2, 1, afterEdit2.length);
             const csRef1 = parseChecksum(cs1);
             const op1 = buildOp(afterEdit2, edit1Range.start, edit1Range.end, replacement1, false);
             const r1 = await streamingEdit(path, [op1], [csRef1], stat2.mtimeMs);
@@ -363,13 +355,10 @@ describe("P3: ref adjustment soundness", () => {
             const lineCount = originalLines.length;
             const { path, lines, mtimeMs } = writeTestLines(iterDir, originalLines);
 
-            // Issue a ref to the first 2 lines and the last 2 lines
+            // The first 2 and last 2 lines stay untouched
             const topEnd = 2;
             const bottomStart = lineCount - 1;
             if (topEnd >= bottomStart) return;
-
-            issueTestRef(lines, 1, topEnd);
-            issueTestRef(lines, bottomStart, lineCount);
 
             // Edit the middle (between topEnd and bottomStart)
             const editStart = topEnd + 1;
@@ -377,7 +366,6 @@ describe("P3: ref adjustment soundness", () => {
             if (editStart > editEnd) return;
 
             const fullChecksum = rangeChecksum(lines, 1, lineCount);
-            issueTestRef(lines, 1, lineCount);
             const fullChecksumRef = parseChecksum(fullChecksum);
 
             const replacement = ["MIDDLE_REPLACED_1", "MIDDLE_REPLACED_2", "MIDDLE_REPLACED_3"];
@@ -434,7 +422,6 @@ describe("P4: atomicity", () => {
             const originalContent = readFileSync(path, "utf-8");
 
             const checksumStr = rangeChecksum(lines, 1, lineCount);
-            issueTestRef(lines, 1, lineCount);
             const checksumRef = parseChecksum(checksumStr);
 
             // Build a large replacement to make the write non-trivial
@@ -662,7 +649,6 @@ describe("Conformance: TLA+ ApplyOps model vs streamingEdit", () => {
           const mtime = statSync(path).mtimeMs;
 
           const checksumStr = rangeChecksum(lines, 1, lines.length);
-          issueTestRef(lines, 1, lines.length);
           const checksumRef = parseChecksum(checksumStr);
 
           // 3. Build StreamEditOps with proper hashes

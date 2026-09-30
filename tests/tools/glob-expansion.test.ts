@@ -6,6 +6,7 @@ import { handleReadMulti } from "../../src/tools/read.ts";
 import { handleOutline } from "../../src/tools/outline.ts";
 import { handleSearch } from "../../src/tools/search.ts";
 import { expandGlobs } from "../../src/tools/shared.ts";
+import { cleanEnv, getText, makeGitRepo } from "../helpers.ts";
 
 let testDir: string;
 
@@ -25,10 +26,6 @@ beforeAll(() => {
 afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
-
-function getText(result: { content: { text: string }[] }): string {
-  return result.content[0].text;
-}
 
 // =============================================================================
 // trueline_read glob expansion
@@ -117,59 +114,34 @@ describe("read glob expansion", () => {
 });
 
 // =============================================================================
-// trueline_outline glob expansion
+// trueline_outline / trueline_search glob expansion
 // =============================================================================
 
-describe("outline glob expansion", () => {
-  test("expands glob to matching files", async () => {
-    const result = await handleOutline({
-      file_paths: ["src/*.ts"],
-      projectDir: testDir,
-    });
-    const text = getText(result);
-    expect(text).toContain("alpha");
-    expect(text).toContain("beta");
-    expect(text).not.toContain("gamma");
-  });
+describe("outline and search glob expansion", () => {
+  // Each row keeps its tool's own assertions: search also pins "beta" on the recursive glob.
+  const tools = [
+    {
+      name: "outline",
+      call: (file_paths: string[]) => handleOutline({ file_paths, projectDir: testDir }),
+      recursiveHits: ["alpha", "delta"],
+    },
+    {
+      name: "search",
+      call: (file_paths: string[]) => handleSearch({ pattern: "export function", file_paths, projectDir: testDir }),
+      recursiveHits: ["alpha", "beta", "delta"],
+    },
+  ];
 
-  test("recursive glob", async () => {
-    const result = await handleOutline({
-      file_paths: ["**/*.ts"],
-      projectDir: testDir,
-    });
-    const text = getText(result);
-    expect(text).toContain("alpha");
-    expect(text).toContain("delta");
-  });
-});
-
-// =============================================================================
-// trueline_search glob expansion
-// =============================================================================
-
-describe("search glob expansion", () => {
-  test("expands glob to matching files", async () => {
-    const result = await handleSearch({
-      pattern: "export function",
-      file_paths: ["src/*.ts"],
-      projectDir: testDir,
-    });
-    const text = getText(result);
+  test.each(tools)("$name expands glob to matching files", async ({ call }) => {
+    const text = getText(await call(["src/*.ts"]));
     expect(text).toContain("alpha");
     expect(text).toContain("beta");
     expect(text).not.toContain("gamma"); // .js not matched
   });
 
-  test("recursive glob", async () => {
-    const result = await handleSearch({
-      pattern: "export function",
-      file_paths: ["**/*.ts"],
-      projectDir: testDir,
-    });
-    const text = getText(result);
-    expect(text).toContain("alpha");
-    expect(text).toContain("beta");
-    expect(text).toContain("delta");
+  test.each(tools)("$name recursive glob", async ({ call, recursiveHits }) => {
+    const text = getText(await call(["**/*.ts"]));
+    for (const hit of recursiveHits) expect(text).toContain(hit);
   });
 
   test("search results from glob have refs", async () => {
@@ -189,20 +161,11 @@ describe("search glob expansion", () => {
 
 describe("gitignore-aware globs", () => {
   let gitDir: string;
-  // Strip inherited GIT_* env vars: under `git commit -a`, lefthook runs this
-  // with an absolute GIT_INDEX_FILE, and `git add -A` would rewrite the parent
-  // repo's pending commit.
-  const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
 
   beforeAll(() => {
-    const { execSync } = require("node:child_process");
-    gitDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-glob-git-")));
-    const git = (cmd: string) => execSync(`git ${cmd}`, { cwd: gitDir, env: cleanEnv });
-
-    // Create a git repo with .gitignore
-    git("init");
-    git("config user.email test@test.com");
-    git("config user.name test");
+    const repo = makeGitRepo("trueline-glob-git-");
+    gitDir = repo.dir;
+    const { git } = repo;
 
     mkdirSync(join(gitDir, "src"), { recursive: true });
     mkdirSync(join(gitDir, "node_modules", "dep"), { recursive: true });

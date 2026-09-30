@@ -141,19 +141,15 @@ describe("coerceParams", () => {
   });
 
   describe("stringified integer coercion (#3)", () => {
-    test('coerces depth: "2" → 2', () => {
-      expect(coerceParams({ file_paths: ["foo.ts"], depth: "2" })).toEqual({
-        file_paths: ["foo.ts"],
-        depth: 2,
-      });
-    });
-
-    test('coerces context_lines: "5" → 5', () => {
-      expect(coerceParams({ context_lines: "5" })).toEqual({ context_lines: 5 });
-    });
-
-    test('coerces max_matches: "20" → 20', () => {
-      expect(coerceParams({ max_matches: "20" })).toEqual({ max_matches: 20 });
+    test.each<[Record<string, unknown>, Record<string, unknown>]>([
+      [
+        { file_paths: ["foo.ts"], depth: "2" },
+        { file_paths: ["foo.ts"], depth: 2 },
+      ],
+      [{ context_lines: "5" }, { context_lines: 5 }],
+      [{ max_matches: "20" }, { max_matches: 20 }],
+    ])("coerces %j → %j", (input, expected) => {
+      expect(coerceParams(input)).toEqual(expected);
     });
 
     test("leaves actual numbers unchanged", () => {
@@ -178,66 +174,25 @@ describe("coerceParams", () => {
   });
 
   describe("pattern aliases (#4)", () => {
-    test("maps query → pattern", () => {
-      expect(coerceParams({ file_paths: ["foo.ts"], query: "hello" })).toEqual({
-        file_paths: ["foo.ts"],
-        pattern: "hello",
-      });
-    });
-
-    test("maps search → pattern", () => {
-      expect(coerceParams({ file_paths: ["foo.ts"], search: "hello" })).toEqual({
-        file_paths: ["foo.ts"],
-        pattern: "hello",
-      });
-    });
-
     test("canonical pattern wins when both provided", () => {
       expect(coerceParams({ query: "wrong", pattern: "right" })).toEqual({ pattern: "right" });
     });
   });
 
-  describe("context_lines alias (#5)", () => {
-    test("maps context → context_lines", () => {
-      expect(coerceParams({ context: 3 })).toEqual({ context_lines: 3 });
-    });
-  });
-
-  describe("max_matches alias (#6)", () => {
-    test("maps limit → max_matches", () => {
-      expect(coerceParams({ limit: 5 })).toEqual({ max_matches: 5 });
-    });
-  });
-
   describe("dry_run aliases (#7)", () => {
-    test("maps dryRun → dry_run", () => {
-      expect(coerceParams({ dryRun: true })).toEqual({ dry_run: true });
-    });
-
-    test("maps dry-run → dry_run", () => {
-      expect(coerceParams({ "dry-run": true })).toEqual({ dry_run: true });
-    });
-
     test("canonical dry_run wins when both provided", () => {
       expect(coerceParams({ dryRun: false, dry_run: true })).toEqual({ dry_run: true });
     });
   });
 
   describe("extended boolean coercion (#8)", () => {
-    test('coerces "yes" → true', () => {
-      expect(coerceParams({ case_insensitive: "yes" })).toEqual({ case_insensitive: true });
-    });
-
-    test('coerces "no" → false', () => {
-      expect(coerceParams({ case_insensitive: "no" })).toEqual({ case_insensitive: false });
-    });
-
-    test("coerces 1 → true", () => {
-      expect(coerceParams({ regex: 1 })).toEqual({ regex: true });
-    });
-
-    test("coerces 0 → false", () => {
-      expect(coerceParams({ regex: 0 })).toEqual({ regex: false });
+    test.each<[Record<string, unknown>, Record<string, unknown>]>([
+      [{ case_insensitive: "yes" }, { case_insensitive: true }],
+      [{ case_insensitive: "no" }, { case_insensitive: false }],
+      [{ regex: 1 }, { regex: true }],
+      [{ regex: 0 }, { regex: false }],
+    ])("coerces %j → %j", (input, expected) => {
+      expect(coerceParams(input)).toEqual(expected);
     });
   });
 
@@ -268,8 +223,11 @@ describe("coerceParams", () => {
     });
   });
 
-  describe("camelCase aliases for snake_case params", () => {
-    test.each<[string, string, unknown]>([
+  describe("aliases for canonical params", () => {
+    // Rows with a fourth element keep a canonical file_paths beside the alias.
+    const withFilePaths = { file_paths: ["foo.ts"] };
+
+    test.each<[string, string, unknown, Record<string, unknown>?]>([
       ["contextLines", "context_lines", 3],
       ["maxMatches", "max_matches", 10],
       ["max_results", "max_matches", 10],
@@ -278,8 +236,18 @@ describe("coerceParams", () => {
       ["ignoreCase", "case_insensitive", true],
       ["ignore_case", "case_insensitive", true],
       ["compareAgainst", "compare_against", "HEAD~1"],
-    ])("maps %s → %s", (alias, canonical, value) => {
-      expect(coerceParams({ [alias]: value })).toEqual({ [canonical]: value });
+      ["query", "pattern", "hello", withFilePaths],
+      ["search", "pattern", "hello", withFilePaths],
+      ["context", "context_lines", 3],
+      ["limit", "max_matches", 5],
+      ["dryRun", "dry_run", true],
+      ["dry-run", "dry_run", true],
+      ["base", "compare_against", "main", withFilePaths],
+      ["branch", "compare_against", "develop", withFilePaths],
+      ["git_ref", "compare_against", "HEAD~2", withFilePaths],
+      ["gitRef", "compare_against", "v1.0", withFilePaths],
+    ])("maps %s → %s", (alias, canonical, value, extra = {}) => {
+      expect(coerceParams({ ...extra, [alias]: value })).toEqual({ ...extra, [canonical]: value });
     });
   });
 
@@ -375,34 +343,6 @@ describe("coerceParams", () => {
   });
 
   describe("compare_against aliases (#11)", () => {
-    test("maps base → compare_against", () => {
-      expect(coerceParams({ file_paths: ["foo.ts"], base: "main" })).toEqual({
-        file_paths: ["foo.ts"],
-        compare_against: "main",
-      });
-    });
-
-    test("maps branch → compare_against", () => {
-      expect(coerceParams({ file_paths: ["foo.ts"], branch: "develop" })).toEqual({
-        file_paths: ["foo.ts"],
-        compare_against: "develop",
-      });
-    });
-
-    test("maps git_ref → compare_against", () => {
-      expect(coerceParams({ file_paths: ["foo.ts"], git_ref: "HEAD~2" })).toEqual({
-        file_paths: ["foo.ts"],
-        compare_against: "HEAD~2",
-      });
-    });
-
-    test("maps gitRef → compare_against", () => {
-      expect(coerceParams({ file_paths: ["foo.ts"], gitRef: "v1.0" })).toEqual({
-        file_paths: ["foo.ts"],
-        compare_against: "v1.0",
-      });
-    });
-
     test("canonical compare_against wins", () => {
       expect(coerceParams({ base: "wrong", compare_against: "right" })).toEqual({
         compare_against: "right",

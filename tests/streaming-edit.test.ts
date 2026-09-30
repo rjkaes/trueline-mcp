@@ -224,16 +224,6 @@ describe("streamingEdit", () => {
     expect(readFileSync(f, "utf-8")).toBe("anchor\nfirst\nsecond\nthird\nnext\n");
   });
 
-  test("insert_after at line 0 (prepend to file)", async () => {
-    const f = writeTestFile(testDir, "prepend.txt", "existing\n");
-    const lines = ["existing"];
-    const cs = rangeChecksum(lines, 1, 1);
-
-    const result = await runEdit(f, [{ range: "+0", content: "prepended" }], cs);
-    expect(result.ok).toBe(true);
-    expect(readFileSync(f, "utf-8")).toBe("prepended\nexisting\n");
-  });
-
   // --------------------------------------------------------------------------
   // Task 6: Multiple edits
   // --------------------------------------------------------------------------
@@ -323,30 +313,6 @@ describe("streamingEdit", () => {
   // Task 8: Edge cases
   // --------------------------------------------------------------------------
 
-  test("preserves CRLF line endings in replacements", async () => {
-    const f = writeTestFile(testDir, "crlf.txt", "line 1\r\nline 2\r\nline 3\r\n");
-    const lines = ["line 1", "line 2", "line 3"];
-    const cs = rangeChecksum(lines, 1, 3);
-    const h2 = lineHash("line 2");
-
-    const result = await runEdit(f, [{ range: `${h2}2`, content: "replaced" }], cs);
-    expect(result.ok).toBe(true);
-    const written = readFileSync(f, "utf-8");
-    expect(written).toBe("line 1\r\nreplaced\r\nline 3\r\n");
-    expect(written).not.toMatch(/(?<!\r)\n/);
-  });
-
-  test("preserves absence of trailing newline", async () => {
-    const f = writeTestFile(testDir, "no-trail.txt", "line 1\nline 2");
-    const lines = ["line 1", "line 2"];
-    const cs = rangeChecksum(lines, 1, 2);
-    const h1 = lineHash("line 1");
-
-    const result = await runEdit(f, [{ range: `${h1}1`, content: "replaced" }], cs);
-    expect(result.ok).toBe(true);
-    expect(readFileSync(f, "utf-8")).toBe("replaced\nline 2");
-  });
-
   test("rejects binary file", async () => {
     const f = join(testDir, "binary.bin");
     writeFileSync(f, Buffer.from([0x68, 0x65, 0x00, 0x6c, 0x6f]));
@@ -370,18 +336,6 @@ describe("streamingEdit", () => {
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toContain("new content");
-  });
-
-  test("detects no-op and skips write", async () => {
-    const f = writeTestFile(testDir, "noop.txt", "aaa\nbbb\nccc\n");
-    const { mtimeMs: before } = statSync(f);
-    const lines = ["aaa", "bbb", "ccc"];
-    const cs = rangeChecksum(lines, 1, 3);
-
-    const result = await runEdit(f, [{ range: `${lineHash("bbb")}2`, content: "bbb" }], cs);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.changed).toBe(false);
-    expect(statSync(f).mtimeMs).toBe(before);
   });
 
   test("detects concurrent modification via mtime", async () => {

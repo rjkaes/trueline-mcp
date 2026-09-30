@@ -308,80 +308,93 @@ describe("encodeBuffer", () => {
 });
 
 // ==============================================================================
-// Integration: trueline_read with UTF-16 LE
+// Integration: trueline_read / trueline_edit across BOM encodings
 // ==============================================================================
 
-describe("trueline_read — UTF-16 LE integration", () => {
-  test("reads UTF-16 LE file and returns UTF-8 content", async () => {
-    const p = writeFile("read-utf16le.txt", utf16leFile("alpha", "beta"));
+type FileBuilder = (...lines: string[]) => Buffer;
+
+describe("trueline_read — BOM integration", () => {
+  test.each<[string, FileBuilder, string[], string]>([
+    ["UTF-16 LE", utf16leFile, ["alpha", "beta"], "utf-16le"],
+    ["UTF-8 BOM", utf8bomFile, ["first", "second"], "utf-8-bom"],
+  ])("reads %s file without BOM leaking into content", async (_kind, build, lines, label) => {
+    const p = writeFile("read-bom.txt", build(...lines));
     const result = await handleRead({
       file_path: p,
       allowedDirs: [tmpDir],
     });
 
     const text = getText(result);
-    expect(text).toContain("alpha");
-    expect(text).toContain("beta");
-    expect(text).toContain("encoding: utf-16le");
+    for (const line of lines) expect(text).toContain(line);
+    expect(text).toContain(`encoding: ${label}`);
     // Should not contain BOM bytes in output
     expect(text).not.toContain("\ufeff");
     expect(text).not.toContain("\ufffe");
   });
 });
 
-// ==============================================================================
-// Integration: trueline_read with UTF-8 BOM
-// ==============================================================================
+describe("trueline_edit — BOM round-trip", () => {
+  interface RoundTripCase {
+    kind: string;
+    build: FileBuilder;
+    bom: number[];
+    decode: (payload: Buffer) => string;
+    lines: string[];
+    target: string;
+    replacement: string;
+  }
 
-describe("trueline_read — UTF-8 BOM integration", () => {
-  test("reads UTF-8 BOM file without BOM leaking into content", async () => {
-    const p = writeFile("read-utf8bom.txt", utf8bomFile("first", "second"));
-    const result = await handleRead({
-      file_path: p,
-      allowedDirs: [tmpDir],
-    });
+  const cases: RoundTripCase[] = [
+    {
+      kind: "UTF-16 LE",
+      build: utf16leFile,
+      bom: [0xff, 0xfe],
+      decode: (payload) => payload.toString("utf16le"),
+      lines: ["alpha", "beta", "gamma"],
+      target: "beta",
+      replacement: "BETA",
+    },
+    {
+      kind: "UTF-8 BOM",
+      build: utf8bomFile,
+      bom: [0xef, 0xbb, 0xbf],
+      decode: (payload) => payload.toString("utf-8"),
+      lines: ["hello", "world"],
+      target: "world",
+      replacement: "universe",
+    },
+    {
+      kind: "UTF-16 BE",
+      build: utf16beFile,
+      bom: [0xfe, 0xff],
+      // swap16 works in place, so copy first
+      decode: (payload) => Buffer.from(payload).swap16().toString("utf16le"),
+      lines: ["one", "two", "three"],
+      target: "two",
+      replacement: "TWO",
+    },
+  ];
 
-    const text = getText(result);
-    // First line content should be "first", not "\uFEFFfirst"
-    const firstContentLine = text.split("\n").find((l) => l.includes("first"));
-    expect(firstContentLine).toBeDefined();
-    expect(firstContentLine!).not.toContain("\ufeff");
-    expect(text).toContain("encoding: utf-8-bom");
-  });
-});
-
-// ==============================================================================
-// Integration: round-trip edit for UTF-16 LE
-// ==============================================================================
-
-describe("trueline_edit — UTF-16 LE round-trip", () => {
-  test("edits a UTF-16 LE file and preserves encoding", async () => {
-    const p = writeFile("edit-utf16le.txt", utf16leFile("alpha", "beta", "gamma"));
+  test.each(cases)("edits a $kind file and preserves its BOM and encoding", async (c) => {
+    const p = writeFile("edit-bom.txt", c.build(...c.lines));
 
     // Read to get checksums
-    const readResult = await handleRead({
-      file_path: p,
-      allowedDirs: [tmpDir],
-    });
-    const readText = getText(readResult);
-
-    // Extract ref from readResult
+    const readText = getText(await handleRead({ file_path: p, allowedDirs: [tmpDir] }));
     const refMatch = readText.match(/ref: (\S+)/);
     expect(refMatch).toBeTruthy();
     const ref = refMatch![1];
 
-    // Extract hashLine for "beta" (line 2)
-    const betaLine = readText.split("\n").find((l) => l.includes("beta"));
-    expect(betaLine).toBeDefined();
-    const hashLine = betaLine!.split("\t")[0]; // e.g., "ab2"
+    // Anchor on the tab so a random tmpdir name can't match the target
+    const targetLine = readText.split("\n").find((l) => l.endsWith(`\t${c.target}`));
+    expect(targetLine).toBeDefined();
+    const hashLine = targetLine!.split("\t")[0]; // e.g., "ab2"
 
-    // Edit: replace "beta" with "BETA"
     const editResult = await handleEdit({
       file_path: p,
       edits: [
         {
           range: `${hashLine}-${hashLine}`,
-          content: "BETA",
+          content: c.replacement,
           ref,
         },
       ],
@@ -389,119 +402,13 @@ describe("trueline_edit — UTF-16 LE round-trip", () => {
     });
     expect(editResult.isError).toBeFalsy();
 
-    // Verify the file is still UTF-16 LE with BOM
     const raw = readFileSync(p);
-    expect(raw[0]).toBe(0xff);
-    expect(raw[1]).toBe(0xfe);
+    expect([...raw.subarray(0, c.bom.length)]).toEqual(c.bom);
 
-    // Decode and verify content
-    const decoded = raw.subarray(2).toString("utf16le");
-    expect(decoded).toContain("BETA");
-    expect(decoded).toContain("alpha");
-    expect(decoded).toContain("gamma");
-    expect(decoded).not.toContain("beta");
-  });
-});
-
-// ==============================================================================
-// Integration: round-trip edit for UTF-8 BOM
-// ==============================================================================
-
-describe("trueline_edit — UTF-8 BOM round-trip", () => {
-  test("edits a UTF-8 BOM file and preserves BOM", async () => {
-    const p = writeFile("edit-utf8bom.txt", utf8bomFile("hello", "world"));
-
-    // Read
-    const readResult = await handleRead({
-      file_path: p,
-      allowedDirs: [tmpDir],
-    });
-    const readText = getText(readResult);
-
-    const refMatch = readText.match(/ref: (\S+)/);
-    const ref = refMatch![1];
-
-    const worldLine = readText.split("\n").find((l) => l.includes("world"));
-    const hashLine = worldLine!.split("\t")[0];
-
-    // Edit: replace "world" with "universe"
-    const editResult = await handleEdit({
-      file_path: p,
-      edits: [
-        {
-          range: `${hashLine}-${hashLine}`,
-          content: "universe",
-          ref,
-        },
-      ],
-      allowedDirs: [tmpDir],
-    });
-    expect(editResult.isError).toBeFalsy();
-
-    // Verify BOM is preserved
-    const raw = readFileSync(p);
-    expect(raw[0]).toBe(0xef);
-    expect(raw[1]).toBe(0xbb);
-    expect(raw[2]).toBe(0xbf);
-
-    // Verify content
-    const content = raw.subarray(3).toString("utf-8");
-    expect(content).toContain("hello");
-    expect(content).toContain("universe");
-    expect(content).not.toContain("world");
-  });
-});
-
-// ==============================================================================
-// Integration: round-trip edit for UTF-16 BE
-// ==============================================================================
-
-describe("trueline_edit — UTF-16 BE round-trip", () => {
-  test("edits a UTF-16 BE file and preserves encoding", async () => {
-    const p = writeFile("edit-utf16be.txt", utf16beFile("one", "two", "three"));
-
-    const readResult = await handleRead({
-      file_path: p,
-      allowedDirs: [tmpDir],
-    });
-    const readText = getText(readResult);
-
-    const refMatch = readText.match(/ref: (\S+)/);
-    const ref = refMatch![1];
-
-    const twoLine = readText.split("\n").find((l) => l.includes("\ttwo"));
-    const hashLine = twoLine!.split("\t")[0];
-
-    const editResult = await handleEdit({
-      file_path: p,
-      edits: [
-        {
-          range: `${hashLine}-${hashLine}`,
-          content: "TWO",
-          ref,
-        },
-      ],
-      allowedDirs: [tmpDir],
-    });
-    expect(editResult.isError).toBeFalsy();
-
-    // Verify BOM is UTF-16 BE
-    const raw = readFileSync(p);
-    expect(raw[0]).toBe(0xfe);
-    expect(raw[1]).toBe(0xff);
-
-    // Decode BE: swap byte pairs to LE, then decode
-    const payload = raw.subarray(2);
-    const le = Buffer.alloc(payload.length);
-    for (let i = 0; i < payload.length - 1; i += 2) {
-      le[i] = payload[i + 1];
-      le[i + 1] = payload[i];
-    }
-    const decoded = le.toString("utf16le");
-    expect(decoded).toContain("TWO");
-    expect(decoded).toContain("one");
-    expect(decoded).toContain("three");
-    expect(decoded).not.toContain("\ttwo\n");
+    const decoded = c.decode(raw.subarray(c.bom.length));
+    expect(decoded).toContain(c.replacement);
+    for (const line of c.lines.filter((l) => l !== c.target)) expect(decoded).toContain(line);
+    expect(decoded).not.toContain(c.target);
   });
 });
 

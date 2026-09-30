@@ -63,11 +63,15 @@ describe("trueline_outline", () => {
     expect(text).not.toContain("lots of implementation");
   });
 
-  test("shows class members at depth 1", async () => {
+  test.each<[string, string]>([
+    ["class", "class.ts"],
+    ["export class", "exported-class.ts"],
+    ["export default class", "exported-default-class.ts"],
+  ])("shows class members at depth 1 for `%s`", async (prefix, fileName) => {
     const file = writeTestFile(
-      "class.ts",
+      fileName,
       [
-        "class Greeter {",
+        `${prefix} Greeter {`,
         "  name: string;",
         "  constructor(name: string) {",
         "    this.name = name;",
@@ -84,58 +88,7 @@ describe("trueline_outline", () => {
     const text = getText(result);
 
     // Class should be at depth 0, members indented
-    expect(text).toMatch(/^\d.*class Greeter/m);
-    expect(text).toMatch(/^ {2}\d.*constructor/m);
-    expect(text).toMatch(/^ {2}\d.*greet/m);
-  });
-
-  test("shows class members at depth 1 when exported", async () => {
-    const file = writeTestFile(
-      "exported-class.ts",
-      [
-        "export class Greeter {",
-        "  name: string;",
-        "  constructor(name: string) {",
-        "    this.name = name;",
-        "  }",
-        "  greet(): string {",
-        "    return 'Hello, ' + this.name;",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
-    const text = getText(result);
-
-    // Same expectations as the non-exported case: class at depth 0, members indented
-    expect(text).toMatch(/^\d.*export class Greeter/m);
-    expect(text).toMatch(/^ {2}\d.*constructor/m);
-    expect(text).toMatch(/^ {2}\d.*greet/m);
-  });
-
-  test("shows class members at depth 1 for export default class", async () => {
-    const file = writeTestFile(
-      "exported-default-class.ts",
-      [
-        "export default class Greeter {",
-        "  name: string;",
-        "  constructor(name: string) {",
-        "    this.name = name;",
-        "  }",
-        "  greet(): string {",
-        "    return 'Hello, ' + this.name;",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
-    const text = getText(result);
-
-    expect(text).toMatch(/^\d.*export default class Greeter/m);
+    expect(text).toMatch(new RegExp(`^\\d.*${prefix} Greeter`, "m"));
     expect(text).toMatch(/^ {2}\d.*constructor/m);
     expect(text).toMatch(/^ {2}\d.*greet/m);
   });

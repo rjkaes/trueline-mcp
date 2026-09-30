@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { CLI, run } from "./helpers.ts";
+import { run, scratch, trueline } from "./helpers.ts";
 
 let tmpDir: string;
 
@@ -34,37 +34,9 @@ describe("changes subcommand", () => {
   });
 });
 
-interface Invocation {
-  cwd?: string;
-  env?: Record<string, string>;
-  input?: string;
-}
-
-// Unlike run() this supports cwd and stdin, and strips an inherited
-// CLAUDE_PROJECT_DIR so results do not depend on the shell the suite runs from.
-function trueline(args: string[], opts: Invocation = {}) {
-  const env: Record<string, string | undefined> = { ...process.env, TRUELINE_ALLOWED_DIRS: tmpDir, ...opts.env };
-  if (opts.env?.CLAUDE_PROJECT_DIR === undefined) delete env.CLAUDE_PROJECT_DIR;
-  const result = spawnSync("bun", [CLI, ...args], {
-    cwd: opts.cwd ?? tmpDir,
-    env,
-    input: opts.input ?? "",
-    encoding: "utf-8",
-    timeout: 20_000,
-  });
-  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", exitCode: result.status ?? -1 };
-}
-
-function scratch(name: string, files: Record<string, string>): string {
-  const dir = join(tmpDir, name);
-  mkdirSync(dir, { recursive: true });
-  for (const [fileName, content] of Object.entries(files)) writeFileSync(join(dir, fileName), content);
-  return dir;
-}
-
 describe("changes from a repo subdirectory", () => {
   test("no-path `changes` finds tracked edits when cwd is below the repo root", () => {
-    const repo = scratch("changes-repo", {});
+    const repo = scratch(tmpDir, "changes-repo", {});
     mkdirSync(join(repo, "pkg"), { recursive: true });
     writeFileSync(join(repo, "pkg", "m.ts"), "export function a() { return 1; }\n");
     const git = (...args: string[]) =>
@@ -76,7 +48,7 @@ describe("changes from a repo subdirectory", () => {
     git("commit", "-q", "-m", "init");
     writeFileSync(join(repo, "pkg", "m.ts"), "export function a() { return 2; }\nexport function extra() {}\n");
 
-    const { stdout } = trueline(["changes"], { cwd: join(repo, "pkg") });
+    const { stdout } = trueline(tmpDir, ["changes"], { cwd: join(repo, "pkg") });
     expect(stdout).not.toContain("Access denied");
     expect(stdout).toContain("extra");
   });
@@ -84,7 +56,7 @@ describe("changes from a repo subdirectory", () => {
   // An explicit "*" must reach handleDiff as the sentinel; resolved against cwd it
   // becomes a glob that matches no changed file.
   test("`changes '*'` diffs all changed files, not a cwd-relative glob", () => {
-    const repo = scratch("changes-star-repo", {});
+    const repo = scratch(tmpDir, "changes-star-repo", {});
     mkdirSync(join(repo, "pkg"), { recursive: true });
     writeFileSync(join(repo, "pkg", "m.ts"), "export function a() { return 1; }\n");
     const git = (...args: string[]) =>
@@ -96,7 +68,7 @@ describe("changes from a repo subdirectory", () => {
     git("commit", "-q", "-m", "init");
     writeFileSync(join(repo, "pkg", "m.ts"), "export function a() { return 2; }\nexport function extra() {}\n");
 
-    const { stdout, exitCode } = trueline(["changes", "*"], { cwd: repo });
+    const { stdout, exitCode } = trueline(tmpDir, ["changes", "*"], { cwd: repo });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("extra");
   });

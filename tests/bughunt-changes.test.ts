@@ -6,22 +6,14 @@ import { join } from "node:path";
 import { diffSymbols, extractSymbols } from "../src/semantic-diff.ts";
 import { handleDiff } from "../src/tools/diff.ts";
 import { run } from "./cli/helpers.ts";
-
-// Strip inherited GIT_* env vars so fixture repos do not touch the parent worktree.
-const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+import { cleanEnv, makeGitRepo } from "./helpers.ts";
 
 let scratch: string[] = [];
 
 function makeRepo(prefix = "trueline-bughunt-changes-") {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
-  scratch.push(dir);
-  const git = (...args: string[]) =>
-    execFileSync("git", args, { cwd: dir, stdio: "pipe", env: cleanEnv, encoding: "utf-8" });
-  git("init", "-q");
-  git("config", "user.email", "test@test.com");
-  git("config", "user.name", "Test");
-  git("config", "commit.gpgsign", "false");
-  return { dir, git };
+  const repo = makeGitRepo(prefix);
+  scratch.push(repo.dir);
+  return repo;
 }
 
 async function changes(params: Parameters<typeof handleDiff>[0]) {

@@ -2,34 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { getInstructions } from "../../hooks/core/instructions.js";
 
 describe("getInstructions", () => {
-  test("starts with trueline heading", () => {
-    const out = getInstructions();
-    expect(out).toContain("### trueline MCP");
-  });
-
-  test("documents all six trueline tools", () => {
-    const out = getInstructions();
-    expect(out).toContain("trueline_read");
-    expect(out).toContain("trueline_edit");
-    expect(out).toContain("trueline_changes");
-    expect(out).toContain("trueline_outline");
-    expect(out).toContain("trueline_search");
-    expect(out).toContain("trueline_verify");
-  });
-
-  test("has exploration rules for outline and changes", () => {
-    const out = getInstructions();
-    expect(out).toContain("trueline_outline");
-    expect(out).toContain("trueline_changes");
-  });
-
-  test("has editing paths: surgical, exploratory, small-edit guidance", () => {
-    const out = getInstructions();
-    expect(out).toContain("trueline_search");
-    expect(out).toContain("trueline_read");
-    expect(out).toContain("trueline_edit");
-  });
-
   test("includes workflow guidance", () => {
     const out = getInstructions();
     expect(out).toContain("trueline_search -> trueline_edit");

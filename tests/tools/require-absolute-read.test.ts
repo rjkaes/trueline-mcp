@@ -1,5 +1,4 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { execSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,7 +8,8 @@ import { handleSearch } from "../../src/tools/search.ts";
 import { handleVerify } from "../../src/tools/verify.ts";
 import { handleDiff } from "../../src/tools/diff.ts";
 import { isAbsolutePathArg } from "../../src/tools/shared.ts";
-import { getText, issueTestRef, writeTestFile } from "../helpers.ts";
+import type { ToolResult } from "../../src/tools/types.ts";
+import { getText, issueTestRef, makeGitRepo, writeTestFile } from "../helpers.ts";
 
 // Regression coverage for: extending the trueline_edit requireAbsolutePath
 // guard (see edit-relative-path.test.ts) to the read-side MCP tools
@@ -40,197 +40,84 @@ afterEach(() => {
 });
 
 describe("isAbsolutePathArg", () => {
-  test("relative path is not absolute", () => {
-    expect(isAbsolutePathArg("foo.ts")).toBe(false);
-  });
-
-  test("absolute path is absolute", () => {
-    expect(isAbsolutePathArg("/abs/foo.ts")).toBe(true);
-  });
-
-  test("relative path with inline range is not absolute", () => {
-    expect(isAbsolutePathArg("foo.ts:10-25")).toBe(false);
-  });
-
-  test("absolute path with inline range is absolute", () => {
-    expect(isAbsolutePathArg("/abs/foo.ts:10-25")).toBe(true);
-  });
-
-  test("relative glob is not absolute", () => {
-    expect(isAbsolutePathArg("src/*.ts")).toBe(false);
-  });
-
-  test("absolute glob is absolute", () => {
-    expect(isAbsolutePathArg("/abs/src/*.ts")).toBe(true);
+  test.each([
+    ["relative path is not absolute", "foo.ts", false],
+    ["absolute path is absolute", "/abs/foo.ts", true],
+    ["relative path with inline range is not absolute", "foo.ts:10-25", false],
+    ["absolute path with inline range is absolute", "/abs/foo.ts:10-25", true],
+    ["relative glob is not absolute", "src/*.ts", false],
+    ["absolute glob is absolute", "/abs/src/*.ts", true],
+  ])("%s", (_name, input, expected) => {
+    expect(isAbsolutePathArg(input)).toBe(expected);
   });
 });
 
-describe("trueline_read requireAbsolutePath guard", () => {
+const MCP_MODE = { requireAbsolutePath: true } as const;
+
+interface GuardedTool {
+  name: string;
+  call: (filePaths: string[], opts?: typeof MCP_MODE) => Promise<ToolResult>;
+  // Text a successful call over target.ts must contain; outline finds no symbols in it.
+  targetText?: string;
+}
+
+const readTool: GuardedTool = {
+  name: "trueline_read",
+  call: (file_paths, opts) => handleReadMulti({ file_paths, projectDir: testDir, ...opts }),
+  targetText: "line 1",
+};
+
+const outlineTool: GuardedTool = {
+  name: "trueline_outline",
+  call: (file_paths, opts) => handleOutline({ file_paths, projectDir: testDir, ...opts }),
+};
+
+const searchTool: GuardedTool = {
+  name: "trueline_search",
+  call: (file_paths, opts) => handleSearch({ file_paths, pattern: "line", projectDir: testDir, ...opts }),
+  targetText: "line 1",
+};
+
+describe.each([readTool, outlineTool, searchTool])("$name requireAbsolutePath guard", ({ call, targetText }) => {
   test("MCP mode rejects a relative file_path", async () => {
-    const result = await handleReadMulti({
-      file_paths: ["target.ts"],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
+    const result = await call(["target.ts"], MCP_MODE);
     expect(result.isError).toBeTruthy();
     expect(getText(result)).toContain("absolute");
   });
 
   test("MCP mode accepts an absolute file_path", async () => {
-    const result = await handleReadMulti({
-      file_paths: [testFile],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
+    const result = await call([testFile], MCP_MODE);
     expect(result.isError).toBeUndefined();
-    expect(getText(result)).toContain("line 1");
+    if (targetText) expect(getText(result)).toContain(targetText);
   });
 
   test("CLI mode (flag omitted) still accepts a relative file_path", async () => {
-    const result = await handleReadMulti({
-      file_paths: ["target.ts"],
-      projectDir: testDir,
-    });
+    const result = await call(["target.ts"]);
     expect(result.isError).toBeUndefined();
-    expect(getText(result)).toContain("line 1");
+    if (targetText) expect(getText(result)).toContain(targetText);
   });
 
   test("relative sibling errors but an absolute sibling still succeeds (graceful degradation)", async () => {
-    const result = await handleReadMulti({
-      file_paths: [testFile, "sibling.ts"],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
+    const result = await call([testFile, "sibling.ts"], MCP_MODE);
     expect(result.isError).toBeUndefined();
     const text = getText(result);
-    expect(text).toContain("line 1");
     expect(text).toContain("absolute");
+    if (targetText) expect(text).toContain(targetText);
   });
+});
 
+// trueline_search has no glob cases here; adding them would be new coverage, not a fold.
+describe.each([readTool, outlineTool])("$name requireAbsolutePath guard (globs)", ({ call }) => {
   test("rejects a relative glob", async () => {
-    const result = await handleReadMulti({
-      file_paths: ["src/*.ts"],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
+    const result = await call(["src/*.ts"], MCP_MODE);
     expect(result.isError).toBeTruthy();
     expect(getText(result)).toContain("absolute");
   });
 
   test("an absolute glob still expands", async () => {
-    const result = await handleReadMulti({
-      file_paths: [`${join(testDir, "src")}/*.ts`],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
+    const result = await call([`${join(testDir, "src")}/*.ts`], MCP_MODE);
     expect(result.isError).toBeUndefined();
     expect(getText(result)).toContain("alpha");
-  });
-});
-
-describe("trueline_outline requireAbsolutePath guard", () => {
-  test("MCP mode rejects a relative file_path", async () => {
-    const result = await handleOutline({
-      file_paths: ["target.ts"],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
-    expect(result.isError).toBeTruthy();
-    expect(getText(result)).toContain("absolute");
-  });
-
-  test("MCP mode accepts an absolute file_path", async () => {
-    const result = await handleOutline({
-      file_paths: [testFile],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
-    expect(result.isError).toBeUndefined();
-  });
-
-  test("CLI mode (flag omitted) still accepts a relative file_path", async () => {
-    const result = await handleOutline({
-      file_paths: ["target.ts"],
-      projectDir: testDir,
-    });
-    expect(result.isError).toBeUndefined();
-  });
-
-  test("relative sibling errors but an absolute sibling still succeeds (graceful degradation)", async () => {
-    const result = await handleOutline({
-      file_paths: [testFile, "sibling.ts"],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
-    expect(result.isError).toBeUndefined();
-    expect(getText(result)).toContain("absolute");
-  });
-
-  test("rejects a relative glob", async () => {
-    const result = await handleOutline({
-      file_paths: ["src/*.ts"],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
-    expect(result.isError).toBeTruthy();
-    expect(getText(result)).toContain("absolute");
-  });
-
-  test("an absolute glob still expands", async () => {
-    const result = await handleOutline({
-      file_paths: [`${join(testDir, "src")}/*.ts`],
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
-    expect(result.isError).toBeUndefined();
-    expect(getText(result)).toContain("alpha");
-  });
-});
-
-describe("trueline_search requireAbsolutePath guard", () => {
-  test("MCP mode rejects a relative file_path", async () => {
-    const result = await handleSearch({
-      file_paths: ["target.ts"],
-      pattern: "line",
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
-    expect(result.isError).toBeTruthy();
-    expect(getText(result)).toContain("absolute");
-  });
-
-  test("MCP mode accepts an absolute file_path", async () => {
-    const result = await handleSearch({
-      file_paths: [testFile],
-      pattern: "line",
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
-    expect(result.isError).toBeUndefined();
-    expect(getText(result)).toContain("line 1");
-  });
-
-  test("CLI mode (flag omitted) still accepts a relative file_path", async () => {
-    const result = await handleSearch({
-      file_paths: ["target.ts"],
-      pattern: "line",
-      projectDir: testDir,
-    });
-    expect(result.isError).toBeUndefined();
-    expect(getText(result)).toContain("line 1");
-  });
-
-  test("relative sibling errors but an absolute sibling still succeeds (graceful degradation)", async () => {
-    const result = await handleSearch({
-      file_paths: [testFile, "sibling.ts"],
-      pattern: "line",
-      projectDir: testDir,
-      requireAbsolutePath: true,
-    });
-    expect(result.isError).toBeUndefined();
-    const text = getText(result);
-    expect(text).toContain("absolute");
-    expect(text).toContain("line 1");
   });
 });
 
@@ -273,17 +160,10 @@ describe("trueline_verify requireAbsolutePath guard", () => {
 
 describe("trueline_changes requireAbsolutePath guard", () => {
   let diffDir: string;
-  const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
-
-  function git(cmd: string) {
-    execSync(`git ${cmd}`, { cwd: diffDir, stdio: "pipe", env: cleanEnv });
-  }
+  let git: ReturnType<typeof makeGitRepo>["git"];
 
   beforeEach(() => {
-    diffDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-require-absolute-diff-")));
-    git("init");
-    git("config user.email test@test.com");
-    git("config user.name Test");
+    ({ dir: diffDir, git } = makeGitRepo("trueline-require-absolute-diff-"));
   });
 
   afterEach(() => {

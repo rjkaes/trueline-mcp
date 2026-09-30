@@ -5,11 +5,5 @@
     "declaration": false
   },
   "include": ["src/**/*", "tests/**/*"],
-  "exclude": [
-    "tests/hooks",
-    "tests/logical_bugs.test.ts",
-    "tests/tools/edit_no_op_eol.test.ts",
-    "tests/tools/edit-edge-cases.test.ts",
-    "tests/tools/edit-protocol-edge-cases.test.ts"
-  ]
+  "exclude": ["tests/hooks", "tests/tools/edit-edge-cases.test.ts", "tests/tools/edit-protocol-edge-cases.test.ts"]
 }

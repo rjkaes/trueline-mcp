@@ -30,30 +30,7 @@ function linesOf(readText: string): string[] {
     .map((l) => l.slice(l.indexOf("\t") + 1));
 }
 
-function hashLineOf(readText: string, lineNumber: number): string {
-  const line = readText.split("\n").find((l) => new RegExp(`^[a-z]{2}${lineNumber}\t`).test(l));
-  return line!.split("\t")[0];
-}
-
 describe("edit engine bug hunt", () => {
-  // A line ending in a lone CR followed by an empty LF-terminated line was
-  // written as "...\r" + "\n", which the splitter read back as one CRLF.
-  test("blank line after a lone-CR line survives deleting the line between them", async () => {
-    const f = writeTestFile(testDir, "notes.txt", "header\rstray\n\nfooter\n");
-    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir })));
-
-    const result = await handleEdit({
-      file_path: f,
-      projectDir: testDir,
-      edits: [{ ref, range: `${lineHash("stray")}2`, content: "" }],
-    });
-    expect(result.isError).toBeUndefined();
-
-    const reread = getText(await handleRead({ file_path: f, projectDir: testDir }));
-    expect(linesOf(reread)).toEqual(["header", "", "footer"]);
-    expect(refOf(reread)).toBe(refOf(getText(result)));
-  });
-
   // Buffer.from(str, "latin1") keeps only the low byte of each code unit, so
   // U+010D (č) is written as 0x0D, a CR that splits the line on the next read.
   test("latin1 edit with a code point above U+00FF does not split the line or return a stale ref", async () => {
@@ -145,6 +122,13 @@ describe("lone CR followed by an empty LF line", () => {
       edit: { range: `${lineHash("y")}2`, content: "" },
       lines: ["x", "", "", "z"],
       bytes: "x\r\r\n\nz\n",
+    },
+    {
+      name: "delete the line between a lone-CR line and a blank line",
+      source: "header\rstray\n\nfooter\n",
+      edit: { range: `${lineHash("stray")}2`, content: "" },
+      lines: ["header", "", "footer"],
+      bytes: "header\r\r\nfooter\n",
     },
   ])("$name keeps every line", async ({ source, edit, lines, bytes }) => {
     const f = writeTestFile(testDir, "mixed.txt", source);
@@ -303,6 +287,17 @@ describe("UTF-16 untouched lines round-trip byte-exact", () => {
     expect(readFileSync(f).toString("hex")).toBe(Buffer.concat([bomBE, be("ALPHA\n"), line2]).toString("hex"));
   });
 
+  test("lone high surrogate in a little-endian file", async () => {
+    const f = join(testDir, "le.txt");
+    const line2 = Buffer.concat([Buffer.from([0x00, 0xd8]), Buffer.from("x\n", "utf16le")]);
+    writeFileSync(f, Buffer.concat([bomLE, Buffer.from("alpha\n", "utf16le"), line2]));
+
+    await editLine1(f);
+    expect(readFileSync(f).toString("hex")).toBe(
+      Buffer.concat([bomLE, Buffer.from("ALPHA\n", "utf16le"), line2]).toString("hex"),
+    );
+  });
+
   // 32766 units after the 2-byte BOM end the first 64 KB read between the pair's halves.
   test("surrogate pair split across a read chunk still decodes as one character", async () => {
     const f = join(testDir, "emoji.txt");
@@ -315,27 +310,6 @@ describe("UTF-16 untouched lines round-trip byte-exact", () => {
     expect(readFileSync(f).toString("hex")).toBe(
       Buffer.concat([bomLE, Buffer.from("ALPHA\n", "utf16le"), line2]).toString("hex"),
     );
-  });
-});
-
-describe("encoding: UTF-16 round-trip of untouched lines", () => {
-  test("editing line 1 keeps a lone surrogate on line 2 byte-exact", async () => {
-    const file = join(testDir, "strings.txt");
-    const bom = Buffer.from([0xff, 0xfe]);
-    const loneHighSurrogate = Buffer.from([0x00, 0xd8]);
-    const line2 = Buffer.concat([loneHighSurrogate, Buffer.from("x\n", "utf16le")]);
-    writeFileSync(file, Buffer.concat([bom, Buffer.from("alpha\n", "utf16le"), line2]));
-
-    const readText = getText(await handleRead({ file_path: file, allowedDirs: [testDir] }));
-    const result = await handleEdit({
-      file_path: file,
-      edits: [{ range: hashLineOf(readText, 1), ref: refOf(readText), content: "ALPHA" }],
-      allowedDirs: [testDir],
-    });
-    expect(result.isError).toBeFalsy();
-
-    const expected = Buffer.concat([bom, Buffer.from("ALPHA\n", "utf16le"), line2]);
-    expect(readFileSync(file).toString("hex")).toBe(expected.toString("hex"));
   });
 });
 

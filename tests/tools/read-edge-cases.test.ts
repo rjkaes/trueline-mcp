@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -6,8 +6,6 @@ import { handleRead } from "../../src/tools/read.ts";
 import { LINE_PATTERN, writeTestFile } from "../helpers.ts";
 
 let testDir: string;
-
-beforeEach(() => {});
 
 beforeAll(() => {
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-read-edge-")));

@@ -12,25 +12,15 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { execSync } from "node:child_process";
 import { handleDiff } from "../../src/tools/diff.ts";
-import { writeTestFile } from "../helpers.ts";
+import { makeGitRepo, writeTestFile } from "../helpers.ts";
 
 let testDir: string;
 
-// Strip inherited GIT_* env vars so git init in temp dirs
-// does not pollute the parent worktree's HEAD.
-const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
-
-function git(cmd: string) {
-  execSync(`git ${cmd}`, { cwd: testDir, stdio: "pipe", env: cleanEnv });
-}
+let git: ReturnType<typeof makeGitRepo>["git"];
 
 beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-sdiff-")));
-  git("init");
-  git("config user.email test@test.com");
-  git("config user.name Test");
+  ({ dir: testDir, git } = makeGitRepo("trueline-sdiff-"));
 });
 
 afterEach(() => {

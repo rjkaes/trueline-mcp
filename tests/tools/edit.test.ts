@@ -19,7 +19,8 @@ import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
 import type { EditInput } from "../../src/tools/shared.ts";
 import { coerceParams } from "../../src/coerce.ts";
-import { lineHash, rawLineHash, issueTestRef, issueTestRefRaw, getText, writeTestFile, hashLine } from "../helpers.ts";
+import { FNV_OFFSET_BASIS, checksumToLetters, fnv1aHashBytes, foldHash, hashToLetters } from "../../src/hash.ts";
+import { lineHash, issueTestRef, getText, writeTestFile, hashLine } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -188,77 +189,31 @@ describe("handleEdit", () => {
     expect(result.content[0].text).toContain("mismatch");
   });
 
-  test("preserves CRLF line endings after edit", async () => {
-    const crlfFile = writeTestFile(testDir, "crlf.ts", "line 1\r\nline 2\r\nline 3\r\n");
-
-    const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(lines, 1, 3);
+  test.each([
+    { name: "CRLF", content: "line 1\r\nline 2\r\nline 3\r\n", expected: "line 1\r\nreplaced\r\nline 3\r\n" },
+    // 2 LF, 1 CRLF: LF wins
+    { name: "mixed, majority LF", content: "line 1\nline 2\r\nline 3\n", expected: "line 1\nreplaced\nline 3\n" },
+    // 2 CRLF, 1 LF: CRLF wins
+    {
+      name: "mixed, majority CRLF",
+      content: "line 1\r\nline 2\nline 3\r\n",
+      expected: "line 1\r\nreplaced\r\nline 3\r\n",
+    },
+    { name: "LF", content: "line 1\nline 2\nline 3\nline 4\n", expected: "line 1\nreplaced\nline 3\nline 4\n" },
+  ])("$name endings survive an edit", async ({ content, expected }) => {
+    const file = writeTestFile(testDir, "eol.ts", content);
+    const lines = content.split(/\r?\n/).slice(0, -1);
+    const ref = issueTestRef(lines, 1, lines.length);
     const h2 = lineHash("line 2");
 
     const result = await handleEdit({
-      file_path: crlfFile,
+      file_path: file,
       edits: [{ ref, range: `${h2}2-${h2}2`, content: "replaced" }],
       projectDir: testDir,
     });
+
     expect(result.isError).toBeUndefined();
-    const written = readFileSync(crlfFile, "utf-8");
-    // All line endings must be \r\n
-    expect(written).toBe("line 1\r\nreplaced\r\nline 3\r\n");
-    expect(written).not.toMatch(/(?<!\r)\n/);
-  });
-
-  test("mixed endings: majority LF preserves LF", async () => {
-    const mixedFile = join(testDir, "mixed-lf.ts");
-    // 2 LF, 1 CRLF → LF wins
-    writeFileSync(mixedFile, "line 1\nline 2\r\nline 3\n");
-
-    const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(lines, 1, 3);
-    const h2 = lineHash("line 2");
-
-    const result = await handleEdit({
-      file_path: mixedFile,
-      edits: [{ ref, range: `${h2}2-${h2}2`, content: "replaced" }],
-      projectDir: testDir,
-    });
-    expect(result.isError).toBeUndefined();
-    const written = readFileSync(mixedFile, "utf-8");
-    expect(written).toBe("line 1\nreplaced\nline 3\n");
-    expect(written).not.toContain("\r\n");
-  });
-
-  test("mixed endings: majority CRLF preserves CRLF", async () => {
-    const mixedFile = join(testDir, "mixed-crlf.ts");
-    // 2 CRLF, 1 LF → CRLF wins
-    writeFileSync(mixedFile, "line 1\r\nline 2\nline 3\r\n");
-
-    const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(lines, 1, 3);
-    const h2 = lineHash("line 2");
-
-    const result = await handleEdit({
-      file_path: mixedFile,
-      edits: [{ ref, range: `${h2}2-${h2}2`, content: "replaced" }],
-      projectDir: testDir,
-    });
-    expect(result.isError).toBeUndefined();
-    const written = readFileSync(mixedFile, "utf-8");
-    expect(written).toBe("line 1\r\nreplaced\r\nline 3\r\n");
-    expect(written).not.toMatch(/(?<!\r)\n/);
-  });
-
-  test("preserves LF line endings after edit (no CRLF introduced)", async () => {
-    const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(lines, 1, 4);
-    const h2 = lineHash("line 2");
-
-    await handleEdit({
-      file_path: testFile,
-      edits: [{ ref, range: `${h2}2-${h2}2`, content: "replaced" }],
-      projectDir: testDir,
-    });
-    const written = readFileSync(testFile, "utf-8");
-    expect(written).not.toContain("\r\n");
+    expect(readFileSync(file, "utf-8")).toBe(expected);
   });
 
   test("rejects directory path", async () => {
@@ -300,6 +255,23 @@ describe("handleEdit", () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Overlapping");
+  });
+
+  // Each ref covers its own edit; lines 2-3 fall inside both checksum ranges.
+  test("verifies partially overlapping refs", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [
+        { ref: issueTestRef(lines, 1, 3), range: hashLine("line 3", 3), content: "new line 3" },
+        { ref: issueTestRef(lines, 2, 4), range: hashLine("line 4", 4), content: "new line 4" },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(readFileSync(testFile, "utf-8")).toBe("line 1\nline 2\nnew line 3\nnew line 4\n");
   });
 
   test("rejects checksum that does not cover edit range", async () => {
@@ -475,8 +447,9 @@ describe("handleEdit", () => {
     const latin1File = join(testDir, "latin1.txt");
     writeFileSync(latin1File, fileBytes);
 
-    const ref = issueTestRefRaw([line1, line2], 1, 2);
-    const h1 = rawLineHash(line1);
+    const lineHashes = [line1, line2].map((line) => fnv1aHashBytes(line));
+    const [h1, h2] = lineHashes.map((h) => hashToLetters(h));
+    const ref = `${h1}1-${h2}2/${checksumToLetters(lineHashes.reduce((acc, h) => foldHash(acc, h), FNV_OFFSET_BASIS))}`;
 
     const result = await handleEdit({
       file_path: latin1File,
@@ -735,119 +708,30 @@ describe("handleEdit", () => {
     expect(text).toContain("── 14 lines ──");
   });
 
-  test("context_lines 0 produces no context", async () => {
-    const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(lines, 1, 4);
-    const h2 = lineHash("line 2");
+  // Two or more edits get context_lines=2 unless the caller passes it; one edit gets none.
+  test.each([
+    { name: "context_lines 0 produces no context", lineCount: 4, editedLines: [2], context_lines: 0, blocks: 0 },
+    { name: "multiple edits show separate blocks", lineCount: 4, editedLines: [1, 4], context_lines: 1, blocks: 2 },
+    { name: "file boundaries do not overflow", lineCount: 4, editedLines: [1], context_lines: 5, blocks: 1 },
+    { name: "auto when multiple edits and omitted", lineCount: 6, editedLines: [2, 5], blocks: 2 },
+    { name: "auto does not activate for a single edit", lineCount: 4, refEnd: 3, editedLines: [2], blocks: 0 },
+    { name: "explicit 0 suppresses auto", lineCount: 6, editedLines: [2, 5], context_lines: 0, blocks: 0 },
+  ])("context_lines: $name", async ({ lineCount, refEnd, editedLines, context_lines, blocks }) => {
+    const lines = Array.from({ length: lineCount }, (_, i) => `line ${i + 1}`);
+    writeFileSync(testFile, `${lines.join("\n")}\n`);
+    const ref = issueTestRef(lines, 1, refEnd ?? lineCount);
 
     const result = await handleEdit({
       file_path: testFile,
-      edits: [{ ref, range: `${h2}2`, content: "replaced 2" }],
-      context_lines: 0,
+      edits: editedLines.map((n) => ({ ref, range: hashLine(lines[n - 1], n), content: `replaced ${n}` })),
+      context_lines,
       projectDir: testDir,
     });
 
-    const text = getText(result);
-    expect(text).not.toContain("context near");
-  });
-
-  test("context_lines with multiple edits shows separate blocks", async () => {
-    const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(lines, 1, 4);
-    const h1 = lineHash("line 1");
-    const h4 = lineHash("line 4");
-
-    const result = await handleEdit({
-      file_path: testFile,
-      edits: [
-        { ref, range: `${h1}1`, content: "replaced 1" },
-        { ref, range: `${h4}4`, content: "replaced 4" },
-      ],
-      context_lines: 1,
-      projectDir: testDir,
-    });
-
-    const text = getText(result);
-    // Two separate context blocks
-    const contextMatches = text.match(/context near/g);
-    expect(contextMatches).toHaveLength(2);
-  });
-
-  test("context_lines at file boundaries does not overflow", async () => {
-    const lines = ["line 1", "line 2", "line 3", "line 4"];
-    const ref = issueTestRef(lines, 1, 4);
-    const h1 = lineHash("line 1");
-
-    const result = await handleEdit({
-      file_path: testFile,
-      edits: [{ ref, range: `${h1}1`, content: "replaced 1" }],
-      context_lines: 5, // more than lines above/below
-      projectDir: testDir,
-    });
-
-    const text = getText(result);
-    expect(text).toContain("context near");
     expect(result.isError).toBeUndefined();
-  });
-
-  test("auto context_lines when multiple edits and context_lines omitted", async () => {
-    writeFileSync(testFile, "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n");
-    const lines = ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"];
-    const ref = issueTestRef(lines, 1, 6);
-    const h2 = lineHash("line 2");
-    const h5 = lineHash("line 5");
-
-    const result = await handleEdit({
-      file_path: testFile,
-      edits: [
-        { ref, range: `${h2}2`, content: "replaced 2" },
-        { ref, range: `${h5}5`, content: "replaced 5" },
-      ],
-      // context_lines intentionally omitted
-      projectDir: testDir,
-    });
-
     const text = getText(result);
-    // Auto context_lines=2 should produce context blocks
-    expect(text).toContain("context near");
-    expect(text).toMatch(/^[a-z]{2}\d+\t/m);
-  });
-
-  test("auto context_lines does not activate for single edit", async () => {
-    const lines = ["line 1", "line 2", "line 3"];
-    const ref = issueTestRef(lines, 1, 3);
-    const h2 = lineHash("line 2");
-
-    const result = await handleEdit({
-      file_path: testFile,
-      edits: [{ ref, range: `${h2}2`, content: "replaced 2" }],
-      // context_lines intentionally omitted
-      projectDir: testDir,
-    });
-
-    const text = getText(result);
-    expect(text).not.toContain("context near");
-  });
-
-  test("explicit context_lines=0 suppresses auto context_lines", async () => {
-    writeFileSync(testFile, "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n");
-    const lines = ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"];
-    const ref = issueTestRef(lines, 1, 6);
-    const h2 = lineHash("line 2");
-    const h5 = lineHash("line 5");
-
-    const result = await handleEdit({
-      file_path: testFile,
-      edits: [
-        { ref, range: `${h2}2`, content: "replaced 2" },
-        { ref, range: `${h5}5`, content: "replaced 5" },
-      ],
-      context_lines: 0,
-      projectDir: testDir,
-    });
-
-    const text = getText(result);
-    expect(text).not.toContain("context near");
+    expect(text.match(/context near/g) ?? []).toHaveLength(blocks);
+    expect(/^[a-z]{2}\d+\t/m.test(text)).toBe(blocks > 0);
   });
 
   test("writes diff to temp file after successful edit", async () => {
@@ -939,6 +823,20 @@ describe("the last line keeps its own EOL", () => {
     await runEdit(file, ref, [{ range: hashLines[0], content: "FIRST" }]);
 
     expect(readFileSync(file, "utf-8")).toBe("FIRST\r\nsecond\nthird\n");
+  });
+
+  // The insert forces the write; the identity replace of line 2 must not pick up the file's CRLF.
+  test("a no-op replace keeps its LF when an insert after it forces the write", async () => {
+    const file = writeTestFile(testDir, "noop-eol.txt", "line1\r\nline2\n");
+    const { ref, hashLines } = await holdRefs(file);
+
+    const result = await runEdit(file, ref, [
+      { range: hashLines[1], content: "line2" },
+      { range: hashLines[1], action: "insert_after", content: "inserted" },
+    ]);
+
+    expect(getText(result)).not.toContain("(no changes)");
+    expect(readFileSync(file, "utf-8")).toMatch(/^line1\r\nline2\n/);
   });
 });
 

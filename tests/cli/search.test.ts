@@ -1,9 +1,8 @@
 import { describe, expect, test, beforeAll } from "bun:test";
-import { spawnSync } from "node:child_process";
-import { writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { CLI, run } from "./helpers.ts";
+import { run, scratch, trueline } from "./helpers.ts";
 
 let tmpDir: string;
 let testFile: string;
@@ -79,38 +78,10 @@ describe("search subcommand", () => {
   });
 });
 
-interface Invocation {
-  cwd?: string;
-  env?: Record<string, string>;
-  input?: string;
-}
-
-// Unlike run() this supports cwd and stdin, and strips an inherited
-// CLAUDE_PROJECT_DIR so results do not depend on the shell the suite runs from.
-function trueline(args: string[], opts: Invocation = {}) {
-  const env: Record<string, string | undefined> = { ...process.env, TRUELINE_ALLOWED_DIRS: tmpDir, ...opts.env };
-  if (opts.env?.CLAUDE_PROJECT_DIR === undefined) delete env.CLAUDE_PROJECT_DIR;
-  const result = spawnSync("bun", [CLI, ...args], {
-    cwd: opts.cwd ?? tmpDir,
-    env,
-    input: opts.input ?? "",
-    encoding: "utf-8",
-    timeout: 20_000,
-  });
-  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", exitCode: result.status ?? -1 };
-}
-
-function scratch(name: string, files: Record<string, string>): string {
-  const dir = join(tmpDir, name);
-  mkdirSync(dir, { recursive: true });
-  for (const [fileName, content] of Object.entries(files)) writeFileSync(join(dir, fileName), content);
-  return dir;
-}
-
 describe("option values", () => {
   test("search -m with a non-number is rejected, not an empty exit-0 result", () => {
-    const dir = scratch("nan-max", { "f.txt": "alpha\nbeta\n" });
-    const { stdout, exitCode } = trueline(["search", "beta", join(dir, "f.txt"), "-m", "abc"]);
+    const dir = scratch(tmpDir, "nan-max", { "f.txt": "alpha\nbeta\n" });
+    const { stdout, exitCode } = trueline(tmpDir, ["search", "beta", join(dir, "f.txt"), "-m", "abc"]);
     expect(exitCode !== 0 || stdout.includes("beta")).toBe(true);
   });
 });
@@ -118,8 +89,8 @@ describe("option values", () => {
 // Zod enforces these minimums for the MCP tools; the CLI skips zod, so io.ts does.
 describe("numeric flags", () => {
   const searchWith = (...flags: string[]) => {
-    const dir = scratch("numeric-flags", { "f.txt": "alpha\nbeta\n" });
-    return trueline(["search", "beta", join(dir, "f.txt"), ...flags]);
+    const dir = scratch(tmpDir, "numeric-flags", { "f.txt": "alpha\nbeta\n" });
+    return trueline(tmpDir, ["search", "beta", join(dir, "f.txt"), ...flags]);
   };
 
   test.each([
