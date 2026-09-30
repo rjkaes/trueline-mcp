@@ -5,8 +5,11 @@
 //   2. Result formatting (human-readable vs --json envelope)
 
 import { readFileSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type ParseArgsConfig, type ParseArgsOptionsConfig, parseArgs } from "node:util";
+import { resolveProjectDirs } from "../allowed-dirs.js";
+import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import type { ToolResult } from "../tools/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -110,13 +113,37 @@ export function fromCwd(arg: string): string {
 // @file / - / literal dispatch
 // ---------------------------------------------------------------------------
 
+// `trueline read` refuses a file a Read deny rule covers. An @path operand feeds file content into a
+// diff preview or an error message, so it faces the same rules. Containment is not enforced: patches
+// and edit lists commonly sit outside the project.
+async function assertNotDenied(filePath: string): Promise<void> {
+  const requested = resolve(process.cwd(), filePath);
+  const { projectDir } = await resolveProjectDirs();
+  const denyGlobs = await readToolDenyPatterns("Read", projectDir);
+  const real = await realpath(requested).catch(() => requested);
+  for (const candidate of new Set([real, requested])) {
+    const { denied, matchedPattern } = evaluateFilePath(candidate, denyGlobs);
+    if (denied) {
+      throw new UsageError(`cannot read ${filePath}: Access denied: matched deny pattern "${matchedPattern}"`);
+    }
+  }
+}
+
+// Not readFileSync(0): under node, asking process.stdin about a TTY puts a pipe fd in non-blocking
+// mode, and the synchronous read then fails with EAGAIN whenever the producer is slower than the CLI.
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString("utf-8");
+}
+
 function stripBom(text: string): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
 /**
  * Resolve a CLI value that may be:
- *   "@path"   — read the file at `path`
+ *   "@path"   — read the file at `path`, unless a Read deny rule covers it
  *   "@@text"  — the literal "@text"; the escape for content that starts with @
  *   "-"       — read stdin (raises UsageError if stdin is a TTY)
  *   anything else — return as-is (literal string)
@@ -128,13 +155,14 @@ function stripBom(text: string): string {
  *
  * When `kind === "json"`, the resolved string is JSON.parsed before return.
  */
-export function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): unknown {
+export async function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): Promise<unknown> {
   let raw: string;
 
   if (value.startsWith("@@")) {
     raw = value.slice(1);
   } else if (value.startsWith("@")) {
     const filePath = value.slice(1);
+    await assertNotDenied(filePath);
     try {
       raw = stripBom(readFileSync(filePath, "utf-8"));
     } catch (err: unknown) {
@@ -146,7 +174,7 @@ export function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): unk
       throw new UsageError("stdin is a TTY; pipe data in or use @file");
     }
     try {
-      raw = stripBom(readFileSync(0, "utf-8"));
+      raw = stripBom(await readStdin());
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new UsageError(`cannot read stdin: ${msg}`);

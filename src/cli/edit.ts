@@ -92,14 +92,17 @@ export default {
     let raw: unknown;
     if (args.edits !== undefined) {
       // Load via @file, stdin, or literal JSON string
-      raw = loadAtOrDashOrLiteral(args.edits, "json");
+      raw = await loadAtOrDashOrLiteral(args.edits, "json");
     } else if (hasFlatFlags) {
-      // Single-edit shorthand; parseEditsArg reports any missing field
+      // Single-edit shorthand. Checked here, not by parseEditsArg, which would blame --edits[0].
+      for (const flag of ["ref", "range", "content"] as const) {
+        if (args[flag] === undefined) throw new UsageError(`missing --${flag}`);
+      }
       raw = [
         {
           ref: args.ref,
           range: args.range,
-          content: args.content === undefined ? undefined : loadAtOrDashOrLiteral(args.content, "text"),
+          content: args.content === undefined ? undefined : await loadAtOrDashOrLiteral(args.content, "text"),
           action: args.action,
         },
       ];

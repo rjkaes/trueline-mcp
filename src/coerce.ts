@@ -53,6 +53,9 @@ const NUMERIC_KEYS = ["depth", "context_lines", "max_matches", "max_match_lines"
 const BOOLEAN_KEYS = ["dry_run", "case_insensitive", "regex", "multiline"];
 const JSON_KEYS = ["file_paths", "ranges", "refs", "edits"];
 
+// Bad client input coerceParams cannot repair; the server reports it as invalid parameters, not a server fault.
+export class ParamError extends Error {}
+
 /**
  * Preprocess MCP tool parameters to be more permissive about what agents send:
  *
@@ -178,7 +181,7 @@ export function coerceParams(val: unknown): unknown {
         // Detect built-in Edit tool shape (old_string/new_string instead of
         // range/ref/content). Can't recover, but give a helpful error.
         if (("old_string" in e || "new_string" in e) && !("range" in e)) {
-          throw new Error(
+          throw new ParamError(
             "Edit uses old_string/new_string format (from the built-in Edit tool). " +
               "trueline_edit requires {range, ref, content}. " +
               "Use trueline_search to find the target lines, then pass the range and ref from its output.",

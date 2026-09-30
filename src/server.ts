@@ -9,7 +9,7 @@ import { handleOutline } from "./tools/outline.ts";
 import { handleSearch } from "./tools/search.ts";
 import { handleVerify } from "./tools/verify.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
-import { coerceParams } from "./coerce.ts";
+import { coerceParams, ParamError } from "./coerce.ts";
 import { resolveProjectDirs } from "./allowed-dirs.js";
 
 // =============================================================================
@@ -71,7 +71,9 @@ function coerceSingleFileParams(rawParams: Record<string, unknown>): Record<stri
   if (!coerced.file_path && Array.isArray(coerced.file_paths)) {
     const paths = coerced.file_paths as string[];
     if (paths.length > 1) {
-      throw new Error(`This tool accepts a single file path; received ${paths.length}. Pass one path as file_path.`);
+      throw new ParamError(
+        `This tool accepts a single file path; received ${paths.length}. Pass one path as file_path.`,
+      );
     }
     coerced.file_path = paths[0];
     delete coerced.file_paths;
@@ -371,7 +373,7 @@ tools.set("trueline_read", {
 tools.set("trueline_edit", {
   description:
     "Apply hash-verified edits to a file. Edits go in the edits array. " +
-    'Example: {file_path: "foo.ts", edits: [{range: "ab10-cd20", ref: "ab10-cd20/efghij", content: "new text"}]}. ' +
+    'Example: {file_path: "/Users/you/project/src/foo.ts", edits: [{range: "ab10-cd20", ref: "ab10-cd20/efghij", content: "new text"}]}. ' +
     "Copy the ref from trueline_read/trueline_search output. The 2-letter hash prefix on each line number is required in ranges. " +
     'Use action: "insert_after" to insert content after a line instead of replacing it. ' +
     "Set context_lines to get hashLine context around edit sites for chaining edits without re-searching.",
@@ -469,6 +471,8 @@ async function handleToolsCall(id: string | number, params: Record<string, unkno
         issue.path.length > 0 ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
       );
       result = errorResult(`Invalid parameters: ${issues.join("; ")}`);
+    } else if (err instanceof ParamError) {
+      result = errorResult(`Invalid parameters: ${err.message}`);
     } else {
       const message = err instanceof Error ? err.message : String(err);
       process.stderr.write(`[trueline-mcp] tool error: ${message}\n`);
@@ -483,6 +487,12 @@ async function handleToolsCall(id: string | number, params: Record<string, unkno
 // =============================================================================
 
 async function dispatch(msg: JsonRpcMessage): Promise<void> {
+  // A JSON-RPC id is a string or number (null tolerated); echoing any other value back would put an id
+  // in a reply that no conforming client can have sent.
+  if (msg.id !== undefined && msg.id !== null && typeof msg.id !== "string" && typeof msg.id !== "number") {
+    respondError(null, INVALID_REQUEST, "Invalid Request: id must be a string or number");
+    return;
+  }
   if (typeof msg.method !== "string") {
     respondError(msg.id ?? null, INVALID_REQUEST, "Invalid Request: missing method");
     return;
@@ -529,6 +539,10 @@ async function dispatch(msg: JsonRpcMessage): Promise<void> {
 // Stdio transport — read newline-delimited JSON from stdin
 // =============================================================================
 
+// Aborted at stdin EOF so the update check's pending registry request cannot hold the process open
+// for its 3 s timeout.
+const stdinClosed = new AbortController();
+
 // Frame on "\n" alone: readline would also split on U+2028/U+2029, which JSON allows raw inside
 // strings, turning one valid request into two parse errors.
 function handleLine(rawLine: string): void {
@@ -564,7 +578,12 @@ process.stdin.on("data", (chunk: string) => {
   pendingInput = lines.pop() ?? "";
   for (const line of lines) handleLine(line);
 });
-process.stdin.on("end", () => handleLine(pendingInput));
+process.stdin.on("end", () => {
+  handleLine(pendingInput);
+  // No process.exit(): under Bun it does not wait for queued stdout, so large replies are cut off.
+  // Requests still running keep the event loop alive, and the process leaves once they drain.
+  stdinClosed.abort();
+});
 
 process.on("uncaughtException", (err) => {
   process.stderr.write(`[trueline-mcp] uncaught exception: ${err.message}\n`);
@@ -574,8 +593,12 @@ process.on("unhandledRejection", (reason) => {
   process.stderr.write(`[trueline-mcp] unhandled rejection: ${message}\n`);
 });
 
-scheduleUpdateCheck(VERSION, ({ current, latest }) => {
-  const message = `update available: ${current} → ${latest} (npm i -g trueline-mcp)`;
-  process.stderr.write(`[trueline-mcp] ${message}\n`);
-  notify("notifications/message", { level: "warning", logger: "trueline-mcp", data: message });
-});
+scheduleUpdateCheck(
+  VERSION,
+  ({ current, latest }) => {
+    const message = `update available: ${current} → ${latest} (npm i -g trueline-mcp)`;
+    process.stderr.write(`[trueline-mcp] ${message}\n`);
+    notify("notifications/message", { level: "warning", logger: "trueline-mcp", data: message });
+  },
+  stdinClosed.signal,
+);

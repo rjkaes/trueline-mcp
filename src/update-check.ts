@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -30,13 +30,16 @@ async function readCache(): Promise<CachedCheck | null> {
 }
 
 async function writeCache(entry: CachedCheck): Promise<void> {
-  await writeFile(CACHE_FILE, JSON.stringify(entry)).catch(() => {});
+  // writeFile follows a symlink planted at the path (shared temp dir). Unlink it, then create
+  // exclusively, so a link replanted in between fails the write instead.
+  await unlink(CACHE_FILE).catch(() => {});
+  await writeFile(CACHE_FILE, JSON.stringify(entry), { flag: "wx" }).catch(() => {});
 }
 
-async function fetchLatestVersion(): Promise<string | null> {
+async function fetchLatestVersion(cancel?: AbortSignal): Promise<string | null> {
   try {
     const res = await fetch(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`, {
-      signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
+      signal: AbortSignal.any([AbortSignal.timeout(REGISTRY_TIMEOUT_MS), ...(cancel ? [cancel] : [])]),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { version?: string };
@@ -52,18 +55,24 @@ async function fetchLatestVersion(): Promise<string | null> {
  * Checks at most once per 24 hours (cached in a temp file).
  *
  * @param onUpdate Called with `{ current, latest }` when a newer version exists.
+ * @param cancel Abandons the registry request when aborted, so it cannot hold the process open.
  */
 export function scheduleUpdateCheck(
   currentVersion: string,
   onUpdate: (info: { current: string; latest: string }) => void,
+  cancel?: AbortSignal,
 ): void {
   // Fire-and-forget — never delays startup or rejects into the event loop
   void (async () => {
     const cached = await readCache();
 
-    let latest = cached && Date.now() - cached.timestamp < CHECK_INTERVAL_MS ? cached.latestVersion : null;
+    // A timestamp ahead of the clock (planted, or a clock that was once wrong) would stay fresh until
+    // the clock caught up, so it counts as expired.
+    const now = Date.now();
+    let latest =
+      cached && cached.timestamp <= now && now - cached.timestamp < CHECK_INTERVAL_MS ? cached.latestVersion : null;
     if (!latest) {
-      latest = await fetchLatestVersion();
+      latest = await fetchLatestVersion(cancel);
       if (!latest) return;
       await writeCache({ timestamp: Date.now(), latestVersion: latest });
     }
@@ -75,10 +84,11 @@ export function scheduleUpdateCheck(
 
 // >0 if a > b. Numeric collation makes 2.10.0 > 2.9.0 and rc.10 > rc.9. Per semver a
 // prerelease sorts before its release, so a running 2.10.0-rc.1 is told about 2.10.0.
+// Build metadata (+...) never takes part in the ordering.
 function compareVersions(a: string, b: string): number {
   const byNumber = (x: string, y: string) => x.localeCompare(y, undefined, { numeric: true });
-  const [coreA, preA] = a.split(/-(.*)/s);
-  const [coreB, preB] = b.split(/-(.*)/s);
+  const [coreA, preA] = a.replace(/\+.*/s, "").split(/-(.*)/s);
+  const [coreB, preB] = b.replace(/\+.*/s, "").split(/-(.*)/s);
 
   const core = byNumber(coreA, coreB);
   if (core !== 0 || preA === preB) return core;

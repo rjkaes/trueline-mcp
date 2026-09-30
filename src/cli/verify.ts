@@ -32,7 +32,7 @@ Options:
  *
  * If @file or - is mixed with other entries, raises UsageError (exit 3).
  */
-function parseRefsArg(refsArray: string[]): string[] {
+async function parseRefsArg(refsArray: string[]): Promise<string[]> {
   if (refsArray.length === 0) {
     throw new UsageError("--refs is required");
   }
@@ -47,7 +47,7 @@ function parseRefsArg(refsArray: string[]): string[] {
 
   if (hasAtFile || hasDash) {
     // Load via @file or stdin, then split on newlines (one ref per line)
-    const raw = loadAtOrDashOrLiteral(refsArray[0], "text") as string;
+    const raw = (await loadAtOrDashOrLiteral(refsArray[0], "text")) as string;
     return raw
       .split("\n")
       .map((l) => l.trim())
@@ -66,7 +66,7 @@ export default {
     }
     const filePath = fromCwd(paths[0]);
 
-    const refs = parseRefsArg(args.refs ?? []);
+    const refs = await parseRefsArg(args.refs ?? []);
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 
