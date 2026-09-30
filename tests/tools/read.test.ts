@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead, handleReadMulti } from "../../src/tools/read.ts";
-import { LINE_PATTERN, writeTestFile } from "../helpers.ts";
+import { LINE_PATTERN, getText, writeTestFile } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
@@ -328,5 +328,104 @@ describe("handleRead", () => {
     const text = result.content[0].text;
     expect(text).toContain("const a = 1;");
     expect(text).toContain("const c = 3;");
+  });
+});
+
+describe("read range handling", () => {
+  // read.ts:168-169 validates against the boundary-expanded range, so the
+  // error names start-1 instead of the line the caller asked for.
+  test("out-of-range error names the requested start line", async () => {
+    const file = writeTestFile(testDir, "five-lines.txt", "a\nb\nc\nd\ne\n");
+
+    const result = await handleRead({ file_path: file, ranges: ["50-60"], projectDir: testDir });
+
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain("start_line 50 ");
+  });
+
+  // Same root cause: the +/-1 boundary expansion runs before the EOF check, so
+  // a range starting one line past EOF is served as the last line instead of
+  // the "out of range" error that line 7 (or "100-") gets.
+  test("range starting one line past EOF is an error", async () => {
+    const file = writeTestFile(testDir, "five-lines-eof.txt", "a\nb\nc\nd\ne\n");
+
+    const result = await handleRead({ file_path: file, ranges: ["6"], projectDir: testDir });
+
+    expect(result.isError).toBe(true);
+  });
+
+  // Graceful degradation: valid ranges are served and each out-of-range one is
+  // named, so one bad range does not discard the rest. Error only when none is valid.
+  test("a later range past EOF is skipped with a note, valid ranges are still served", async () => {
+    const file = writeTestFile(testDir, "two-ranges.txt", "a\nb\nc\nd\ne\n");
+
+    const result = await handleRead({ file_path: file, ranges: ["1-2", "9"], projectDir: testDir });
+
+    expect(result.isError).toBeFalsy();
+    const text = getText(result);
+    expect(text).toMatch(/\ta$/m);
+    expect(text).toMatch(/\tb$/m);
+    expect(text).toContain("range 9 skipped");
+    expect(text).toContain("file has 5 lines");
+    expect(text).not.toContain("range 1-2 skipped");
+  });
+
+  test("the note names each out-of-range range", async () => {
+    const file = writeTestFile(testDir, "three-bad-ranges.txt", "a\nb\nc\nd\ne\n");
+
+    const result = await handleRead({ file_path: file, ranges: ["1-2", "9", "20-30", "40-"], projectDir: testDir });
+
+    expect(result.isError).toBeFalsy();
+    const text = getText(result);
+    expect(text).toContain("range 9 skipped");
+    expect(text).toContain("range 20-30 skipped");
+    expect(text).toContain("range 40- skipped");
+  });
+
+  test("every range out of range is still an error", async () => {
+    const file = writeTestFile(testDir, "all-bad-ranges.txt", "a\nb\nc\nd\ne\n");
+
+    const result = await handleRead({ file_path: file, ranges: ["9", "20-30"], projectDir: testDir });
+
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toBe("start_line 9 out of range (file has 5 lines)");
+  });
+
+  // read.ts:182/190 append em-dash notices as UTF-8 bytes into a buffer that is
+  // then decoded with the caller's encoding, garbling them under latin1.
+  test("truncation notice is intact under encoding=latin1", async () => {
+    const file = writeTestFile(testDir, "long.txt", Array.from({ length: 2100 }, (_, i) => `row ${i + 1}`).join("\n"));
+
+    const result = await handleRead({ file_path: file, encoding: "latin1", projectDir: testDir });
+
+    expect(getText(result)).toContain("(truncated at 2000 line limit — use ranges");
+  });
+});
+
+describe("read multi-file batch", () => {
+  // read.ts:226/244: the multi-file guard counts only absolute entries, and the
+  // multi-file branch then drops top-level `ranges`, returning the full file.
+  test("top-level ranges are not silently ignored when a relative sibling is rejected", async () => {
+    const file = writeTestFile(testDir, "ranged.txt", Array.from({ length: 10 }, (_, i) => `row ${i + 1}`).join("\n"));
+
+    const result = await handleReadMulti({
+      file_paths: ["relative/sibling.txt", file],
+      ranges: ["2-3"],
+      projectDir: testDir,
+      requireAbsolutePath: true,
+    });
+
+    expect(getText(result)).not.toContain("row 10");
+  });
+
+  // handleReadMulti re-parses glob-expanded real paths for inline ranges, so a
+  // matched file named "snapshot:5" is split into "snapshot" plus range 5.
+  test.skipIf(process.platform === "win32")("glob match ending in :<digits> is read as a filename", async () => {
+    writeTestFile(testDir, "snapshot:5", Array.from({ length: 10 }, (_, i) => `row ${i + 1}`).join("\n"));
+
+    const result = await handleReadMulti({ file_paths: [join(testDir, "snapshot*")], projectDir: testDir });
+
+    expect(result.isError).toBeFalsy();
+    expect(getText(result)).toContain("row 10");
   });
 });

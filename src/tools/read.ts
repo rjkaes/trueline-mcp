@@ -164,9 +164,14 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     return textResult("(empty file)\n\nref: 0-0/aaaaaa");
   }
 
-  // Check if first range's start is out of range
-  if (rangeFirstLine === 0 && ranges[0].start > totalLines) {
-    return errorResult(`start_line ${ranges[0].start} out of range (file has ${totalLines} lines)`);
+  // Check requested ranges, not the boundary-expanded ones, or the error names
+  // start-1 and a range one line past EOF is served as the last line. A truncated
+  // read stopped early, so ranges it never reached say nothing about EOF.
+  const pastEof = truncated ? [] : requestedRanges.filter((r) => r.start > totalLines);
+  // Graceful degradation: error only when no range is servable; otherwise the
+  // valid ranges are returned and each past-EOF one is named in the trailer.
+  if (pastEof.length === requestedRanges.length) {
+    return errorResult(`start_line ${pastEof[0].start} out of range (file has ${totalLines} lines)`);
   }
 
   // Emit inline ref for the last range (only if we output any lines in it)
@@ -176,29 +181,37 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     append(refLine);
   }
 
+  // Notices hold non-ASCII text; keep them out of the buffer that is decoded
+  // with the caller's encoding (latin1 would garble the UTF-8 bytes).
+  let trailer = "";
+  for (const r of pastEof) {
+    const spec = r.end === Infinity ? `${r.start}-` : r.start === r.end ? `${r.start}` : `${r.start}-${r.end}`;
+    trailer += `\n\n(range ${spec} skipped — out of range, file has ${totalLines} lines)`;
+  }
+
   // Append truncation notice so the agent knows to use narrower ranges
   if (truncated) {
     const reason = outputLines > MAX_OUTPUT_LINES ? `${MAX_OUTPUT_LINES} line` : "20 MB output";
     const notice = `\n\n(truncated at ${reason} limit — use ranges for specific sections)`;
-    append(notice);
+    trailer += notice;
   }
 
   // Nudge toward targeted reads when a full-file read returns many lines.
   const LARGE_READ_NUDGE = 150;
   const isFullFileRead = requestedRanges.length === 1 && requestedRanges[0].end === Infinity;
   if (!truncated && isFullFileRead && outputLines > LARGE_READ_NUDGE) {
-    append(`\n\n(${outputLines} lines — consider ranges for targeted reads)`);
+    trailer += `\n\n(${outputLines} lines — consider ranges for targeted reads)`;
   }
 
   // Include encoding metadata when non-default, so trueline_edit can round-trip
   if (bomInfo.bom.length > 0) {
     const encLabel = bomInfo.encoding === "utf-8" ? "utf-8-bom" : bomInfo.encoding;
-    append(`\nencoding: ${encLabel}`);
+    trailer += `\nencoding: ${encLabel}`;
   }
 
   // UTF-16 content has been transcoded to UTF-8; always decode output as UTF-8.
   const outputEnc = bomInfo.encoding === "utf-8" ? enc : "utf-8";
-  return textResult(Buffer.concat(outputChunks, outputLen).toString(outputEnc));
+  return textResult(Buffer.concat(outputChunks, outputLen).toString(outputEnc) + trailer);
 }
 
 export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResult> {
@@ -216,14 +229,19 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
     return `--- ${displayPath(path, rest.projectDir)} ---\nerror: ${errorText}`;
   });
 
-  // Expand globs before parsing inline ranges (globs never contain ':')
+  // Expand globs; entries without glob characters pass through unchanged.
   const expanded = await expandGlobs(candidates, rest.projectDir, rest.allowedDirs);
 
-  // Parse inline ranges from file_paths (e.g. "src/foo.ts:10-25")
-  const parsed = expanded.map(parseFilePathWithRanges);
+  // Only user-supplied entries carry inline ranges (e.g. "src/foo.ts:10-25").
+  // A glob match is a real filename, so one named "backup:5" is never split.
+  const literalEntries = new Set(candidates.map((entry) => entry.replaceAll("\\", "/")));
+  const parsed = expanded.map((entry) =>
+    literalEntries.has(entry) ? parseFilePathWithRanges(entry) : { path: entry, rangeSpecs: undefined },
+  );
 
-  // Top-level ranges with multiple files is ambiguous; reject it.
-  if (ranges?.length && parsed.length > 1) {
+  // Top-level ranges with multiple files is ambiguous; reject it. Rejected
+  // entries count, or the ranges would silently rebind to the surviving file.
+  if (ranges?.length && parsed.length + rejectedSections.length > 1) {
     return errorResult(
       "Top-level ranges cannot be used with multiple file_paths. " +
         'Use inline range syntax instead: file_paths: ["src/foo.ts:10-25", "src/bar.ts:1-50"]',
