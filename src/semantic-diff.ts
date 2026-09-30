@@ -149,8 +149,18 @@ const DECLARED_NAME =
 // `static func + (a, b)`. Followed by a space or `(`, so the `<` of Kotlin's `fun <T> f()` is not one.
 const OPERATOR_METHOD = /\b(?:def|func|fun)\s+(\[\]=?|[-+*/%=!<>~&|^?.]+@?)(?=\s|\(|$)/;
 
+// Text that precedes or interrupts a declaration without naming it. Left in, the first `class T`, `Name(` or `(`
+// past it is taken for the declaration's name:
+// - C++ `template <class T>` headers and C# `[Attr("x")]` lists, both before the declaration. A `]` followed by
+//   `(` is a computed member name (`[Symbol.iterator]()`), not an attribute list.
+// - C/C++ `__declspec(...)` and `__attribute__((...))`, which can sit among the specifiers.
+// - A C# tuple return type, which makes the modifier before it read as a call (`public (int, int) Locate()`).
+const NON_NAME_TEXT =
+  /^\s*template\s*<(?:[^<>]|<(?:[^<>]|<[^<>]*>)*>)*>|^\s*(?:\[(?:"(?:[^"\\]|\\.)*"|[^\]"])*\]\s*)+(?=[\p{ID_Continue}$])|\b__declspec\s*\([^)]*\)|\b__attribute__\s*\(\((?:[^()]|\([^()]*\))*\)\)|(?<=\s)\((?:[^(),]|\([^()]*\))*,(?:[^()]|\([^()]*\))*\)(?=\s+[\p{ID_Continue}$~:]+\s*(?:<[^>]*>)?\s*\()/gu;
+
 /** Extract a human-readable name from a signature line. */
 function extractName(sig: string): string {
+  sig = sig.replace(NON_NAME_TEXT, " ");
   // Go method: qualify by receiver type so `A.Run` and `B.Run` stay distinct.
   const goMethod = sig.match(/^\s*func\s*\((?:[^)]*[\s*])?(\p{ID_Continue}+)(?:\[[^\]]*\])?\)\s*(\p{ID_Continue}+)/u);
   if (goMethod) return `${goMethod[1]}.${goMethod[2]}`;

@@ -182,15 +182,33 @@ export function openNoFollow(filePath: string): Promise<FileHandle> {
   return open(filePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
 }
 
-// Outline parsers treat a leading U+FEFF as content (a line-1 heading or
-// front matter stops matching; the first tree-sitter entry gains the character).
-function stripUtf8Bom(buf: Buffer): Buffer {
-  return buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf ? buf.subarray(3) : buf;
+/**
+ * Source text of a file's bytes, decoded as trueline_read does: a UTF-8 or UTF-16 BOM is consumed and UTF-16 is
+ * transcoded. null when the bytes are binary: a NUL byte outside UTF-16, or UTF-32 (refused in encoding.ts too).
+ */
+export function decodeText(bytes: Buffer): string | null {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    // FF FE 00 00 is the UTF-32LE BOM, which would otherwise pass for a UTF-16LE one.
+    return bytes[2] === 0 && bytes[3] === 0 ? null : bytes.toString("utf16le", 2);
+  }
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    // swap16 takes whole code units; an odd trailing byte is half a character.
+    return Buffer.from(bytes.subarray(2, bytes.length - (bytes.length % 2)))
+      .swap16()
+      .toString("utf16le");
+  }
+  if (bytes.includes(0)) return null;
+  return bytes.toString("utf-8", bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0);
 }
 
-/** Reads a file as UTF-8 via openNoFollow, dropping a leading BOM. Returns null if it contains a NUL byte (binary). */
+// Outline parsers treat a leading U+FEFF as content (a line-1 heading or
+// front matter stops matching; the first tree-sitter entry gains the character).
+/**
+ * Reads a file via openNoFollow and decodes it with decodeText: a UTF-8 or UTF-16 BOM is dropped and UTF-16 is
+ * transcoded. Returns null if the file is binary (a NUL byte outside UTF-16, or UTF-32).
+ */
 export async function readTextNoFollow(filePath: string): Promise<string | null> {
   const fh = await openNoFollow(filePath);
   const buf = await fh.readFile().finally(() => fh.close());
-  return buf.includes(0) ? null : stripUtf8Bom(buf).toString("utf-8");
+  return decodeText(buf);
 }

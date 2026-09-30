@@ -1,4 +1,4 @@
-import { readTextNoFollow } from "../line-splitter.ts";
+import { decodeText, readTextNoFollow } from "../line-splitter.ts";
 import { lcsMiddle, trimCommonEnds } from "../diff-collector.ts";
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
@@ -8,6 +8,7 @@ import {
   checkPathBoundary,
   displayPath,
   gitExec,
+  gitExecBytes,
   isAbsolutePathArg,
   relativePathError,
   type ToolContext,
@@ -143,7 +144,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     // Read git content
     const refState = await checkRefOnce();
     if (refState === "invalid") return invalidRef;
-    let gitContent: string | null = null;
+    let gitContent: Buffer | null = null;
     try {
       // An unborn HEAD has no tree: every file is new. Spawning rev-parse there would leave its promise unawaited.
       if (refState !== "unborn") {
@@ -173,11 +174,12 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
         }
       }
     } catch (err) {
-      const { code, stderr = "", message } = err as Error & { code?: string; stderr?: string };
+      // stderr is a Buffer when it comes from the byte-reading cat-file.
+      const { code, stderr = "", message } = err as Error & { code?: string; stderr?: string | Buffer };
       const reason =
         code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
           ? "it is over the 10 MB limit"
-          : (stderr || message).trim().split("\n")[0];
+          : (String(stderr) || message).trim().split("\n")[0];
       sections.push(`## ${relPath}\n\nCould not read the ${compare_against} version: ${reason}.`);
       continue;
     }
@@ -186,13 +188,26 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
       continue;
     }
 
-    // Extract symbols from both
-    const [oldSymbols, newSymbols] = await Promise.all([
-      extractSymbols(gitContent ?? "", ext),
-      extractSymbols(diskContent, ext),
-    ]);
+    // A binary ref version is skipped like a binary disk one: read as UTF-8, its NUL bytes parse as symbols.
+    const oldSource = gitContent === null ? "" : decodeText(gitContent);
+    if (oldSource === null) {
+      sections.push(`## ${relPath}\n\nBinary file, not diffed.`);
+      continue;
+    }
 
-    const diff = diffSymbols(oldSymbols, newSymbols);
+    // One file the parser cannot handle must not discard the sections of the others. The parser's own
+    // message is an internal detail, so it is not passed on.
+    let diff: SymbolDiff;
+    try {
+      const [oldSymbols, newSymbols] = await Promise.all([
+        extractSymbols(oldSource, ext),
+        extractSymbols(diskContent, ext),
+      ]);
+      diff = diffSymbols(oldSymbols, newSymbols);
+    } catch {
+      sections.push(`## ${relPath}\n\nCould not analyze this file; not diffed.`);
+      continue;
+    }
     sections.push(formatDiffSection(relPath, diff, compare_against, getLanguageConfig(ext)?.whitespaceMode));
   }
 
@@ -242,7 +257,7 @@ async function resolveMissingPath(absolute: string): Promise<string> {
 }
 
 /**
- * Content of `filePath` at `ref`; null when the ref has no such file (new or untracked).
+ * Bytes of `filePath` at `ref`; null when the ref has no such file (new or untracked).
  * Every other git failure throws: an empty baseline would report every symbol as added.
  */
 async function getGitContent(
@@ -250,7 +265,7 @@ async function getGitContent(
   ref: string,
   cwd: string,
   toplevel: Promise<string>,
-): Promise<string | null> {
+): Promise<Buffer | null> {
   // Use git's own toplevel to compute the relative path, so that
   // Windows 8.3 short-name mismatches between realpath() and the
   // test's realpathSync() don't produce wrong relative paths.
@@ -266,9 +281,7 @@ async function getGitContent(
       : await gitExec(["ls-tree", "-z", "--full-tree", ref, "--", `./${relPath}`], cwd);
   const blobId = (ref === INDEX_REF ? /^(?!160000)\d+ (\w+) 0\t/ : /^\d+ blob (\w+)\t/).exec(listing)?.[1];
   if (blobId === undefined) return null;
-  const content = await gitExec(["cat-file", "blob", blobId], cwd);
-  // The disk side is read without its BOM; match it so a BOM-prefixed file does not differ on its first symbol.
-  return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+  return gitExecBytes(["cat-file", "blob", blobId], cwd);
 }
 
 /**
