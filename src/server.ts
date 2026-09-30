@@ -1,4 +1,3 @@
-import { createInterface } from "node:readline";
 import { z } from "zod";
 import pkg from "../package.json";
 import type { ToolResult } from "./tools/types.ts";
@@ -19,7 +18,7 @@ import { resolveProjectDirs } from "./allowed-dirs.js";
 
 interface JsonRpcMessage {
   id?: string | number;
-  method: string;
+  method?: string;
   params?: Record<string, unknown>;
 }
 
@@ -36,7 +35,7 @@ function respond(id: string | number, result: unknown): void {
   send({ jsonrpc: "2.0", id, result });
 }
 
-function respondError(id: string | number, code: number, message: string): void {
+function respondError(id: string | number | null, code: number, message: string): void {
   send({ jsonrpc: "2.0", id, error: { code, message } });
 }
 
@@ -88,6 +87,7 @@ const VERSION = pkg.version;
 const PROTOCOL_VERSION = "2024-11-05";
 
 // JSON-RPC error codes
+const PARSE_ERROR = -32700;
 const INVALID_REQUEST = -32600;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
@@ -252,7 +252,7 @@ const editJsonSchema = {
       type: "integer",
       minimum: 0,
       description:
-        "Lines of hashLine context to return around each edit site. 0 or omitted = no context. Use when you plan to make follow-up edits to the same file.",
+        "Lines of hashLine context to return around each edit site. Omitted: 2 when the call has 2 or more edits, otherwise 0. Pass 0 for none. Use when you plan to make follow-up edits to the same file.",
     },
   },
   required: ["file_path", "edits"],
@@ -453,7 +453,8 @@ async function handleToolsCall(id: string | number, params: Record<string, unkno
 
   const tool = tools.get(name);
   if (!tool) {
-    respondError(id, METHOD_NOT_FOUND, `Unknown tool: ${name}`);
+    // MCP: an unknown tool is a protocol error, reported as invalid params.
+    respondError(id, INVALID_PARAMS, `Unknown tool: ${name}`);
     return;
   }
 
@@ -482,6 +483,11 @@ async function handleToolsCall(id: string | number, params: Record<string, unkno
 // =============================================================================
 
 async function dispatch(msg: JsonRpcMessage): Promise<void> {
+  if (typeof msg.method !== "string") {
+    respondError(msg.id ?? null, INVALID_REQUEST, "Invalid Request: missing method");
+    return;
+  }
+
   // Notifications carry no id — nothing to respond to
   if (msg.id === undefined) return;
 
@@ -494,6 +500,11 @@ async function dispatch(msg: JsonRpcMessage): Promise<void> {
       });
       break;
     case "ping":
+      respond(msg.id, {});
+      break;
+    case "logging/setLevel":
+      // `logging` is declared because the update notice goes out as notifications/message. That is
+      // the only log message we send, once at startup, so the requested level is accepted, not tracked.
       respond(msg.id, {});
       break;
     case "tools/list":
@@ -518,23 +529,42 @@ async function dispatch(msg: JsonRpcMessage): Promise<void> {
 // Stdio transport — read newline-delimited JSON from stdin
 // =============================================================================
 
-createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line", (line) => {
+// Frame on "\n" alone: readline would also split on U+2028/U+2029, which JSON allows raw inside
+// strings, turning one valid request into two parse errors.
+function handleLine(rawLine: string): void {
+  const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
   if (!line) return;
 
-  let msg: JsonRpcMessage;
+  let parsed: unknown;
   try {
-    msg = JSON.parse(line) as JsonRpcMessage;
+    parsed = JSON.parse(line);
   } catch {
-    respondError(0, INVALID_REQUEST, "Invalid JSON");
+    respondError(null, PARSE_ERROR, "Parse error");
     return;
   }
 
+  // Batch arrays are not supported, but JSON-RPC still wants an error reply.
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    respondError(null, INVALID_REQUEST, "Invalid Request");
+    return;
+  }
+
+  const msg = parsed as JsonRpcMessage;
   dispatch(msg).catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[trueline-mcp] dispatch error: ${message}\n`);
     if (msg.id !== undefined) respondError(msg.id, INVALID_PARAMS, `Internal error: ${message}`);
   });
+}
+
+let pendingInput = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk: string) => {
+  const lines = (pendingInput + chunk).split("\n");
+  pendingInput = lines.pop() ?? "";
+  for (const line of lines) handleLine(line);
 });
+process.stdin.on("end", () => handleLine(pendingInput));
 
 process.on("uncaughtException", (err) => {
   process.stderr.write(`[trueline-mcp] uncaught exception: ${err.message}\n`);

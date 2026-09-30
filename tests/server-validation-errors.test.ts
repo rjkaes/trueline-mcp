@@ -100,3 +100,160 @@ describe("tool param validation errors", () => {
     expect(result.text).not.toContain('"code"');
   });
 });
+
+describe("JSON-RPC framing and protocol errors", () => {
+  const sentinelId = "done";
+  const sentinel = `${JSON.stringify({ jsonrpc: "2.0", id: sentinelId, method: "ping" })}\n`;
+  let sandbox: string;
+
+  interface Reply {
+    jsonrpc?: string;
+    id: unknown;
+    result?: Record<string, unknown>;
+    error?: { code: number; message: string };
+  }
+
+  beforeAll(() => {
+    sandbox = realpathSync(mkdtempSync(join(tmpdir(), "trueline-rpc-")));
+    // A fresh cache entry keeps the child off the network and its stdout free of update notices.
+    writeFileSync(
+      join(sandbox, "trueline-mcp-update-check.json"),
+      JSON.stringify({ timestamp: Date.now(), latestVersion: "0.0.1" }),
+    );
+  });
+
+  afterAll(() => {
+    rmSync(sandbox, { recursive: true, force: true });
+  });
+
+  // Writes each chunk in order, then a ping sentinel, and returns every reply that came before the
+  // sentinel's. With closeStdin the sentinel is skipped and replies are read until the server exits.
+  async function exchange(chunks: (string | Uint8Array)[], closeStdin = false): Promise<Reply[]> {
+    const proc = Bun.spawn(["bun", serverPath], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "ignore",
+      env: { ...process.env, TMPDIR: sandbox, CLAUDE_PROJECT_DIR: sandbox },
+    });
+    const timer = setTimeout(() => proc.kill(), 10_000);
+    try {
+      for (const chunk of chunks) {
+        proc.stdin.write(chunk);
+        proc.stdin.flush();
+        await Bun.sleep(20);
+      }
+      if (closeStdin) {
+        proc.stdin.end();
+      } else {
+        proc.stdin.write(sentinel);
+        proc.stdin.flush();
+      }
+
+      const replies: Reply[] = [];
+      const decoder = new TextDecoder();
+      let buffered = "";
+      for await (const chunk of proc.stdout) {
+        buffered += decoder.decode(chunk, { stream: true });
+        const lines = buffered.split("\n");
+        buffered = lines.pop() ?? "";
+        for (const line of lines) {
+          const reply = JSON.parse(line) as Reply;
+          if (!closeStdin && reply.id === sentinelId) return replies;
+          replies.push(reply);
+        }
+      }
+      return replies;
+    } finally {
+      clearTimeout(timer);
+      proc.kill();
+    }
+  }
+
+  const ping = (id: number, params?: unknown) => `${JSON.stringify({ jsonrpc: "2.0", id, method: "ping", params })}\n`;
+  const line = (message: unknown) => `${JSON.stringify(message)}\n`;
+
+  // U+2028/U+2029 are legal raw inside JSON strings and JSON.stringify does not escape them, but
+  // readline treats them as line breaks.
+  test.each([
+    ["U+2028", String.fromCharCode(0x2028)],
+    ["U+2029", String.fromCharCode(0x2029)],
+  ])("a request containing a raw %s is one message", async (_name, separator) => {
+    const request = ping(1, { note: `before${separator}after` });
+    expect(request).toContain(separator);
+
+    expect(await exchange([request])).toEqual([{ jsonrpc: "2.0", id: 1, result: {} }]);
+  });
+
+  test("a message split mid-codepoint across writes is reassembled", async () => {
+    const bytes = new TextEncoder().encode(ping(2, { note: `a${String.fromCharCode(0x2028)}b` }));
+    const cut = bytes.indexOf(0xe2) + 1; // inside the 3-byte U+2028 sequence
+
+    expect(await exchange([bytes.slice(0, cut), bytes.slice(cut)])).toEqual([{ jsonrpc: "2.0", id: 2, result: {} }]);
+  });
+
+  test("CRLF terminates a message", async () => {
+    expect(await exchange([ping(3).replace(/\n$/, "\r\n")])).toEqual([{ jsonrpc: "2.0", id: 3, result: {} }]);
+  });
+
+  test("a final message without a newline is handled at EOF", async () => {
+    expect(await exchange([ping(4).trimEnd()], true)).toEqual([{ jsonrpc: "2.0", id: 4, result: {} }]);
+  });
+
+  test("invalid JSON gets -32700 with a null id", async () => {
+    const replies = await exchange(["{not json\n"]);
+
+    expect(replies).toHaveLength(1);
+    expect(replies[0].id).toBeNull();
+    expect(replies[0].error?.code).toBe(-32700);
+  });
+
+  test.each([["null"], ["42"], ['"text"'], ["true"], ['[{"jsonrpc":"2.0","id":7,"method":"ping"}]']])(
+    "non-object message %s gets -32600 with a null id",
+    async (raw) => {
+      const replies = await exchange([`${raw}\n`]);
+
+      expect(replies).toHaveLength(1);
+      expect(replies[0].id).toBeNull();
+      expect(replies[0].error?.code).toBe(-32600);
+    },
+  );
+
+  test("a request without a method is an invalid request, not an unknown method", async () => {
+    const replies = await exchange([line({ jsonrpc: "2.0", id: 8 })]);
+
+    expect(replies).toHaveLength(1);
+    expect(replies[0].id).toBe(8);
+    expect(replies[0].error?.code).toBe(-32600);
+  });
+
+  // MCP spec, Tools > Error Handling: unknown tools are protocol errors, code -32602.
+  test("an unknown tool is invalid params", async () => {
+    const replies = await exchange([
+      line({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "trueline_nope", arguments: {} } }),
+    ]);
+
+    expect(replies).toHaveLength(1);
+    expect(replies[0].id).toBe(9);
+    expect(replies[0].error?.code).toBe(-32602);
+    expect(replies[0].error?.message).toContain("trueline_nope");
+  });
+
+  // MCP spec, Logging: a server that emits notifications/message must declare `logging`.
+  test("logging is advertised, so logging/setLevel is answered", async () => {
+    const replies = await exchange([
+      line({ jsonrpc: "2.0", id: 10, method: "initialize", params: {} }),
+      line({ jsonrpc: "2.0", id: 11, method: "logging/setLevel", params: { level: "info" } }),
+    ]);
+
+    expect(replies).toHaveLength(2);
+    expect(replies[0].result).toHaveProperty("capabilities.logging");
+    expect(replies[1]).toEqual({ jsonrpc: "2.0", id: 11, result: {} });
+  });
+
+  test("an unsupported method is still -32601", async () => {
+    const replies = await exchange([line({ jsonrpc: "2.0", id: 12, method: "resources/list" })]);
+
+    expect(replies).toHaveLength(1);
+    expect(replies[0].error?.code).toBe(-32601);
+  });
+});
