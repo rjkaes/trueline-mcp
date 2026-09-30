@@ -144,15 +144,24 @@ export async function streamingEdit(
   const writeBuf = Buffer.allocUnsafe(WRITE_BUF_SIZE);
   let writeBufPos = 0;
 
+  // fd.write() may take fewer bytes than asked (RLIMIT_FSIZE, a full disk). Dropping the rest would
+  // rename a truncated temp over the original, so loop: the next call, with no room left, throws
+  // ENOSPC/EFBIG instead of returning 0.
+  async function writeAll(buf: Buffer, length: number): Promise<void> {
+    for (let written = 0; written < length; ) {
+      written += (await fd.write(buf, written, length - written)).bytesWritten;
+    }
+  }
+
   // Write BOM if the original file had one
   const { bom } = transcoded.bomInfo;
   if (bom.length > 0) {
-    await fd.write(bom, 0, bom.length).catch(abortBeforeStream);
+    await writeAll(bom, bom.length).catch(abortBeforeStream);
   }
 
   async function flushWriteBuf(): Promise<void> {
     if (writeBufPos > 0) {
-      await fd.write(writeBuf, 0, writeBufPos);
+      await writeAll(writeBuf, writeBufPos);
       writeBufPos = 0;
     }
   }
@@ -163,7 +172,7 @@ export async function streamingEdit(
       await flushWriteBuf();
       // If it's larger than the entire buffer, write directly
       if (buf.length > WRITE_BUF_SIZE) {
-        await fd.write(buf, 0, buf.length);
+        await writeAll(buf, buf.length);
         return;
       }
     }
@@ -214,8 +223,13 @@ export async function streamingEdit(
     const lineH = precomputedHash ?? fnv1aHashBytes(buf);
     if (outputLineCount === 0) {
       outputFirstLineHash = lineH;
-      // In a BOM-less file these bytes read back as a BOM and are dropped, so no ref could match.
-      startsWithBomBytes = bom.length === 0 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
+      // In a BOM-less file these bytes read back as a BOM: UTF-8's is dropped, so no ref could match,
+      // and UTF-16's makes the whole file read as UTF-16. Rejecting keeps the file's encoding as it was.
+      startsWithBomBytes =
+        bom.length === 0 &&
+        ((buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) ||
+          (buf[0] === 0xff && buf[1] === 0xfe) ||
+          (buf[0] === 0xfe && buf[1] === 0xff));
     }
     outputLastLineHash = lineH;
     outputChecksumAcc = foldHash(outputChecksumAcc, lineH);
@@ -270,8 +284,10 @@ export async function streamingEdit(
   // keep their original bytes and EOL (DESIGN.md: only edited lines are normalized); the rest take
   // the file's EOL. A range that comes back entirely identical is a no-op.
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[], origEols: Buffer[]): Promise<void> {
+    // Compares decoded text, as the read shows it: an invalid byte reads as U+FFFD, whose re-sent
+    // UTF-8 bytes (EF BF BD) never equal the original byte, so a byte compare would rewrite the line.
     const sameLine = (origIndex: number, contentIndex: number) =>
-      Buffer.from(op.content[contentIndex], textEncoding).equals(origBytes[origIndex]);
+      origBytes[origIndex].toString(textEncoding) === op.content[contentIndex];
     const writeOriginal = (k: number) =>
       enqueueLine(origBytes[k], undefined, origEols[k].length > 0 ? origEols[k] : undefined);
 
@@ -561,7 +577,7 @@ export async function streamingEdit(
   // Like the latin1 refusal above: better no write than a first line that changes on re-read.
   if (startsWithBomBytes) {
     return await fail(
-      "the edit would make the file start with U+FEFF, which readers take for a byte-order mark and drop. " +
+      "the edit would make the file start with bytes (EF BB BF, FF FE or FE FF) that readers take for a byte-order mark. " +
         "Nothing was written.",
     );
   }

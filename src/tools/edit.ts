@@ -197,7 +197,9 @@ function editSummary(ops: StreamEditOp[], textEncoding: BufferEncoding): string 
 
       if (lines === 0) {
         const joined = op.deletedContent?.join("\\n");
-        const preview = joined === undefined ? "" : `: "${joined.length > 80 ? `${joined.slice(0, 80)}…` : joined}"`;
+        // Half a surrogate pair serialises as a lone JSON escape that strict consumers reject.
+        const clipped = joined?.slice(0, 80).replace(/[\uD800-\uDBFF]$/, "");
+        const preview = joined === undefined ? "" : `: "${joined.length > 80 ? `${clipped}…` : joined}"`;
         return `-${rangeStr} (${span})${preview}`;
       }
 
