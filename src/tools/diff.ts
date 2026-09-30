@@ -24,24 +24,32 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const cwd = projectDir ?? process.cwd();
   let filePaths = params.file_paths;
   // Old cwd-relative path of each file git reports as renamed, keyed by its new absolute path.
-  let renamedFrom = new Map<string, string>();
+  // `*` fills it; an explicit path loads it only when the file is new to the ref.
+  let renamedFrom: Promise<Map<string, string>> | undefined;
 
   // The ref goes straight into git argv, where a leading dash is an option:
   // --output=<path> would write outside allowedDirs.
   if (compare_against.startsWith("-")) {
     return errorResult(`Invalid compare_against "${compare_against}": a git ref cannot start with "-".`);
   }
+  // resolvedPath is canonical, so the base must be too: an aliased projectDir
+  // (symlink, /var vs /private/var, Windows 8.3 RUNNER~1) yields ../ headers.
+  // A missing project directory denies every path, so fail once here, plainly.
+  const realProject = await realpath(cwd).catch(() => null);
+  if (realProject === null) return errorResult("Project directory not found or inaccessible");
   // An unresolvable ref must fail loudly: as an empty baseline it reports every symbol as added.
   // Checked on first use, so per-file notes (unsupported, binary, denied) still work outside a repo.
   const invalidRef = errorResult(`compare_against "${compare_against}" is not a commit in this git repository.`);
-  let refKind: Promise<"commit" | "unborn" | "invalid"> | undefined;
+  let refKind: Promise<"commit" | "unborn" | "index" | "invalid"> | undefined;
   const checkRefOnce = () => (refKind ??= checkRef(compare_against, cwd));
 
   // Expand "*" to all changed files
   if (filePaths.length === 1 && filePaths[0] === "*") {
     const kind = await checkRefOnce();
     if (kind === "invalid") return invalidRef;
-    ({ files: filePaths, renamedFrom } = await getChangedFiles(cwd, kind === "unborn" ? undefined : compare_against));
+    const changed = await getChangedFiles(cwd, kind === "unborn" ? undefined : compare_against);
+    filePaths = changed.files;
+    renamedFrom = Promise.resolve(changed.renamedFrom);
     if (filePaths.length === 0) {
       return textResult("No changed files found.");
     }
@@ -50,9 +58,6 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const sections: string[] = [];
   // Every file shares one repo toplevel; spawn rev-parse once, on first use.
   let toplevel: Promise<string> | undefined;
-  // resolvedPath is canonical, so the base must be too: an aliased projectDir
-  // (symlink, /var vs /private/var, Windows 8.3 RUNNER~1) yields ../ headers.
-  let realProject: Promise<string> | undefined;
 
   for (const filePath of filePaths) {
     if (requireAbsolutePath && filePath !== "*" && !isAbsolutePathArg(filePath)) {
@@ -61,7 +66,6 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
       continue;
     }
 
-    realProject ??= realpath(cwd);
     let resolvedPath: string;
     let deletedOnDisk = false;
     const validated = await validatePath(filePath, "Read", projectDir, allowedDirs);
@@ -94,7 +98,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 
     const ext = extname(resolvedPath).toLowerCase();
     // relative() yields backslashes on Windows; headers use forward slashes on every platform.
-    const relPath = isAbsolute(filePath) ? relative(await realProject, resolvedPath).replace(/\\/g, "/") : filePath;
+    const relPath = isAbsolute(filePath) ? relative(realProject, resolvedPath).replace(/\\/g, "/") : filePath;
 
     // Unsupported file type: extension has no language config. Checked before
     // any I/O so lockfiles, JSON, and images skip the disk read and git spawns.
@@ -119,34 +123,34 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     // Read git content
     const refState = await checkRefOnce();
     if (refState === "invalid") return invalidRef;
-    const oldPath = renamedFrom.get(filePath);
-    if (oldPath !== undefined) {
-      // The old side is historical content of a path the caller never named: it needs its own boundary and deny check.
-      const oldAbsolute = resolve(cwd, oldPath);
-      const oldBoundary = await checkPathBoundary(
-        oldPath,
-        oldAbsolute,
-        await resolveMissingPath(oldAbsolute),
-        "Read",
-        projectDir,
-        allowedDirs,
-      );
-      if (!oldBoundary.ok) {
-        sections.push(`## ${relPath}\n\nRenamed from a path that is not readable; not diffed.`);
-        continue;
-      }
-    }
     let gitContent: string | null = null;
     try {
       // An unborn HEAD has no tree: every file is new. Spawning rev-parse there would leave its promise unawaited.
       if (refState !== "unborn") {
         toplevel ??= gitExec(["rev-parse", "--show-toplevel"], cwd).then((out) => out.trim());
-        gitContent = await getGitContent(
-          oldPath ? join(await realProject, oldPath) : resolvedPath,
-          compare_against,
-          cwd,
-          toplevel,
-        );
+        gitContent = await getGitContent(resolvedPath, compare_against, cwd, toplevel);
+        // New to the ref may mean renamed: its old path is the baseline, or every symbol reads as added.
+        if (gitContent === null && refState === "commit" && !deletedOnDisk) {
+          renamedFrom ??= getChangedFiles(cwd, compare_against).then((changed) => changed.renamedFrom);
+          const oldPath = (await renamedFrom).get(resolve(cwd, relative(realProject, resolvedPath)));
+          if (oldPath !== undefined) {
+            // The old side is historical content of a path the caller never named: it needs its own boundary and deny check.
+            const oldAbsolute = resolve(cwd, oldPath);
+            const oldBoundary = await checkPathBoundary(
+              oldPath,
+              oldAbsolute,
+              await resolveMissingPath(oldAbsolute),
+              "Read",
+              projectDir,
+              allowedDirs,
+            );
+            if (!oldBoundary.ok) {
+              sections.push(`## ${relPath}\n\nRenamed from a path that is not readable; not diffed.`);
+              continue;
+            }
+            gitContent = await getGitContent(join(realProject, oldPath), compare_against, cwd, toplevel);
+          }
+        }
       }
     } catch (err) {
       const { code, stderr = "", message } = err as Error & { code?: string; stderr?: string };
@@ -179,8 +183,18 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
 // Git helpers
 // ==============================================================================
 
+/** The ref advertised for staged content. */
+const INDEX_REF = ":0";
+
 /** "unborn" is HEAD in a repo with no commits, where every file is new. */
-async function checkRef(ref: string, cwd: string): Promise<"commit" | "unborn" | "invalid"> {
+async function checkRef(ref: string, cwd: string): Promise<"commit" | "unborn" | "index" | "invalid"> {
+  // Staged content lives in the index, not a commit: `^{commit}` would reject it.
+  if (ref === INDEX_REF) {
+    return gitExec(["rev-parse", "--git-dir"], cwd).then(
+      () => "index" as const,
+      () => "invalid" as const,
+    );
+  }
   try {
     await gitExec(["rev-parse", "--verify", `${ref}^{commit}`], cwd);
     return "commit";
@@ -224,23 +238,33 @@ async function getGitContent(
   // Not `git show <ref>:<path>`: for a glob-ish path (`zz*`, `[id]`) it exits 0 and prints the commit.
   // ls-tree matches the path literally, and cat-file reads the blob by id, so no path is re-parsed.
   // The `./` keeps a leading `:` from being read as pathspec magic.
-  const listing = await gitExec(["ls-tree", "-z", "--full-tree", ref, "--", `./${relPath}`], cwd);
-  const blobId = /^\d+ blob (\w+)\t/.exec(listing)?.[1];
+  // The index has no tree for ls-tree: ls-files lists it, `top` and `literal` making the pathspec root-relative
+  // and matching `zz*` only as itself. Stage 0 and no gitlink (mode 160000): the entry must be a blob.
+  const listing =
+    ref === INDEX_REF
+      ? await gitExec(["ls-files", "-z", "--stage", "--", `:(top,literal)${relPath}`], cwd)
+      : await gitExec(["ls-tree", "-z", "--full-tree", ref, "--", `./${relPath}`], cwd);
+  const blobId = (ref === INDEX_REF ? /^(?!160000)\d+ (\w+) 0\t/ : /^\d+ blob (\w+)\t/).exec(listing)?.[1];
   if (blobId === undefined) return null;
   const content = await gitExec(["cat-file", "blob", blobId], cwd);
   // The disk side is read without its BOM; match it so a BOM-prefixed file does not differ on its first symbol.
   return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
 }
 
-/** Files changed since `ref` (undefined: no commits yet, so staged files count) plus untracked ones, as absolute paths. */
+/**
+ * Files changed since `ref` (undefined: no commits yet, so staged files count; `:0`: the working tree against the
+ * index) plus untracked ones, as absolute paths. Directories are not files: git lists a dirty submodule and an
+ * untracked nested repo by path.
+ */
 async function getChangedFiles(
   cwd: string,
   ref: string | undefined,
 ): Promise<{ files: string[]; renamedFrom: Map<string, string> }> {
   // -z: git octal-quotes non-ASCII names otherwise. --relative: names are relative to
   // cwd, not the repo root, so they resolve against cwd from a repo subdirectory.
-  const baseline = ref ?? "--cached";
-  const changes = (await gitExec(["diff", "--name-status", "-z", "-M", "--relative", baseline, "--"], cwd)).split("\0");
+  const baseline = ref === INDEX_REF ? [] : [ref ?? "--cached"];
+  const diffArgs = ["diff", "--name-status", "-z", "-M", "--relative", ...baseline, "--"];
+  const changes = (await gitExec(diffArgs, cwd)).split("\0");
   const untracked = (await gitExec(["ls-files", "--others", "--exclude-standard", "-z"], cwd)).split("\0");
   const files = new Set<string>();
   const renamedFrom = new Map<string, string>();
@@ -253,7 +277,13 @@ async function getChangedFiles(
     if (oldName !== undefined) renamedFrom.set(file, oldName);
   }
   for (const name of untracked.filter(Boolean)) files.add(resolve(cwd, name));
-  return { files: [...files], renamedFrom };
+  const kept: string[] = [];
+  for (const file of files) {
+    // Gone from disk is a deletion, which stays listed.
+    const stats = await lstat(file).catch(() => null);
+    if (!stats?.isDirectory()) kept.push(file);
+  }
+  return { files: kept, renamedFrom };
 }
 
 // ==============================================================================

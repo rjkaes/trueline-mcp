@@ -1,6 +1,10 @@
 import { getLanguageConfig } from "./outline/languages.ts";
 import { extractOutline } from "./outline/extract.ts";
+import type { OutlineEntry } from "./outline/extract.ts";
 import { fnv1aHash } from "./hash.ts";
+
+/** Bodyless nodes and empty `{}` bodies all hash alike: nothing to pair a rename on, nothing to read as logic. */
+const EMPTY_BODY_HASH = fnv1aHash("");
 
 // ==============================================================================
 // Types
@@ -11,8 +15,8 @@ interface SymbolInfo {
   /** Enclosing symbol names, dot-joined: same-named members of different classes stay distinct */
   scope?: string;
   signature: string;
-  /** Hash of the untruncated first line; `signature` is cut at 200 chars */
-  headHash?: number;
+  /** Signature up to the body, untruncated; `signature` is cut at 200 chars */
+  head?: string;
   bodyHash: number;
   /** Full body text for inline mini-diffs of small changes */
   bodyText?: string;
@@ -35,7 +39,7 @@ export function normalizeBody(text: string, mode: "collapse" | "preserve-indent"
   // Blank lines carry no meaning: adding one must not read as a logic change.
   if (mode === "preserve-indent") {
     return lines
-      .map((l) => l.replace(/\s+$/, "").replace(/(\S)\s{2,}(\S)/g, "$1 $2"))
+      .map((l) => l.replace(/\s+$/, "").replace(/(?<=\S)\s{2,}(?=\S)/g, " "))
       .filter(Boolean)
       .join("\n");
   }
@@ -51,6 +55,47 @@ export function normalizeBody(text: string, mode: "collapse" | "preserve-indent"
 // ==============================================================================
 
 /**
+ * Guess where a node's signature ends, for nodes the outline found no body node for: at the first `{`
+ * outside parentheses, else where the parentheses close (a wrapped C prototype or Kotlin signature). A `{`
+ * inside open parentheses is a block argument, as in `describe("x", () => {`: the first line is the
+ * signature and the rest is the body. A one-line decorator or attribute (a line starting with `@` or `[`)
+ * continues the signature.
+ */
+function splitSignature(text: string): { head: string; body: string } {
+  const lines = text.split("\n");
+  const cutAfter = (row: number) => ({
+    head: lines.slice(0, row + 1).join("\n"),
+    body: lines.slice(row + 1).join("\n"),
+  });
+  let depth = 0;
+  for (const [row, line] of lines.entries()) {
+    for (let col = 0; col < line.length; col++) {
+      if (line[col] === "(") depth++;
+      else if (line[col] === ")") depth--;
+      else if (line[col] === "{") {
+        if (depth > 0) return cutAfter(0);
+        return {
+          head: [...lines.slice(0, row), line.slice(0, col)].join("\n"),
+          body: [line.slice(col + 1), ...lines.slice(row + 1)].join("\n"),
+        };
+      }
+    }
+    if (depth <= 0 && !/^\s*[@[]/.test(line)) return cutAfter(row);
+  }
+  return { head: text, body: "" };
+}
+
+/** Signature and body of an entry: split at the body node when the outline has one, else guessed from the text. */
+function splitEntry(entry: OutlineEntry, lines: string[]): { head: string; body: string } {
+  const { head, bodyStart } = entry;
+  if (head === undefined || bodyStart === undefined) {
+    return splitSignature(lines.slice(entry.startLine - 1, entry.endLine).join("\n"));
+  }
+  const firstRow = (lines[bodyStart.line - 1] ?? "").slice(bodyStart.column);
+  return { head, body: [firstRow, ...lines.slice(bodyStart.line, entry.endLine)].join("\n") };
+}
+
+/**
  * Extract symbols from source code for a given file extension.
  * Returns [] for unsupported extensions.
  */
@@ -61,6 +106,7 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
   const entries = await extractOutline(source, config);
   const lines = source.split("\n");
   const wsMode = config.whitespaceMode ?? "collapse";
+  const constIsModifier = CONST_IS_MODIFIER.has(config.grammar);
 
   // Entries arrive in document order, so `depth` indexes the chain of enclosing symbols.
   const parents: string[] = [];
@@ -68,13 +114,14 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
   return entries
     .filter((e) => e.nodeType !== "_skipped")
     .map((entry) => {
-      const bodyLines = lines.slice(entry.startLine - 1, entry.endLine);
-      const bodyText = bodyLines.join("\n");
-      // Hash body excluding the signature line so renames don't change the hash.
-      // For single-line nodes, innerBody is empty; rename detection won't apply.
-      const innerLines = bodyLines.length > 1 ? bodyLines.slice(1) : bodyLines;
-      const normalized = normalizeBody(innerLines.join("\n"), wsMode);
-      const name = extractName(entry.text);
+      const bodyText = lines.slice(entry.startLine - 1, entry.endLine).join("\n");
+      const { head, body } = splitEntry(entry, lines);
+      // Hash the body past the signature so renames don't change the hash. A node with no body, or an
+      // empty one (`{}`), hashes as empty: rename detection skips it, and a signature edit is not logic.
+      const normalized = /[^\s{}]/.test(body) ? normalizeBody(body, wsMode) : "";
+      // The entry's text is cut at 200 chars, which a long decorator can push the name past.
+      const nameSource = entry.head ?? entry.text;
+      const name = extractName(constIsModifier ? nameSource.replace(/\bconst\b/g, "") : nameSource);
       parents.length = entry.depth;
       const scope = parents.join(".");
       parents.push(name);
@@ -83,12 +130,20 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
         name,
         scope,
         signature: entry.text,
-        headHash: fnv1aHash(normalizeBody(lines[entry.startLine - 1])),
+        head,
         bodyHash: fnv1aHash(normalized),
         bodyText,
       };
     });
 }
+
+// `const` qualifies a type in C and C++ (`const char *f()`): the word after it is never the name.
+const CONST_IS_MODIFIER = new Set(["c", "cpp"]);
+
+// Declaration keywords stack (`enum class`, `pub const fn`, `class func`): the name follows the last.
+// Ruby's `def self.find` is named `find`; Kotlin allows backticked names with spaces.
+const DECLARED_NAME =
+  /\b(?:(?:function|class|interface|type|enum|struct|trait|mod|namespace|object|protocol|extension|module|const|let|var|val|def|defp|defmacro|defmacrop|defmodule|defprotocol|defimpl|fn|func|fun|pub\s+fn|async\s+function)\s+)+(?:self\.)?(\w+|`[^`]+`)/g;
 
 /** Extract a human-readable name from a signature line. */
 function extractName(sig: string): string {
@@ -98,19 +153,30 @@ function extractName(sig: string): string {
   // Rust impl: keep the whole target so `impl Foo` and `impl Show for Foo` differ.
   const impl = sig.match(/^\s*(?:unsafe\s+)?impl(?=[\s<])\s*(.+?)\s*(?:\{|\bwhere\b|$)/);
   if (impl) return `impl ${impl[1]}`;
-  const match = sig.match(
-    /\b(?:function|class|interface|type|enum|struct|trait|mod|namespace|object|protocol|extension|module|const|let|var|val|def|defp|defmacro|defmacrop|defmodule|defprotocol|defimpl|fn|func|fun|pub\s+fn|async\s+function)\s+(\w+)/,
-  );
-  if (match) return match[1];
+  // A keyword inside parentheses is a parameter's qualifier (`int f(const char *s)`), not a declaration.
+  for (const match of sig.matchAll(DECLARED_NAME)) {
+    const before = sig.slice(0, match.index);
+    if (before.split("(").length <= before.split(")").length) return match[1].replaceAll("`", "");
+  }
   const bare = sig.replace(/@\w+(?:\([^)]*\))?\s*/g, "");
-  // Method-like: the identifier before the first `(`, past modifiers and return types.
-  const methodMatch = bare.match(/([\w$:~]+)\s*(?:<[^>]*>)?\s*\(/);
+  // C++ operators: `operator==` and `operator()` are names, not calls of `operator`.
+  const op = bare.match(
+    /((?:[\w$~]+::)*)(?<![\w$])operator(?![\w$])\s*(\(\s*\)|\[\s*\]|[^\s\w()[\]]+|\w[\w:]*)(?=\s*\()/,
+  );
+  if (op) return `${op[1]}operator${/^\w/.test(op[2]) ? " " : ""}${op[2].replace(/\s+/g, "")}`;
+  // Function-pointer declarator (`void (*cb)(int)`): the name sits in the first parentheses, past a `*`, and
+  // those parentheses are followed by the pointer's own parameter list (a call's `(*args)` is not).
+  const fnPtr = bare.match(/^[^(=]*\(\s*\*+\s*([\w$]+)(?:\[[^\]]*\]|\([^()]*\))*\s*\)\s*\(/);
+  if (fnPtr) return fnPtr[1];
+  // Method-like: the identifier before the first `(`, past modifiers and return types. It may be optional (`m?(`).
+  const methodMatch = bare.match(/((?:[\w$~]+::)*[\w$~]+)\??\s*(?:<[^>]*>)?\s*\(/);
   // A `=` before the name makes it a call in an initializer (`items = new ArrayList<>()`): a field.
   if (methodMatch && !bare.slice(0, methodMatch.index).includes("=")) return methodMatch[1];
   // Field or property: the last identifier before its initializer, type annotation, or accessor block.
   // Modifiers (`private`, `public static`) come first, so they are never the last word.
-  const field = bare.split(/[=;:{]/, 1)[0].match(/([\w$]+)\s*(?:\[[^\]]*\]\s*)*$/);
-  if (field) return field[1];
+  // A quoted key (`"content-type": string`) or an optional member (`host?: string`) is still the name.
+  const field = bare.split(/[=;:{]/, 1)[0].match(/(?:([\w$]+)|["']([^"']+)["'])[?!]?\s*(?:\[[^\]]*\]\s*)*$/);
+  if (field) return field[1] ?? field[2];
   // Fallback: first word-like token
   const fallback = bare.match(/(\w+)/);
   return fallback ? fallback[1] : sig.slice(0, 40);
@@ -130,24 +196,39 @@ export function diffSymbols(oldSyms: SymbolInfo[], newSyms: SymbolInfo[]): Symbo
   };
 
   const identity = (s: SymbolInfo) => (s.scope ? `${s.scope}.${s.name}` : s.name);
-  const sameSignature = (a: SymbolInfo, b: SymbolInfo) =>
-    a.headHash === b.headHash && normalizeBody(a.signature) === normalizeBody(b.signature);
+  const rawHead = (s: SymbolInfo) => s.head ?? splitSignature(s.signature).head;
+  const sameSignature = (a: SymbolInfo, b: SymbolInfo) => normalizeBody(rawHead(a)) === normalizeBody(rawHead(b));
+  // A rename changes the name; any other difference in the signature is a separate edit to report.
+  // The name may have gained a space the source lacks (`impl <T> Foo<T>` for `impl<T> Foo<T>`).
+  const signatureSansName = (s: SymbolInfo) => {
+    const bare = s.name
+      .slice(s.name.lastIndexOf(".") + 1)
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s*");
+    return normalizeBody(rawHead(s).replace(new RegExp(`(?<![\\w$])${bare}(?![\\w$])`), ""));
+  };
 
   const pairs = new Map<SymbolInfo, SymbolInfo>();
   const paired = new Set<SymbolInfo>();
   const pairBy = (key: (s: SymbolInfo) => string, eligible: (s: SymbolInfo) => boolean) => {
     const candidates = Map.groupBy(newSyms.filter(eligible), key);
-    for (const exact of [true, false]) {
+    // Identical symbols pair first: a duplicate inserted above an unchanged one must not take its partner.
+    const tiers: Array<(a: SymbolInfo, b: SymbolInfo) => boolean> = [
+      (a, b) => sameSignature(a, b) && a.bodyHash === b.bodyHash,
+      sameSignature,
+      () => true,
+    ];
+    for (const accepts of tiers) {
       for (const o of oldSyms) {
         if (pairs.has(o) || !eligible(o)) continue;
-        const n = candidates.get(key(o))?.find((c) => !paired.has(c) && (!exact || sameSignature(o, c)));
+        const n = candidates.get(key(o))?.find((c) => !paired.has(c) && accepts(o, c));
         if (!n) continue;
         pairs.set(o, n);
         paired.add(n);
       }
     }
   };
-  // Same-named symbols (overloads, get/set pairs) pair by identical signature first, then in order.
+  // Same-named symbols (overloads, get/set pairs) pair when identical first, then by signature, then in order.
   pairBy(identity, () => true);
   // Renaming a container (`class Foo` -> `Bar`, `impl Foo` -> `impl<T> Foo<T>`) changes every member's scope, so
   // members of a container with no counterpart pair by name alone. Members of surviving containers do not:
@@ -176,14 +257,21 @@ export function diffSymbols(oldSyms: SymbolInfo[], newSyms: SymbolInfo[]): Symbo
   const unmatchedNew = newSyms.filter((n) => !paired.has(n));
 
   // Rename detection: unmatched old + unmatched new with same body hash
-  const oldByHash = Map.groupBy(unmatchedOld, (o) => o.bodyHash);
+  const hasBody = (s: SymbolInfo) => s.bodyHash !== EMPTY_BODY_HASH;
+  const oldByHash = Map.groupBy(unmatchedOld.filter(hasBody), (o) => o.bodyHash);
   // By identity, not name: names collide across class scopes and overloads.
   const renamedOld = new Set<SymbolInfo>();
 
   for (const n of unmatchedNew) {
-    const o = oldByHash.get(n.bodyHash)?.shift();
+    const o = hasBody(n) ? oldByHash.get(n.bodyHash)?.shift() : undefined;
     if (o) {
-      result.renamed.push({ oldName: o.name, newName: n.name });
+      // Bare names read `run` → `run` for a method moved between classes: scope them when the scope changed.
+      result.renamed.push(
+        o.scope === n.scope ? { oldName: o.name, newName: n.name } : { oldName: identity(o), newName: identity(n) },
+      );
+      if (signatureSansName(o) !== signatureSansName(n)) {
+        result.signatureChanged.push({ name: identity(o), oldSig: o.signature, newSig: n.signature });
+      }
       renamedOld.add(o);
     } else {
       result.added.push(n);
