@@ -51,6 +51,10 @@ function parseEditsArg(raw: unknown): EditInput[] {
   if (!Array.isArray(raw)) {
     throw new UsageError("--edits must be a JSON array");
   }
+  // Mirrors editSchema's edits.min(1): an empty list would exit 0 as "(no changes)".
+  if (raw.length === 0) {
+    throw new UsageError("--edits must contain at least one edit");
+  }
   return raw.map((item: unknown, i: number) => {
     if (typeof item !== "object" || item === null) {
       throw new UsageError(`--edits[${i}]: expected an object`);

@@ -356,7 +356,7 @@ const verifyJsonSchema = {
 tools.set("trueline_read", {
   description:
     "Read files with per-line hashes and refs. Supports globs and :range syntax. " +
-    'Example: {"file_paths": ["src/tools/*.ts", "src/foo.ts:10-25"]}.',
+    'Example: {"file_paths": ["/Users/you/project/src/tools/*.ts", "/Users/you/project/src/foo.ts:10-25"]}.',
   inputSchema: readJsonSchema,
   handler: async (rawParams) => {
     const params = readSchema.parse(coerceParams(rawParams));

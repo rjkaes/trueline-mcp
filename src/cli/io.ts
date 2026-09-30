@@ -216,8 +216,13 @@ export function emitResult(result: ToolResult, opts: FormatOptions): void {
     exitCode = 2;
     stream = process.stderr;
   } else if (opts.search && text.startsWith("No matches")) {
-    // Handler returns success but text says "No matches"
-    exitCode = 1;
+    // Handler returns success but text says "No matches". Its multi-file summary appends a
+    // "path:\nerror: ..." section per file that failed; when every file did, nothing was searched,
+    // so a script must not read exit 1 as "searched, nothing there". NaN (single file) stays 1.
+    const searched = Number(/^No matches .* across (\d+) files/.exec(text)?.[1]);
+    const failed = text.match(/:\nerror: /g)?.length ?? 0;
+    exitCode = failed >= searched ? 2 : 1;
+    if (exitCode === 2) stream = process.stderr;
   }
 
   stream.write(output.endsWith("\n") ? output : `${output}\n`);
