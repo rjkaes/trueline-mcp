@@ -117,8 +117,9 @@ async function outlineOneFile(
     return errorResult(`Error reading file: ${(err as Error).message}`);
   }
 
-  // A trailing newline ends the last line; it does not start another.
-  const totalLines = source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
+  // A trailing newline ends the last line; it does not start another. An empty file has no lines, as in
+  // the markdown and XML outlines.
+  const totalLines = source === "" ? 0 : source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
 
   const config = getLanguageConfig(ext);
   if (!config) {

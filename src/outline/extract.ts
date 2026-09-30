@@ -11,8 +11,17 @@ import type { Node as SyntaxNode } from "web-tree-sitter";
 // web-tree-sitter 0.25 types child slots as nullable.
 const childrenOf = (node: SyntaxNode): SyntaxNode[] => node.children.filter((c): c is SyntaxNode => c !== null);
 
-// A `{` inside a string literal is not a body brace: `@GetMapping("/orders/{id}")`.
-const hasBodyBrace = (line: string): boolean => line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, "").includes("{");
+// A `{` inside a string literal is not a body brace: `@GetMapping("/orders/{id}")`. Nor is one inside
+// parentheses: a Kotlin lambda default `f(onDone: () -> Unit = {})` or Dart named parameters `f({`.
+const hasBodyBrace = (text: string): boolean => {
+  let parens = 0;
+  for (const ch of text.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, "")) {
+    if (ch === "(") parens++;
+    else if (ch === ")") parens--;
+    else if (ch === "{" && parens <= 0) return true;
+  }
+  return false;
+};
 
 /** The node holding a declaration's body, looking through export, decorator and `const f = ...` wrappers. */
 function findBody(node: SyntaxNode): SyntaxNode | undefined {
@@ -173,7 +182,7 @@ export async function extractOutline(
     for (let row = startRow + 1; row <= lastRow; row++) {
       const line = codeOnRow(row);
       parts.push(line.trim());
-      if (!body && hasBodyBrace(line)) break;
+      if (!body && hasBodyBrace(parts.join(" "))) break;
     }
 
     let head: string | undefined;
@@ -240,8 +249,19 @@ export async function extractOutline(
       // Flush any pending skipped nodes before this entry
       if (isRootChild) flushSkipped();
 
+      // TS method decorators, Rust attributes and Dart annotations are siblings of the declaration, not
+      // children, so its own start would skip them. Dart's annotations precede the signature's wrapper node.
+      let first = node;
+      for (
+        let prev = node.previousSibling ?? node.parent?.previousSibling;
+        prev && ["decorator", "attribute_item", "annotation"].includes(prev.type);
+        prev = prev.previousSibling
+      ) {
+        first = prev;
+      }
+
       entries.push({
-        startLine: node.startPosition.row + 1,
+        startLine: first.startPosition.row + 1,
         endLine: lastLine(trailingBody(node) ?? node),
         depth,
         nodeType: node.type,

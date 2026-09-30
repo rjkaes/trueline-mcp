@@ -177,7 +177,8 @@ export async function extractXmlOutline(
         case State.Comment:
           // Looking for '-->'
           if (ch === "-" && line.slice(i, i + 3) === "-->") {
-            state = State.Text;
+            // A comment in a DOCTYPE's internal subset returns to the subset, not to the document text.
+            state = inDocSubset ? State.DocType : State.Text;
             i += 2; // skip '->'
           }
           // Intentionally not buffering comment content
@@ -194,7 +195,11 @@ export async function extractXmlOutline(
         case State.DocType: {
           // Only a '>' outside the internal subset closes the DOCTYPE.
           // TODO: a quoted ']' or '>' in an entity value still ends the subset or DOCTYPE early.
-          if (ch === "[") {
+          if (inDocSubset && line.startsWith("<!--", i)) {
+            // A ']' in the comment must not end the subset.
+            state = State.Comment;
+            i += 3; // skip '!--'
+          } else if (ch === "[") {
             inDocSubset = true;
           } else if (ch === "]") {
             inDocSubset = false;

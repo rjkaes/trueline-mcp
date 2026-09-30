@@ -4,6 +4,7 @@
  * Lazily initializes web-tree-sitter and caches loaded language grammars.
  * WASM files are resolved from the tree-sitter-wasms package.
  */
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve, dirname } from "node:path";
 import { Language, Parser } from "web-tree-sitter";
@@ -17,8 +18,8 @@ const languageCache = new Map<string, Promise<Language>>();
  * Resolve the path to tree-sitter.wasm at runtime.
  *
  * bun build --target=node hardcodes the WASM path from the build environment
- * (e.g. /home/runner/work/…) into the bundle. We override with locateFile so
- * the path is resolved from the actual node_modules at runtime.
+ * (e.g. /home/runner/work/…) into the bundle. We instantiate from this path instead (see
+ * initRuntime), so it is resolved from the actual node_modules at runtime.
  */
 function treeSitterWasmPath(): string {
   // 0.25+ does not export ./package.json, so resolve the main entry instead.
@@ -46,7 +47,24 @@ async function initRuntime(): Promise<void> {
     timer = setTimeout(() => reject(new Error("tree-sitter WASM init timed out after 10 s")), 10_000);
   });
   try {
-    await Promise.race([Parser.init({ locateFile: () => treeSitterWasmPath() }), timeout]);
+    await Promise.race([
+      Parser.init({
+        // tree-sitter-wasms' bash grammar imports libc `isalpha`, which tree-sitter.wasm does not export. The
+        // dynamic linker stubs an unresolved import lazily, so the grammar loads, then dies with "resolved is
+        // not a function" when its scanner first calls it (an `==` inside `[ ]`). Supply it in the runtime's
+        // import table, which is also where the linker looks up global symbols.
+        instantiateWasm(
+          imports: WebAssembly.Imports,
+          receive: (instance: WebAssembly.Instance, module: WebAssembly.Module) => unknown,
+        ) {
+          // C locale: ASCII letters only.
+          imports.env.isalpha = (c: number) => ((c | 32) >= 97 && (c | 32) <= 122 ? 1 : 0);
+          const module = new WebAssembly.Module(readFileSync(treeSitterWasmPath()));
+          return receive(new WebAssembly.Instance(module, imports), module);
+        },
+      }),
+      timeout,
+    ]);
   } finally {
     // A pending timer keeps the event loop alive; CLI runs lingered 10 s.
     clearTimeout(timer);

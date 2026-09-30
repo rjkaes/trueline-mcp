@@ -36,6 +36,7 @@ const typescript: LanguageConfig = {
   grammar: "typescript",
   outline: new Set([
     "function_declaration",
+    "generator_function_declaration",
     "class_declaration",
     "abstract_class_declaration",
     "interface_declaration",
@@ -65,6 +66,7 @@ const javascript: LanguageConfig = {
   grammar: "javascript",
   outline: new Set([
     "function_declaration",
+    "generator_function_declaration",
     "class_declaration",
     "lexical_declaration",
     "variable_declaration",
@@ -144,12 +146,13 @@ const ruby: LanguageConfig = {
     "method",
     "singleton_method",
     "class",
+    "singleton_class", // `class << self` holds the class methods
     "module",
     "assignment",
     "call", // require, require_relative at top level
   ]),
   recurse: new Set(["body_statement"]),
-  canRecurse: (owner) => owner.type === "class" || owner.type === "module",
+  canRecurse: (owner) => owner.type === "class" || owner.type === "module" || owner.type === "singleton_class",
 };
 
 /** True when a member declaration's declarator, past any pointer or reference wrapper, is a function. */
@@ -193,13 +196,25 @@ const cpp: LanguageConfig = {
     "linkage_specification",
     "declaration_list", // body of `extern "C" {`
   ]),
-  // Data members are noise; member function declarations (`void add(int id);`) are not.
-  include: (node) => node.type !== "field_declaration" || declaresFunction(node),
+  // Data members are noise; member function declarations (`void add(int id);`) and nested
+  // types (`class Line { ... };`, which the grammar wraps in a field_declaration) are not.
+  include: (node) => {
+    if (node.type !== "field_declaration" || declaresFunction(node)) return true;
+    const type = node.childForFieldName("type");
+    return /^(class|struct|enum)_specifier$/.test(type?.type ?? "") && type?.childForFieldName("body") != null;
+  },
 };
 
 const c: LanguageConfig = {
   grammar: "c",
-  outline: new Set(["function_definition", "struct_specifier", "enum_specifier", "declaration", "type_definition"]),
+  outline: new Set([
+    "function_definition",
+    "struct_specifier",
+    "union_specifier",
+    "enum_specifier",
+    "declaration",
+    "type_definition",
+  ]),
   skip: new Set(["preproc_include"]),
   transparent: new Set([
     "preproc_ifdef",
@@ -226,6 +241,9 @@ const csharp: LanguageConfig = {
     "method_declaration",
     "constructor_declaration",
     "property_declaration",
+    "operator_declaration",
+    "indexer_declaration",
+    "delegate_declaration",
     "namespace_declaration",
   ]),
   skip: new Set(["using_directive"]),
@@ -242,6 +260,8 @@ const kotlin: LanguageConfig = {
     "object_declaration",
     "companion_object",
     "property_declaration",
+    "type_alias",
+    "secondary_constructor",
   ]),
   skip: new Set(["import_list", "package_header"]),
   recurse: new Set(["class_body", "enum_class_body"]),
@@ -256,6 +276,9 @@ const swift: LanguageConfig = {
     "protocol_declaration",
     "property_declaration",
     "init_declaration",
+    "deinit_declaration",
+    "subscript_declaration",
+    "typealias_declaration",
     "protocol_function_declaration",
     "protocol_property_declaration",
   ]),
@@ -276,6 +299,9 @@ const php: LanguageConfig = {
   ]),
   skip: new Set(["namespace_use_declaration"]),
   recurse: new Set(["declaration_list", "enum_declaration_list"]),
+  // `namespace X { ... }` wraps its declarations in a compound_statement; `namespace X;` has no body.
+  // Like the unbraced form, neither gets an entry of its own.
+  transparent: new Set(["namespace_definition", "compound_statement"]),
 };
 
 const scala: LanguageConfig = {
@@ -321,6 +347,7 @@ const dart: LanguageConfig = {
     "getter_signature",
     "setter_signature",
     "constructor_signature",
+    "constant_constructor_signature",
     "factory_constructor_signature",
     "class_definition",
     "enum_declaration",
