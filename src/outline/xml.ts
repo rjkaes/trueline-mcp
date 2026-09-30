@@ -57,6 +57,8 @@ export async function extractXmlOutline(
   let inDocSubset = false;
   // Line where the current tag/comment/PI started
   let tokenStartLine = 0;
+  // Quote character of the attribute value being read; a '>' inside it does not end the tag
+  let tagQuote = "";
 
   function addElement(startLine: number, endLine: number, depth: number, text: string): void {
     if (depth <= maxDepth) {
@@ -82,6 +84,8 @@ export async function extractXmlOutline(
       // No matching open tag found; ignore the close tag
       if (i === -1) return;
       const frame = stack[i];
+      // Elements left open inside the matched one end with it
+      for (const open of stack.slice(i + 1)) addElement(open.startLine, endLine, open.depth, open.signature);
       // Pop everything from i onward (handles mismatched nesting gracefully)
       stack.length = i;
       addElement(frame.startLine, endLine, frame.depth, frame.signature);
@@ -153,10 +157,14 @@ export async function extractXmlOutline(
           break;
 
         case State.TagOpen:
-          if (ch === ">") {
+          if (tagQuote) {
+            if (ch === tagQuote) tagQuote = "";
+            buf += ch;
+          } else if (ch === ">") {
             handleTag(buf.trim(), lineNumber);
             state = State.Text;
           } else {
+            if (ch === '"' || ch === "'") tagQuote = ch;
             buf += ch;
           }
           break;

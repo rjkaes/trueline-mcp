@@ -9,6 +9,8 @@
  *   (e.g. class bodies, impl blocks)
  */
 
+import type { Node as SyntaxNode } from "web-tree-sitter";
+
 export interface LanguageConfig {
   grammar: string;
   /** Top-level node types to include */
@@ -17,6 +19,11 @@ export interface LanguageConfig {
   skip?: Set<string>;
   /** Node types whose children should be recursed into (one level) */
   recurse?: Set<string>;
+  /** Whether to list the members of a recurse target, given the node that owns it.
+   *  For languages where function bodies and class bodies share a node type. */
+  canRecurse?: (owner: SyntaxNode) => boolean;
+  /** Node types whose children are visited at the same depth, without an entry of their own. */
+  transparent?: Set<string>;
   /** Whitespace normalization for semantic diffing body hashes.
    *  "collapse" (default): collapse whitespace runs to single space, trim lines.
    *  "preserve-indent": normalize trailing whitespace only, preserve leading indentation. */
@@ -28,6 +35,7 @@ const typescript: LanguageConfig = {
   outline: new Set([
     "function_declaration",
     "class_declaration",
+    "abstract_class_declaration",
     "interface_declaration",
     "type_alias_declaration",
     "enum_declaration",
@@ -36,6 +44,7 @@ const typescript: LanguageConfig = {
     "export_statement",
     "expression_statement",
     "method_definition",
+    "abstract_method_signature",
     "public_field_definition",
   ]),
   skip: new Set(["import_statement"]),
@@ -73,6 +82,7 @@ const python: LanguageConfig = {
   ]),
   skip: new Set(["import_statement", "import_from_statement"]),
   recurse: new Set(["block"]),
+  canRecurse: (owner) => owner.type === "class_definition",
   whitespaceMode: "preserve-indent",
 };
 
@@ -92,6 +102,7 @@ const rust: LanguageConfig = {
   grammar: "rust",
   outline: new Set([
     "function_item",
+    "function_signature_item",
     "struct_item",
     "enum_item",
     "trait_item",
@@ -110,26 +121,30 @@ const java: LanguageConfig = {
   grammar: "java",
   outline: new Set([
     "class_declaration",
+    "record_declaration",
     "interface_declaration",
     "enum_declaration",
     "method_declaration",
     "constructor_declaration",
     "field_declaration",
+    "constant_declaration",
   ]),
   skip: new Set(["package_declaration", "import_declaration"]),
-  recurse: new Set(["class_body"]),
+  recurse: new Set(["class_body", "interface_body"]),
 };
 
 const ruby: LanguageConfig = {
   grammar: "ruby",
   outline: new Set([
     "method",
+    "singleton_method",
     "class",
     "module",
     "assignment",
     "call", // require, require_relative at top level
   ]),
   recurse: new Set(["body_statement"]),
+  canRecurse: (owner) => owner.type === "class" || owner.type === "module",
 };
 
 const cpp: LanguageConfig = {
@@ -145,12 +160,15 @@ const cpp: LanguageConfig = {
   ]),
   skip: new Set(["preproc_include"]),
   recurse: new Set(["declaration_list", "field_declaration_list"]),
+  // Include guards and conditional compilation wrap most of a header.
+  transparent: new Set(["preproc_ifdef", "preproc_if", "preproc_else", "preproc_elif"]),
 };
 
 const c: LanguageConfig = {
   grammar: "c",
   outline: new Set(["function_definition", "struct_specifier", "enum_specifier", "declaration", "type_definition"]),
   skip: new Set(["preproc_include"]),
+  transparent: new Set(["preproc_ifdef", "preproc_if", "preproc_else", "preproc_elif"]),
 };
 
 const csharp: LanguageConfig = {
@@ -159,6 +177,8 @@ const csharp: LanguageConfig = {
     "class_declaration",
     "interface_declaration",
     "struct_declaration",
+    "record_declaration",
+    "record_struct_declaration",
     "enum_declaration",
     "method_declaration",
     "constructor_declaration",
@@ -167,6 +187,8 @@ const csharp: LanguageConfig = {
   ]),
   skip: new Set(["using_directive"]),
   recurse: new Set(["declaration_list"]),
+  // `namespace X;` has no body node: its members are its direct children.
+  transparent: new Set(["file_scoped_namespace_declaration"]),
 };
 
 const kotlin: LanguageConfig = {
@@ -223,16 +245,18 @@ const scala: LanguageConfig = {
 const elixir: LanguageConfig = {
   grammar: "elixir",
   outline: new Set(["call"]), // def, defp, defmodule are all calls in elixir's grammar
+  recurse: new Set(["do_block"]),
+  // A def's do_block holds its body, not symbols.
+  canRecurse: (owner) => /^def(module|protocol|impl)$/.test(owner.childForFieldName("target")?.text ?? ""),
 };
 
 const lua: LanguageConfig = {
   grammar: "lua",
   outline: new Set([
-    "function_declaration",
-    "local_function",
-    "variable_declaration",
+    "function_definition_statement",
+    "local_function_definition_statement",
     "local_variable_declaration",
-    "assignment_statement",
+    "variable_assignment",
   ]),
 };
 
@@ -240,19 +264,26 @@ const dart: LanguageConfig = {
   grammar: "dart",
   outline: new Set([
     "function_signature",
+    "getter_signature",
+    "setter_signature",
+    "constructor_signature",
+    "factory_constructor_signature",
     "class_definition",
     "enum_declaration",
     "mixin_declaration",
     "extension_declaration",
+    "extension_type_declaration",
     "type_alias",
   ]),
   skip: new Set(["import_or_export"]),
-  recurse: new Set(["class_body"]),
+  // A member's signature sits inside a `declaration` or `method_signature` wrapper; its body is a sibling.
+  transparent: new Set(["declaration", "method_signature"]),
+  recurse: new Set(["class_body", "extension_body"]),
 };
 
 const zig: LanguageConfig = {
   grammar: "zig",
-  outline: new Set(["TopLevelDecl", "VarDecl", "FnProto"]),
+  outline: new Set(["function_declaration", "variable_declaration"]),
 };
 
 const bash: LanguageConfig = {
@@ -264,6 +295,8 @@ const bash: LanguageConfig = {
 export const LANGUAGES: Record<string, LanguageConfig> = {
   // TypeScript / JavaScript
   ".ts": typescript,
+  ".mts": typescript,
+  ".cts": typescript,
   ".tsx": tsx,
   ".js": javascript,
   ".jsx": javascript,

@@ -10,6 +10,18 @@ import type { OutlineEntry } from "./extract.ts";
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
 const FENCE_OPEN_RE = /^(`{3,}|~{3,})(\s*(\S+))?/;
+const SETEXT_UNDERLINE_RE = /^ {0,3}(=+|-+)\s*$/;
+// Indented code, list items and block quotes: an underline below them is not a setext underline.
+const NON_PARAGRAPH_RE = /^( {4}|\t|\s*[-*+]\s|\s*\d+[.)]\s|\s*>)/;
+// CommonMark HTML block starts: the raw tags of types 1-6, or a lone tag (type 7). `<b>text</b>` is inline.
+const HTML_BLOCK_TAGS =
+  "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul";
+const HTML_BLOCK_START_RE = new RegExp(
+  `^ {0,3}(<(script|pre|style|textarea)([\\s>]|$)|<!--|<\\?|<![A-Za-z]|<!\\[CDATA\\[|</?(${HTML_BLOCK_TAGS})([\\s>]|/>|$))`,
+  "i",
+);
+const HTML_LONE_TAG_RE = /^ {0,3}<\/?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?\/?>\s*$/;
+const THEMATIC_BREAK_RE = /^ {0,3}([-*_])( *\1){2,} *$/;
 
 enum State {
   NORMAL,
@@ -38,6 +50,14 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
   let fenceCount = 0;
   let fenceStart = 0;
   let fenceLang = "";
+
+  // Paragraph being read, in case an underline below turns it into a setext heading
+  let paragraphStart = 0; // 0 = not in a paragraph
+  let paragraphText = "";
+  // A list, quote, code or HTML block, which runs to the next blank line: an underline inside is not setext.
+  // TODO: a block that starts directly under a paragraph should end it, and HTML blocks of types 1-5
+  // (script, comment, ...) end at their closing marker rather than a blank line.
+  let blockOpen: "" | "html" | "other" = "";
 
   function elementDepth(): number {
     return currentHeadingDepth >= 0 ? currentHeadingDepth + 1 : 0;
@@ -106,8 +126,11 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
 
         // Fenced code block
         const fenceMatch = FENCE_OPEN_RE.exec(line);
-        if (fenceMatch) {
+        // A backtick fence's info string cannot contain backticks: ```code``` is inline code.
+        if (fenceMatch && !(fenceMatch[1][0] === "`" && line.includes("`", fenceMatch[1].length))) {
           state = State.IN_FENCE;
+          paragraphStart = 0;
+          blockOpen = "";
           fenceChar = fenceMatch[1][0];
           fenceCount = fenceMatch[1].length;
           fenceStart = lineNumber;
@@ -118,7 +141,35 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
         // Heading
         const headingMatch = HEADING_RE.exec(line);
         if (headingMatch) {
-          emitHeading(headingMatch[1].length, headingMatch[2].trimEnd(), lineNumber);
+          emitHeading(headingMatch[1].length, headingMatch[2].replace(/\s+#+\s*$/, "").trimEnd(), lineNumber);
+          paragraphStart = 0;
+          blockOpen = "";
+          return;
+        }
+
+        // Setext heading: an underline directly below a paragraph
+        const underlineMatch = SETEXT_UNDERLINE_RE.exec(line);
+        if (underlineMatch && paragraphStart) {
+          emitHeading(underlineMatch[1][0] === "=" ? 1 : 2, paragraphText, paragraphStart);
+          paragraphStart = 0;
+          return;
+        }
+
+        if (!line.trim()) {
+          paragraphStart = 0;
+          blockOpen = "";
+        } else if (THEMATIC_BREAK_RE.test(line) && blockOpen !== "html") {
+          paragraphStart = 0;
+          blockOpen = "";
+        } else if (paragraphStart) {
+          paragraphText += ` ${line.trim()}`;
+        } else if (!blockOpen) {
+          if (HTML_BLOCK_START_RE.test(line) || HTML_LONE_TAG_RE.test(line)) blockOpen = "html";
+          else if (NON_PARAGRAPH_RE.test(line)) blockOpen = "other";
+          else {
+            paragraphStart = lineNumber;
+            paragraphText = line.trim();
+          }
         }
         return;
       }

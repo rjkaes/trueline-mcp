@@ -34,6 +34,7 @@ const XML_EXTENSIONS = new Set([
   ".svg",
   ".pom",
   ".csproj",
+  ".fsproj",
   ".props",
   ".targets",
   ".fxml",

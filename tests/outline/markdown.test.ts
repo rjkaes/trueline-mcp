@@ -3,6 +3,8 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { extractMarkdownOutline } from "../../src/outline/markdown.ts";
+import { handleOutline } from "../../src/tools/outline.ts";
+import { getText } from "../helpers.ts";
 
 let testDir: string;
 
@@ -328,5 +330,85 @@ describe("edge cases", () => {
     const h1 = entries.find((e) => e.text === "# Title");
     // First heading's range should extend to line 6 (just before # Second on line 7)
     expect(h1!.endLine).toBe(6);
+  });
+});
+
+async function outline(name: string, source: string): Promise<{ text: string; isError: boolean }> {
+  const file = writeTestFile(name, source);
+  const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+  return { text: getText(result), isError: result.isError === true };
+}
+
+describe("heading and front matter recognition", () => {
+  test("heading on line 1 of a BOM-prefixed file is found", async () => {
+    const { text } = await outline("bom.md", "\uFEFF# Invoice Guide\n\nBody text.\n");
+
+    expect(text).toContain("# Invoice Guide");
+  });
+
+  test("setext headings are found", async () => {
+    const { text } = await outline(
+      "setext.md",
+      ["Invoice Guide", "=============", "", "Setup", "-----", "", "Body.", ""].join("\n"),
+    );
+
+    expect(text).toContain("# Invoice Guide");
+    expect(text).toContain("## Setup");
+  });
+
+  test("closing hashes are not part of the heading text", async () => {
+    const file = writeTestFile("closed.md", "# Invoice Guide #\n\nBody.\n");
+
+    const { entries } = await extractMarkdownOutline(file);
+
+    expect(entries[0].text).toBe("# Invoice Guide");
+  });
+
+  test("triple backticks in a line's inline code do not open a fence", async () => {
+    const file = writeTestFile("inline-fence.md", "```code``` is inline, not a fence.\n\n# Real Heading\n\nBody.\n");
+
+    const { entries } = await extractMarkdownOutline(file);
+
+    expect(entries.map((e) => e.text)).toContain("# Real Heading");
+  });
+
+  test("an underline below a list item continuation is a thematic break", async () => {
+    const file = writeTestFile("list-rule.md", "# Guide\n\n- item\n  continued\n---\n\nBody.\n");
+
+    const { entries } = await extractMarkdownOutline(file);
+
+    expect(entries.map((e) => e.text)).toEqual(["# Guide"]);
+  });
+
+  test("an underline below an HTML block is not a setext underline", async () => {
+    const file = writeTestFile("html-rule.md", "# Guide\n\n<div>\nfoo\n</div>\n---\n\nBody.\n");
+
+    const { entries } = await extractMarkdownOutline(file);
+
+    expect(entries.map((e) => e.text)).toEqual(["# Guide"]);
+  });
+
+  test("a paragraph after a thematic break can still be a setext heading", async () => {
+    const file = writeTestFile("rule-then-setext.md", "- item\n---\nSetup\n-----\n\nBody.\n");
+
+    const { entries } = await extractMarkdownOutline(file);
+
+    expect(entries.map((e) => e.text)).toEqual(["## Setup"]);
+  });
+
+  test("a paragraph opening with an inline tag can still be a setext heading", async () => {
+    const file = writeTestFile("inline-tag.md", "<b>Setup</b> notes\n-----\n\nBody.\n");
+
+    const { entries } = await extractMarkdownOutline(file);
+
+    expect(entries.map((e) => e.text)).toEqual(["## <b>Setup</b> notes"]);
+  });
+
+  test("front matter is still outlined", async () => {
+    const file = writeTestFile("front.md", "---\ntitle: Guide\n---\n\n# Guide\n");
+
+    const { entries } = await extractMarkdownOutline(file);
+
+    expect(entries.map((e) => e.nodeType)).toEqual(["frontmatter", "h1"]);
   });
 });

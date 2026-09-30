@@ -6,13 +6,12 @@
  */
 import { createRequire } from "node:module";
 import { resolve, dirname } from "node:path";
-import Parser from "web-tree-sitter";
+import { Language, Parser } from "web-tree-sitter";
 
 const require = createRequire(import.meta.url);
 
-let initialized = false;
-// biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
-const languageCache = new Map<string, Promise<any>>();
+let initialization: Promise<void> | undefined;
+const languageCache = new Map<string, Promise<Language>>();
 
 /**
  * Resolve the path to tree-sitter.wasm at runtime.
@@ -22,13 +21,25 @@ const languageCache = new Map<string, Promise<any>>();
  * the path is resolved from the actual node_modules at runtime.
  */
 function treeSitterWasmPath(): string {
-  const entry = require.resolve("web-tree-sitter/package.json");
-  return resolve(dirname(entry), "tree-sitter.wasm");
+  // 0.25+ does not export ./package.json, so resolve the main entry instead.
+  return resolve(dirname(require.resolve("web-tree-sitter")), "tree-sitter.wasm");
 }
 
 /** Ensure web-tree-sitter WASM runtime is initialized (idempotent). */
-async function ensureInit(): Promise<void> {
-  if (initialized) return;
+function ensureInit(): Promise<void> {
+  // Concurrent first callers must share one init: each Parser.init() builds its own
+  // WASM module, and a Language loaded into one module is invalid in another.
+  if (!initialization) {
+    initialization = initRuntime();
+    // Evict failures so a later call retries.
+    initialization.catch(() => {
+      initialization = undefined;
+    });
+  }
+  return initialization;
+}
+
+async function initRuntime(): Promise<void> {
   // Guard against WASM loading that hangs (e.g. missing .wasm files).
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -40,7 +51,6 @@ async function ensureInit(): Promise<void> {
     // A pending timer keeps the event loop alive; CLI runs lingered 10 s.
     clearTimeout(timer);
   }
-  initialized = true;
 }
 
 /** Resolve the path to a grammar's .wasm file via require.resolve. */
@@ -52,14 +62,13 @@ function grammarPath(grammar: string): string {
 }
 
 /** Create a parser configured for a given grammar. */
-// biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
-export async function createParser(grammar: string): Promise<any> {
+export async function createParser(grammar: string): Promise<Parser> {
   await ensureInit();
   // Cache the in-flight load: every Language.load instantiates a grammar copy that
   // is never freed, so concurrent first callers must share one.
   let load = languageCache.get(grammar);
   if (!load) {
-    load = Parser.Language.load(grammarPath(grammar));
+    load = Language.load(grammarPath(grammar));
     languageCache.set(grammar, load);
     // Evict failures so a later call retries.
     load.catch(() => languageCache.delete(grammar));

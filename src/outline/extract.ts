@@ -6,9 +6,10 @@
  */
 import type { LanguageConfig } from "./languages.ts";
 import { createParser } from "./parser.ts";
-import type Parser from "web-tree-sitter";
+import type { Node as SyntaxNode } from "web-tree-sitter";
 
-type SyntaxNode = Parser.SyntaxNode;
+// web-tree-sitter 0.25 types child slots as nullable.
+const childrenOf = (node: SyntaxNode): SyntaxNode[] => node.children.filter((c): c is SyntaxNode => c !== null);
 
 export interface OutlineEntry {
   /** 1-based start line */
@@ -35,8 +36,19 @@ export async function extractOutline(
   // WASM heap until deleted, and a full heap aborts every later parse.
   // A tree does not reference its parser, so the parser can go now.
   parser.delete();
+  if (!tree) throw new Error(`tree-sitter returned no tree for ${config.grammar}`);
   const lines = source.split("\n");
   const entries: OutlineEntry[] = [];
+
+  /** 1-based last line of a node. Kotlin's import_list ends at column 0 of the next line, past trailing blank lines. */
+  function lastLine(node: SyntaxNode): number {
+    let row = node.endPosition.row;
+    if (node.endPosition.column === 0 && row > node.startPosition.row) {
+      row--;
+      while (row > node.startPosition.row && !lines[row]?.trim()) row--;
+    }
+    return row + 1;
+  }
 
   /**
    * Extract a compact signature for the node.
@@ -57,10 +69,45 @@ export async function extractOutline(
     }
 
     // Multi-line: join lines from startRow until we find the opening brace or
-    // reach the end of the node, whichever comes first.
-    const parts: string[] = [fl.trimEnd()];
-    for (let row = startRow + 1; row <= Math.min(endRow, startRow + 20); row++) {
-      const line = (lines[row] ?? "").trimEnd();
+    // reach the end of the node, whichever comes first. A body also ends the join:
+    // Python and Ruby have no brace, and their body starts on the line after the
+    // signature. Elixir's `do` block starts on the signature's last line.
+    const definition = node.childForFieldName("definition") ?? node; // Python decorated_definition
+    const body = definition.childForFieldName("body") ?? childrenOf(definition).find((c) => c.type === "do_block");
+    let lastRow = Math.min(endRow, startRow + 20);
+    if (body) {
+      const bodyRow = body.startPosition.row;
+      const sharesRow = (lines[bodyRow] ?? "").slice(0, body.startPosition.column).trim() !== "";
+      lastRow = Math.min(lastRow, sharesRow ? bodyRow : bodyRow - 1);
+    }
+    // A comment in the signature would make editing it read as a signature change.
+    const comments: SyntaxNode[] = [];
+    const collectComments = (parent: SyntaxNode): void => {
+      for (const child of childrenOf(parent)) {
+        if (child.startPosition.row > lastRow) break;
+        if (child.type.includes("comment")) comments.push(child);
+        else collectComments(child);
+      }
+    };
+    collectComments(node);
+    // Past a body-less signature's last line, a trailing comment is a sibling, not a child.
+    for (let next = node.nextSibling; next && next.startPosition.row === endRow; next = next.nextSibling) {
+      if (next.type.includes("comment")) comments.push(next);
+    }
+    const codeOnRow = (row: number): string => {
+      let line = lines[row] ?? "";
+      // Right to left, so earlier columns stay valid.
+      for (const comment of [...comments].reverse()) {
+        if (comment.startPosition.row > row || comment.endPosition.row < row) continue;
+        const from = comment.startPosition.row === row ? comment.startPosition.column : 0;
+        const to = comment.endPosition.row === row ? comment.endPosition.column : line.length;
+        line = line.slice(0, from) + line.slice(to);
+      }
+      return line.trimEnd();
+    };
+    const parts: string[] = [codeOnRow(startRow)];
+    for (let row = startRow + 1; row <= lastRow; row++) {
+      const line = codeOnRow(row);
       parts.push(line.trim());
       if (line.includes("{")) break;
     }
@@ -100,7 +147,7 @@ export async function extractOutline(
 
   function trackSkipped(node: SyntaxNode): void {
     const nodeStart = node.startPosition.row + 1;
-    const nodeEnd = node.endPosition.row + 1;
+    const nodeEnd = lastLine(node);
     // Infer a human-readable label from the node type
     const label = node.type
       .replace(/_/g, " ")
@@ -124,13 +171,20 @@ export async function extractOutline(
     }
     if (config.skip?.has(node.type)) return;
 
+    if (config.transparent?.has(node.type)) {
+      for (const child of childrenOf(node)) {
+        if (child.isNamed) visit(child, depth, isRootChild);
+      }
+      return;
+    }
+
     if (config.outline.has(node.type)) {
       // Flush any pending skipped nodes before this entry
       if (isRootChild) flushSkipped();
 
       entries.push({
         startLine: node.startPosition.row + 1,
-        endLine: node.endPosition.row + 1,
+        endLine: lastLine(node),
         depth,
         nodeType: node.type,
         text: extractSignature(node),
@@ -141,13 +195,14 @@ export async function extractOutline(
       // `decorated_definition`) hold the real declaration one level deeper than
       // the outline node itself, so a recurse target may be a grandchild.
       if (depth + 1 <= maxDepth) {
-        for (const child of node.children) {
+        for (const child of childrenOf(node)) {
           if (!child.isNamed) continue;
           const recurseTargets = config.recurse?.has(child.type)
             ? [child]
-            : child.children.filter((c) => c.isNamed && config.recurse?.has(c.type));
+            : childrenOf(child).filter((c) => c.isNamed && config.recurse?.has(c.type));
           for (const target of recurseTargets) {
-            for (const member of target.children) {
+            if (config.canRecurse && target.parent && !config.canRecurse(target.parent)) continue;
+            for (const member of childrenOf(target)) {
               if (!member.isNamed) continue;
               visit(member, depth + 1, false);
             }
@@ -159,7 +214,7 @@ export async function extractOutline(
   }
 
   try {
-    for (const child of tree.rootNode.children) {
+    for (const child of childrenOf(tree.rootNode)) {
       visit(child, 0, true);
     }
   } finally {

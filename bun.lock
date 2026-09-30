@@ -6,7 +6,7 @@
       "name": "hashline-mcp",
       "dependencies": {
         "tree-sitter-wasms": "0.1.13",
-        "web-tree-sitter": "0.24.7",
+        "web-tree-sitter": "0.25.3",
         "zod": "^3.25.0",
       },
       "devDependencies": {
@@ -73,7 +73,7 @@
 
     "undici-types": ["undici-types@6.21.0", "", {}, "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="],
 
-    "web-tree-sitter": ["web-tree-sitter@0.24.7", "", {}, "sha512-CdC/TqVFbXqR+C51v38hv6wOPatKEUGxa39scAeFSm98wIhZxAYonhRQPSMmfZ2w7JDI0zQDdzdmgtNk06/krQ=="],
+    "web-tree-sitter": ["web-tree-sitter@0.25.3", "", {}, "sha512-e0hdXG+nJ18Zd/QJFhSx0DNTSMz7miwUjKyJ/lglTnZo6ke08++BQzXkaeaqnGJFi9qq+nPJg2L8hYAjduToHQ=="],
 
     "zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
   }

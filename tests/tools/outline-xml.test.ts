@@ -3,6 +3,7 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleOutline } from "../../src/tools/outline.ts";
+import { extractXmlOutline } from "../../src/outline/xml.ts";
 import { getText, writeTestFile as _writeTestFile } from "../helpers.ts";
 
 let testDir: string;
@@ -314,5 +315,47 @@ describe("XML outline", () => {
     expect(text).toContain("<root>");
     expect(text).toContain("<unclosed>");
     expect(text).toContain("<leaf />");
+  });
+});
+
+async function outline(name: string, source: string): Promise<{ text: string; isError: boolean }> {
+  const file = writeTestFile(name, source);
+  const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+  return { text: getText(result), isError: result.isError === true };
+}
+
+describe("XML tag parsing and project file types", () => {
+  test("a '>' inside an attribute value does not end the tag", async () => {
+    const file = writeTestFile(
+      "template.xsl",
+      ["<stylesheet>", '  <xsl:if test="count(item) > 1"/>', "  <xsl:apply-templates/>", "</stylesheet>", ""].join(
+        "\n",
+      ),
+    );
+
+    const { entries } = await extractXmlOutline(file);
+
+    expect(entries.map((e) => `${e.depth}:${e.text}`)).toEqual([
+      "0:<stylesheet>",
+      '1:<xsl:if test="count(item) > 1" />',
+      "1:<xsl:apply-templates />",
+    ]);
+  });
+
+  test("an unclosed element is kept when its parent closes", async () => {
+    const file = writeTestFile("unclosed.xml", ["<root>", "  <a>", "    <b>text", "  </a>", "</root>", ""].join("\n"));
+
+    const { entries } = await extractXmlOutline(file);
+
+    expect(entries.map((e) => e.text)).toContain("<b>");
+  });
+
+  test(".fsproj project files are outlined like .csproj", async () => {
+    const { text } = await outline(
+      "App.fsproj",
+      ["<Project>", "  <PropertyGroup>", "  </PropertyGroup>", "</Project>", ""].join("\n"),
+    );
+
+    expect(text).not.toContain("No outline support");
   });
 });
