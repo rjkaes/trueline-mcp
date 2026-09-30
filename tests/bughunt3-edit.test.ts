@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { handleEdit } from "../src/tools/edit.ts";
+import { streamingEdit } from "../src/streaming-edit.ts";
 import { handleRead } from "../src/tools/read.ts";
 import { validateEdits } from "../src/tools/shared.ts";
 import { getText, lineHash, rangeChecksum, useTestDir, writeTestFile } from "./helpers.ts";
@@ -158,4 +159,28 @@ try {
     expect(result.isError).toBeUndefined();
     expect(getText(result).isWellFormed()).toBe(true);
   });
+
+  // The catch around transcodedLines treats any message containing "binary" as a content verdict. An open
+  // failure such as EACCES quotes the path, so a file named binary-notes.txt resolves { ok: false } although
+  // open failures are documented to throw.
+  // src/streaming-edit.ts:114 — substring "binary" in the path turns an open failure into a result
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "an unreadable file named binary-notes.txt rejects with EACCES instead of resolving { ok: false }",
+    async () => {
+      const lines = ["alpha", "beta"];
+      const f = writeTestFile(testDir(), "binary-notes.txt", `${lines.join("\n")}\n`);
+      const { mtimeMs } = statSync(f);
+      const validated = validateEdits([
+        { ref: rangeChecksum(lines, 1, lines.length), range: `${lineHash(lines[0])}1`, content: "CHANGED" },
+      ]);
+      if (!validated.ok) throw new Error(`validateEdits failed: ${validated.error.content[0].text}`);
+
+      chmodSync(f, 0o000);
+      try {
+        await expect(streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs)).rejects.toThrow("EACCES");
+      } finally {
+        chmodSync(f, 0o644);
+      }
+    },
+  );
 });

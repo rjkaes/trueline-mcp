@@ -10,7 +10,7 @@
 // end.  This avoids a per-line `Buffer.toString()` allocation.
 // ==============================================================================
 import { LF_BUF } from "../line-splitter.ts";
-import { transcodedLines } from "../encoding.ts";
+import { isBinaryError, transcodedLines } from "../encoding.ts";
 import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, hashToLetters } from "../hash.ts";
 import { mergeSortedRanges, parseFilePathWithRanges, parseRanges, type ReadRange } from "../parse.ts";
 import {
@@ -19,7 +19,6 @@ import {
   expandGlobs,
   filterAbsolutePaths,
   isAbsolutePathArg,
-  isBinaryError,
   relativePathError,
   type ToolContext,
   validateEncoding,

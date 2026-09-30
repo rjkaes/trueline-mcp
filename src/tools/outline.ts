@@ -5,7 +5,7 @@
  * Much smaller than reading the full file — useful for navigation and
  * understanding file structure before reading specific ranges.
  */
-import { transcodedLines } from "../encoding.ts";
+import { isBinaryError, transcodedLines } from "../encoding.ts";
 import { extname } from "node:path";
 import { extractOutline, formatOutline } from "../outline/extract.ts";
 import type { OutlineEntry } from "../outline/extract.ts";
@@ -18,7 +18,6 @@ import {
   expandGlobs,
   filterAbsolutePaths,
   isAbsolutePathArg,
-  isBinaryError,
   relativePathError,
   type ToolContext,
   validatePath,

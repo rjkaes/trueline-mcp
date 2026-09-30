@@ -57,6 +57,13 @@ interface TranscodedLinesResult {
 
 const READ_BUF_SIZE = 65536;
 
+/** Check whether an error from `transcodedLines` indicates a binary file. */
+export function isBinaryError(err: unknown): err is Error {
+  // Anchored to the splitter's and encoding's own messages: an fs error (EACCES) quotes the
+  // path, and a path can contain "binary".
+  return err instanceof Error && /^(File appears to be binary|UTF-32 is not supported)/.test(err.message);
+}
+
 /**
  * Stream lines from a file, transparently handling BOM and UTF-16 transcoding.
  *
@@ -85,7 +92,7 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
   const firstChunk = Buffer.from(readBuf.subarray(0, firstBytesRead));
   if (UTF32_BOMS.some((bom) => firstChunk.subarray(0, bom.length).equals(bom))) {
     await fd.close();
-    // "binary" routes it through isBinaryError, so search and verify skip the file
+    // isBinaryError matches the "UTF-32 is not supported" prefix, so search and verify skip the file
     // as they did when UTF-32BE's NUL bytes tripped binary detection.
     // No path: callers name the file, as for splitChunks' binary error.
     throw new Error("UTF-32 is not supported; the file is treated as binary");

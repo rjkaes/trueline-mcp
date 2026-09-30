@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { displayPath, expandGlobs, isBinaryError } from "../src/tools/shared.ts";
+import { isBinaryError } from "../src/encoding.ts";
+import { displayPath, expandGlobs } from "../src/tools/shared.ts";
 import { makeGitRepo, useTestDir } from "./helpers.ts";
 
 describe("isBinaryError", () => {
-  // src/tools/shared.ts:205 — isBinaryError matches "binary" anywhere in the message, so an fs error naming a path with "binary" is reported as a binary file
+  // src/encoding.ts:61 — isBinaryError matched "binary" anywhere in the message, so an fs error naming a path with "binary" was reported as a binary file
   test("an EACCES error for a path containing 'binary' is not a binary-file error", () => {
     const fromLineSplitter = new Error("File appears to be binary (contains null bytes)");
     expect(isBinaryError(fromLineSplitter)).toBe(true);

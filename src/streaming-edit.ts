@@ -24,7 +24,7 @@ import { devNull } from "node:os";
 import { dirname, resolve } from "node:path";
 import { FNV_OFFSET_BASIS, checksumToLetters, fnv1aHashBytes, foldHash, hashToLetters } from "./hash.ts";
 import { EMPTY_BUF, LF_BUF } from "./line-splitter.ts";
-import { transcodedLines, encodeBuffer } from "./encoding.ts";
+import { isBinaryError, transcodedLines, encodeBuffer } from "./encoding.ts";
 import type { DiffCollector } from "./diff-collector.ts";
 import { BARE_LINE_HASH, type ChecksumRef } from "./parse.ts";
 
@@ -111,7 +111,7 @@ export async function streamingEdit(
   try {
     transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
   } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes("binary")) return await fail(err.message);
+    if (isBinaryError(err)) return await fail(err.message);
     await cleanupTmp();
     throw err;
   }
@@ -457,7 +457,7 @@ export async function streamingEdit(
   } catch (err: unknown) {
     // Binary detection throws from transcodedLines — convert to a structured
     // error result so callers get { ok: false } instead of an exception.
-    if (err instanceof Error && err.message.includes("binary")) {
+    if (isBinaryError(err)) {
       return await fail(err.message);
     }
     return await fail(`stream read failed: ${(err as Error).message}`);

@@ -6,17 +6,10 @@
 // Returns "valid" or "stale" per ref, near-zero tokens.
 // ==============================================================================
 
-import { transcodedLines } from "../encoding.ts";
+import { isBinaryError, transcodedLines } from "../encoding.ts";
 import { checksumToLetters, FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash } from "../hash.ts";
 import { type ChecksumRef, parseChecksum } from "../parse.ts";
-import {
-  binaryFileError,
-  isAbsolutePathArg,
-  isBinaryError,
-  relativePathError,
-  type ToolContext,
-  validatePath,
-} from "./shared.ts";
+import { binaryFileError, isAbsolutePathArg, relativePathError, type ToolContext, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
 interface VerifyParams extends ToolContext {

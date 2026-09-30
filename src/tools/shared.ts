@@ -200,13 +200,6 @@ export async function validatePath(
 // Binary file detection helper
 // ==============================================================================
 
-/** Check whether an error from `transcodedLines` indicates a binary file. */
-export function isBinaryError(err: unknown): err is Error {
-  // Anchored to the splitter's and encoding's own messages: an fs error (EACCES) quotes the
-  // path, and a path can contain "binary".
-  return err instanceof Error && /^(File appears to be binary|UTF-32 is not supported)/.test(err.message);
-}
-
 /** Return a standard error result for binary file access. */
 export function binaryFileError(filePath: string): ToolResult {
   return errorResult(`"${filePath}" appears to be a binary file`);

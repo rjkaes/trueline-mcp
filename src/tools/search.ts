@@ -6,12 +6,12 @@
  * checksums, and refs ready for immediate editing.
  */
 import { checksumToLetters, hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
+import { isBinaryError } from "../encoding.ts";
 import {
   displayPath,
   expandGlobs,
   filterAbsolutePaths,
   isAbsolutePathArg,
-  isBinaryError,
   relativePathError,
   type ToolContext,
   validatePath,
