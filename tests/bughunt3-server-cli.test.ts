@@ -133,6 +133,56 @@ describe("server.ts tool descriptions", () => {
     expect(text).not.toBe("");
     expect(text).not.toContain("must be an absolute path");
   });
+
+  // Quoted tokens containing "/" that are not absolute paths. Refs such as "ab10-cd20/efghij" also contain a
+  // slash but are not paths.
+  function relativePathExamples(text: string): string[] {
+    const quoted = [...text.matchAll(/"([^"]*)"/g)].map((match) => match[1]);
+    return quoted.filter(
+      (token) => token.includes("/") && !token.startsWith("/") && !/^[a-z]{2}\d+-[a-z]{2}\d+\/[a-z]{6}$/.test(token),
+    );
+  }
+
+  // Every description in tools/list is text an agent copies from. Relative examples there teach paths the
+  // same server rejects (requireAbsolutePath).
+  // src/server.ts:180 — trueline_read/outline/search file_paths descriptions quote relative paths
+  test("bug: no tool or property description quotes a relative path example", async () => {
+    const list = await call({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const tools = list.result?.tools as { name: string }[];
+    const offenders: string[] = [];
+    const walk = (node: unknown, where: string) => {
+      if (typeof node !== "object" || node === null) return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === "description" && typeof value === "string") {
+          for (const example of relativePathExamples(value)) offenders.push(`${where}: ${example}`);
+        } else {
+          walk(value, `${where}.${key}`);
+        }
+      }
+    };
+    for (const tool of tools) walk(tool, tool.name);
+
+    expect(tools.length).toBeGreaterThan(0);
+    expect(offenders).toEqual([]);
+  });
+
+  // src/server.ts:105 — the min(1) messages of read, changes and outline quote {"file_paths": ["src/..."]}
+  test.each(["trueline_read", "trueline_changes", "trueline_outline"])(
+    "bug: the empty file_paths error of %s quotes no relative path example",
+    async (name) => {
+      const reply = await call({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name, arguments: { file_paths: [] } },
+      });
+      const text = reply.result?.content?.[0].text ?? "";
+
+      expect(reply.result?.isError).toBe(true);
+      expect(text).toContain("file_paths is required");
+      expect(relativePathExamples(text)).toEqual([]);
+    },
+  );
 });
 
 // =============================================================================

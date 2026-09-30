@@ -102,7 +102,10 @@ const { projectDir, allowedDirs } = await resolveProjectDirs();
 const readSchema = z.object({
   file_paths: z
     .array(z.string())
-    .min(1, 'file_paths is required — pass an array of file paths to read, e.g. {"file_paths": ["src/main.ts"]}')
+    .min(
+      1,
+      'file_paths is required — pass an array of file paths to read, e.g. {"file_paths": ["/Users/you/project/src/main.ts"]}',
+    )
     .default([]),
   ranges: z.array(z.string()).optional(),
   encoding: z.string().optional(),
@@ -133,7 +136,7 @@ const changesSchema = z.object({
     .array(z.string())
     .min(
       1,
-      'file_paths is required — pass an array of file paths, e.g. {"file_paths": ["src/app.ts"]}. Use ["*"] for all changed files.',
+      'file_paths is required — pass an array of file paths, e.g. {"file_paths": ["/Users/you/project/src/app.ts"]}. Use ["*"] for all changed files.',
     )
     .default([]),
   compare_against: z.string().optional(),
@@ -142,7 +145,10 @@ const changesSchema = z.object({
 const outlineSchema = z.object({
   file_paths: z
     .array(z.string())
-    .min(1, 'file_paths is required — pass an array of file paths to outline, e.g. {"file_paths": ["src/main.ts"]}')
+    .min(
+      1,
+      'file_paths is required — pass an array of file paths to outline, e.g. {"file_paths": ["/Users/you/project/src/main.ts"]}',
+    )
     .default([]),
   depth: z.number().int().min(0).optional(),
 });
@@ -177,8 +183,8 @@ const readJsonSchema = {
       type: "array",
       items: { type: "string" },
       description:
-        'One or more files to read. Supports globs: "src/tools/*.ts". ' +
-        'Append :range for specific lines: "src/foo.ts:10-25". Accepts file_path as alias. Paths must be absolute.',
+        'One or more files to read. Supports globs: "/Users/you/project/src/tools/*.ts". ' +
+        'Append :range for specific lines: "/Users/you/project/src/foo.ts:10-25". Accepts file_path as alias. Paths must be absolute.',
     },
     ranges: {
       type: "array",
@@ -278,7 +284,8 @@ const outlineJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: 'One or more file paths or globs (e.g. "src/tools/*.ts") to outline. Paths must be absolute.',
+      description:
+        'One or more file paths or globs (e.g. "/Users/you/project/src/tools/*.ts") to outline. Paths must be absolute.',
     },
     depth: {
       type: "integer",
@@ -296,7 +303,7 @@ const searchJsonSchema = {
     file_paths: {
       type: "array",
       items: { type: "string" },
-      description: 'Paths or globs (e.g. "src/tools/*.ts") to search. Paths must be absolute.',
+      description: 'Paths or globs (e.g. "/Users/you/project/src/tools/*.ts") to search. Paths must be absolute.',
     },
     pattern: {
       type: "string",
