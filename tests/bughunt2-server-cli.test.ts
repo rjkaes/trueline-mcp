@@ -66,7 +66,16 @@ function spawnServer(
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, HOME: fakeHome, TMPDIR: tmp, CLAUDE_PROJECT_DIR: projectDir, ...extraEnv },
+    // os.tmpdir() reads TEMP/TMP on Windows and TMPDIR elsewhere; set all so the update cache stays in tmp.
+    env: {
+      ...process.env,
+      HOME: fakeHome,
+      TMPDIR: tmp,
+      TEMP: tmp,
+      TMP: tmp,
+      CLAUDE_PROJECT_DIR: projectDir,
+      ...extraEnv,
+    },
   });
 }
 
@@ -294,7 +303,7 @@ console.log(JSON.stringify(seen));
     );
     const result = spawnSync("bun", [script, current], {
       cwd: sandbox,
-      env: { ...process.env, HOME: fakeHome, TMPDIR: cacheDir },
+      env: { ...process.env, HOME: fakeHome, TMPDIR: cacheDir, TEMP: cacheDir, TMP: cacheDir },
       encoding: "utf-8",
       timeout: 20_000,
     });

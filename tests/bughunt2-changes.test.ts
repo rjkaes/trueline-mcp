@@ -260,23 +260,29 @@ describe("per-file messages and headers", () => {
 });
 
 describe("'*' expansion failures", () => {
-  test("bug: git output over the 10 MB buffer makes handleDiff reject instead of returning a result", async () => {
-    const { dir, git } = makeRepo();
-    writeFileSync(join(dir, "app.ts"), "function app() {\n  return 1;\n}\n");
-    git("add", ".");
-    git("commit", "-q", "-m", "init");
-    writeFileSync(join(dir, "app.ts"), "function app() {\n  return 2;\n}\n");
-    // An un-ignored build directory: `git ls-files --others -z` prints ~10.7 MB of names.
-    const bulk = join(dir, "d".repeat(250));
-    mkdirSync(bulk);
-    const stem = "f".repeat(240);
-    for (let i = 0; i < 21_500; i++) writeFileSync(join(bulk, `${stem}${String(i).padStart(10, "0")}`), "");
+  // Windows CI needs ~46 s to create the files and times out removing them; the fix is
+  // platform-independent, so POSIX runs cover it.
+  test.skipIf(process.platform === "win32")(
+    "bug: git output over the 10 MB buffer makes handleDiff reject instead of returning a result",
+    async () => {
+      const { dir, git } = makeRepo();
+      writeFileSync(join(dir, "app.ts"), "function app() {\n  return 1;\n}\n");
+      git("add", ".");
+      git("commit", "-q", "-m", "init");
+      writeFileSync(join(dir, "app.ts"), "function app() {\n  return 2;\n}\n");
+      // An un-ignored build directory: `git ls-files --others -z` prints ~10.7 MB of names.
+      const bulk = join(dir, "d".repeat(250));
+      mkdirSync(bulk);
+      const stem = "f".repeat(240);
+      for (let i = 0; i < 21_500; i++) writeFileSync(join(bulk, `${stem}${String(i).padStart(10, "0")}`), "");
 
-    const outcome = await handleDiff({ file_paths: ["*"], projectDir: dir, allowedDirs: [dir] }).then(
-      () => "result",
-      (err: Error) => `threw: ${err.message}`,
-    );
+      const outcome = await handleDiff({ file_paths: ["*"], projectDir: dir, allowedDirs: [dir] }).then(
+        () => "result",
+        (err: Error) => `threw: ${err.message}`,
+      );
 
-    expect(outcome).toBe("result");
-  }, 60_000);
+      expect(outcome).toBe("result");
+    },
+    60_000,
+  );
 });
