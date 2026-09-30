@@ -65,8 +65,16 @@ export function scheduleUpdateCheck(
   })();
 }
 
-// >0 if a > b. Numeric collation makes 2.10.0 > 2.9.0. Prerelease tags are
-// unsupported; npm's `latest` dist-tag is always a release.
+// >0 if a > b. Numeric collation makes 2.10.0 > 2.9.0 and rc.10 > rc.9. Per semver a
+// prerelease sorts before its release, so a running 2.10.0-rc.1 is told about 2.10.0.
 function compareVersions(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { numeric: true });
+  const byNumber = (x: string, y: string) => x.localeCompare(y, undefined, { numeric: true });
+  const [coreA, preA] = a.split(/-(.*)/s);
+  const [coreB, preB] = b.split(/-(.*)/s);
+
+  const core = byNumber(coreA, coreB);
+  if (core !== 0 || preA === preB) return core;
+  if (preA === undefined) return 1;
+  if (preB === undefined) return -1;
+  return byNumber(preA, preB);
 }

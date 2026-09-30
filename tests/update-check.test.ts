@@ -109,4 +109,26 @@ describe("scheduleUpdateCheck", () => {
 
     fetchMock.mockRestore();
   });
+
+  // Semver: a prerelease sorts before its release, so an rc build is told about the final release.
+  it.each([
+    ["2.10.0-rc.1", "2.10.0", true],
+    ["2.10.0", "2.10.0-rc.1", false],
+    ["2.10.0-rc.9", "2.10.0-rc.10", true],
+    ["2.10.0-rc.10", "2.10.0-rc.9", false],
+    ["2.9.0", "2.10.0-rc.1", true],
+  ])("current %s, latest %s: notifies=%p", async (current, latest, notifies) => {
+    const fetchMock = spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ version: latest }), { status: 200 }),
+    );
+
+    const { scheduleUpdateCheck } = await import("../src/update-check.ts");
+    scheduleUpdateCheck(current, notify);
+
+    await Bun.sleep(100);
+
+    expect(stderrOutput.includes("update available")).toBe(notifies);
+
+    fetchMock.mockRestore();
+  });
 });
