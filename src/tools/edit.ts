@@ -10,7 +10,8 @@
 // The file is never loaded into memory as a whole.
 // ==============================================================================
 
-import { realpath, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -36,6 +37,26 @@ interface EditParams extends ToolContext {
   context_lines?: number;
 }
 
+// Two streaming edits on one file would each pass the mtime check before either renames, and the
+// second rename would silently discard the first. Edits queue per canonical path instead.
+const fileQueues = new Map<string, Promise<void>>();
+
+async function runExclusive<T>(resolvedPath: string, task: () => Promise<T>): Promise<T> {
+  const ahead = fileQueues.get(resolvedPath);
+  let release!: () => void;
+  const turn = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  fileQueues.set(resolvedPath, turn);
+  try {
+    await ahead;
+    return await task();
+  } finally {
+    release();
+    if (fileQueues.get(resolvedPath) === turn) fileQueues.delete(resolvedPath);
+  }
+}
+
 export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const t0 = performance.now();
   const { file_path, edits, dry_run, context_lines, projectDir, allowedDirs } = params;
@@ -44,10 +65,14 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     return relativePathError(file_path);
   }
 
-  // dry_run uses Read deny patterns: it's a read-only preview, same as the old trueline_changes
-  const toolName = dry_run ? "Read" : "Edit";
-  const validated = await validatePath(file_path, toolName, projectDir, allowedDirs);
+  // A real edit also reads the file (a hash mismatch echoes its lines), so Read deny rules apply to it too.
+  // dry_run is a read-only preview, same as the old trueline_changes: Read rules only.
+  const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
+  if (!dry_run) {
+    const editable = await validatePath(file_path, "Edit", projectDir, allowedDirs);
+    if (!editable.ok) return editable.error;
+  }
 
   let enc: BufferEncoding;
   try {
@@ -56,13 +81,17 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     return errorResult((err as Error).message);
   }
 
-  const { resolvedPath, mtimeMs } = validated;
+  const { resolvedPath } = validated;
 
   const built = validateEdits(edits);
   if (!built.ok) return built.error;
 
   const collector = new DiffCollector();
-  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, dry_run, enc, collector);
+  const result = await runExclusive(resolvedPath, async () => {
+    // Read under the lock: an edit queued behind another must not see that edit's rename as a foreign write.
+    const { mtimeMs } = await stat(resolvedPath);
+    return streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, dry_run, enc, collector);
+  });
   if (!result.ok) return errorResult(result.error);
 
   // resolvedPath is canonical, so the base must be too: an aliased projectDir yields ../ headers.
@@ -80,7 +109,21 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
       .digest("hex")
       .slice(0, 12);
     const diffPath = join(tmpdir(), `trueline-edit-${cwdHash}.diff`);
-    await writeFile(diffPath, diff, "utf-8").catch(() => {});
+    // The name is predictable and tmpdir may be shared: O_NOFOLLOW refuses a planted symlink, and
+    // fchmod before truncating pins 0600 on a pre-existing file (or fails on one we do not own,
+    // leaving it untouched).
+    try {
+      const handoff = await open(diffPath, constants.O_WRONLY | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0), 0o600);
+      try {
+        await handoff.chmod(0o600);
+        await handoff.truncate();
+        await handoff.writeFile(diff, "utf-8");
+      } finally {
+        await handoff.close();
+      }
+    } catch {
+      /* best-effort: the hook shows nothing */
+    }
   }
 
   const newRef =

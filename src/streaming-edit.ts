@@ -91,9 +91,14 @@ export async function streamingEdit(
   const dir = dirname(resolvedPath);
   const tmpName = `.trueline-tmp-${randomBytes(6).toString("hex")}`;
   const tmpPath = resolve(dir, tmpName);
+  // The temp holds the file's whole content, so it starts with the file's permission bits: restoring
+  // them only after the rename would leave a 0600 file's plaintext in a 0644 temp meanwhile. win32
+  // has no such bits, and a read-only temp there cannot be unlinked (see the chmod after the rename).
+  let tmpMode: number | undefined;
+  if (!dryRun && process.platform !== "win32") tmpMode = (await stat(resolvedPath).catch(() => undefined))?.mode;
   // A dry run keeps nothing, so its output goes to the null device: a read-only
   // directory must not fail a preview.
-  const fd = await open(dryRun ? devNull : tmpPath, "w");
+  const fd = await open(dryRun ? devNull : tmpPath, "w", tmpMode === undefined ? undefined : tmpMode & 0o777);
 
   // transcodedLines handles BOM stripping and UTF-16→UTF-8 transcoding.
   // After this point, lineBytes are always UTF-8 regardless of original encoding.
@@ -179,6 +184,7 @@ export async function streamingEdit(
   let outputChecksumAcc = FNV_OFFSET_BASIS; // full-file checksum of output
   let outputFirstLineHash = 0;
   let outputLastLineHash = 0;
+  let startsWithBomBytes = false;
 
   // Track which replace op we're currently inside (skipping source lines)
   let activeReplace: StreamEditOp | null = null;
@@ -206,7 +212,11 @@ export async function streamingEdit(
     // carry the same collision on to a following empty LF line.
     if (prevEndsWithLoneCR && buf.length === 0 && pendingEol[0] === 0x0a) pendingEol = Buffer.from("\r\n");
     const lineH = precomputedHash ?? fnv1aHashBytes(buf);
-    if (outputLineCount === 0) outputFirstLineHash = lineH;
+    if (outputLineCount === 0) {
+      outputFirstLineHash = lineH;
+      // In a BOM-less file these bytes read back as a BOM and are dropped, so no ref could match.
+      startsWithBomBytes = bom.length === 0 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
+    }
     outputLastLineHash = lineH;
     outputChecksumAcc = foldHash(outputChecksumAcc, lineH);
     outputLineCount++;
@@ -256,29 +266,38 @@ export async function streamingEdit(
     }
   }
 
-  // Compare replacement content against original bytes. If identical, write
-  // the original buffers (no-op); otherwise write the replacement.
-  //
-  // Fast path: when line counts differ, skip Buffer allocation entirely —
-  // the content is definitely changed.
+  // Writes a replaced range. Lines the edit re-sends unchanged at the head or tail of the range
+  // keep their original bytes and EOL (DESIGN.md: only edited lines are normalized); the rest take
+  // the file's EOL. A range that comes back entirely identical is a no-op.
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[], origEols: Buffer[]): Promise<void> {
-    const same =
-      op.content.length === origBytes.length &&
-      op.content.every((s, k) => Buffer.from(s, textEncoding).equals(origBytes[k]));
-    if (same) {
-      for (let k = 0; k < origBytes.length; k++) {
-        const eol = origEols[k];
-        await enqueueLine(origBytes[k], undefined, eol && eol.length > 0 ? eol : undefined);
-      }
+    const sameLine = (origIndex: number, contentIndex: number) =>
+      Buffer.from(op.content[contentIndex], textEncoding).equals(origBytes[origIndex]);
+    const writeOriginal = (k: number) =>
+      enqueueLine(origBytes[k], undefined, origEols[k].length > 0 ? origEols[k] : undefined);
+
+    const shorter = Math.min(op.content.length, origBytes.length);
+    let head = 0;
+    while (head < shorter && sameLine(head, head)) head++;
+    if (head === origBytes.length && head === op.content.length) {
+      for (let k = 0; k < origBytes.length; k++) await writeOriginal(k);
       if (collector) for (const buf of origBytes) collector.context(buf.toString(textEncoding));
       return;
     }
+    let tail = 0;
+    while (tail < shorter - head && sameLine(origBytes.length - 1 - tail, op.content.length - 1 - tail)) tail++;
+
     contentChanged = true;
     if (op.content.length === 0) {
       op.deletedContent = origBytes.map((buf) => buf.toString(textEncoding));
     }
     if (collector) for (const buf of origBytes) collector.delete(buf.toString(textEncoding));
-    await writeContentLines(op.content);
+    const tailStart = op.content.length - tail;
+    for (let j = 0; j < op.content.length; j++) {
+      if (j < head) await writeOriginal(j);
+      else if (j >= tailStart) await writeOriginal(origBytes.length - tail + (j - tailStart));
+      else await enqueueLine(Buffer.from(op.content[j], textEncoding));
+      collector?.insert(op.content[j]);
+    }
   }
 
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
@@ -539,6 +558,14 @@ export async function streamingEdit(
     }
   }
 
+  // Like the latin1 refusal above: better no write than a first line that changes on re-read.
+  if (startsWithBomBytes) {
+    return await fail(
+      "the edit would make the file start with U+FEFF, which readers take for a byte-order mark and drop. " +
+        "Nothing was written.",
+    );
+  }
+
   const summary = {
     newLineCount: outputLineCount,
     newHash: checksumToLetters(outputChecksumAcc),
@@ -547,10 +574,13 @@ export async function streamingEdit(
     textEncoding,
   };
 
+  // Edits that cancel out (a line deleted, then inserted back) leave the diff empty: no-ops too.
+  const changed = contentChanged && (collector?.hasChanges() ?? true);
+
   // ---- No-op or dry run: skip write ----
-  if (!contentChanged || dryRun) {
+  if (!changed || dryRun) {
     await cleanupTmp();
-    return { ok: true, ...summary, changed: contentChanged };
+    return { ok: true, ...summary, changed };
   }
 
   // ---- Atomic rename with mtime check ----

@@ -166,6 +166,16 @@ export class DiffCollector {
   }
 
   /**
+   * False when the deletions and insertions cancel out (a line deleted, then the same
+   * text inserted back). Same answer as an empty format(), without the alignment work.
+   */
+  hasChanges(): boolean {
+    const oldSide = this.entries.filter((e) => e.type !== "ins");
+    const newSide = this.entries.filter((e) => e.type !== "del");
+    return oldSide.length !== newSide.length || oldSide.some((e, i) => e.text !== newSide[i].text);
+  }
+
+  /**
    * Format collected entries as a unified diff string.
    * Returns an empty string when there are no changes.
    */
