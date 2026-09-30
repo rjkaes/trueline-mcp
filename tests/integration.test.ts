@@ -1,21 +1,16 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { describe, expect, test, beforeEach } from "bun:test";
+import { writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { handleRead } from "../src/tools/read.ts";
 import { handleEdit } from "../src/tools/edit.ts";
+import { useTestDir } from "./helpers.ts";
 
-let testDir: string;
+const testDir = useTestDir("trueline-integration-");
 let testFile: string;
 
 beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-integration-")));
-  testFile = join(testDir, "app.ts");
+  testFile = join(testDir(), "app.ts");
   writeFileSync(testFile, 'function greet(name: string) {\n  return "Hello, " + name;\n}\n');
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
 });
 
 describe("read → diff → edit roundtrip", () => {
@@ -23,7 +18,7 @@ describe("read → diff → edit roundtrip", () => {
     // Step 1: Read the file
     const readResult = await handleRead({
       file_path: testFile,
-      projectDir: testDir,
+      projectDir: testDir(),
     });
     expect(readResult.isError).toBeUndefined();
     const readText = readResult.content[0].text;
@@ -50,7 +45,7 @@ describe("read → diff → edit roundtrip", () => {
           content: "  return `Hello, ${name}!`;",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
     expect(diffResult.isError).toBeUndefined();
     const diffText = diffResult.content[0].text;
@@ -72,7 +67,7 @@ describe("read → diff → edit roundtrip", () => {
           content: "  return `Hello, ${name}!`;",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
     expect(editResult.isError).toBeUndefined();
 
@@ -85,7 +80,7 @@ describe("read → diff → edit roundtrip", () => {
     // Step 5: Re-read and verify new hashes work
     const rereadResult = await handleRead({
       file_path: testFile,
-      projectDir: testDir,
+      projectDir: testDir(),
     });
     expect(rereadResult.isError).toBeUndefined();
   });

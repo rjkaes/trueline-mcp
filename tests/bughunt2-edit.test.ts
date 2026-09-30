@@ -1,24 +1,15 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, utimesSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, statSync, utimesSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { handleEdit } from "../src/tools/edit.ts";
 import { handleRead } from "../src/tools/read.ts";
-import { getText, lineHash, writeTestFile } from "./helpers.ts";
+import { getText, lineHash, writeTestFile, useTestDir } from "./helpers.ts";
 
 const SERVER = join(import.meta.dir, "..", "src", "server.ts");
 const CLI = join(import.meta.dir, "..", "src", "cli.ts");
 
-let testDir: string;
-
-beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-bughunt2-edit-")));
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
-});
+const testDir = useTestDir("trueline-bughunt2-edit-");
 
 function refOf(text: string): string {
   const match = text.match(/(?:^|\n)ref: (\S+)/);
@@ -27,7 +18,7 @@ function refOf(text: string): string {
 }
 
 async function readRef(file: string): Promise<string> {
-  return refOf(getText(await handleRead({ file_path: file, projectDir: testDir })));
+  return refOf(getText(await handleRead({ file_path: file, projectDir: testDir() })));
 }
 
 describe("edit engine bug hunt, round 2", () => {
@@ -36,14 +27,14 @@ describe("edit engine bug hunt, round 2", () => {
   // shown as context by the dry-run diff, yet writeReplaceOrOriginal re-terminates it with the
   // file's first EOL because only a fully identical range takes the byte-preserving path.
   test("bug: an unchanged line inside a replaced range keeps its own EOL in a mixed-EOL file", async () => {
-    const f = writeTestFile(testDir, "mixed.txt", "one\ntwo\r\nthree\nfour\n");
+    const f = writeTestFile(testDir(), "mixed.txt", "one\ntwo\r\nthree\nfour\n");
     const ref = await readRef(f);
     const edits = [{ ref, range: `${lineHash("two")}2-${lineHash("three")}3`, content: "two\nTHREE" }];
 
-    const preview = getText(await handleEdit({ file_path: f, projectDir: testDir, dry_run: true, edits }));
+    const preview = getText(await handleEdit({ file_path: f, projectDir: testDir(), dry_run: true, edits }));
     expect(preview).toContain("\n two\n");
 
-    const result = await handleEdit({ file_path: f, projectDir: testDir, edits });
+    const result = await handleEdit({ file_path: f, projectDir: testDir(), edits });
     expect(result.isError).toBeUndefined();
     expect(readFileSync(f).toString("latin1")).toBe("one\ntwo\r\nTHREE\nfour\n");
   });
@@ -52,12 +43,12 @@ describe("edit engine bug hunt, round 2", () => {
   // per op, so the engine reports changed=true and the diff, realigned at format time, comes out
   // empty: the tool answers "" instead of the documented "(no changes)".
   test("bug: dry_run of edits that cancel out answers (no changes), not an empty string", async () => {
-    const f = writeTestFile(testDir, "names.txt", "alpha\nbeta\ngamma\n");
+    const f = writeTestFile(testDir(), "names.txt", "alpha\nbeta\ngamma\n");
     const ref = await readRef(f);
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       dry_run: true,
       edits: [
         { ref, range: `${lineHash("beta")}2`, content: "" },
@@ -70,7 +61,7 @@ describe("edit engine bug hunt, round 2", () => {
 
   // streaming-edit.ts promises "skip the atomic rename when nothing actually changed".
   test("bug: edits that cancel out do not rewrite the file", async () => {
-    const f = writeTestFile(testDir, "names.txt", "alpha\nbeta\ngamma\n");
+    const f = writeTestFile(testDir(), "names.txt", "alpha\nbeta\ngamma\n");
     const past = new Date("2001-01-01T00:00:00Z");
     utimesSync(f, past, past);
     const mtimeBefore = statSync(f).mtimeMs;
@@ -78,7 +69,7 @@ describe("edit engine bug hunt, round 2", () => {
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       edits: [
         { ref, range: `${lineHash("beta")}2`, content: "" },
         { ref, range: `+${lineHash("beta")}2`, content: "beta" },
@@ -92,17 +83,17 @@ describe("edit engine bug hunt, round 2", () => {
   // Nothing checks edit content for NUL. The written file trips the binary check that trueline_read,
   // trueline_edit and trueline_search all apply, so trueline can never touch it again.
   test("bug: an edit never leaves a file that trueline itself refuses to read as binary", async () => {
-    const f = writeTestFile(testDir, "notes.txt", "alpha\nbeta\n");
+    const f = writeTestFile(testDir(), "notes.txt", "alpha\nbeta\n");
     const ref = await readRef(f);
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       edits: [{ ref, range: `${lineHash("beta")}2`, content: "be\u0000ta" }],
     });
 
     if (!result.isError) {
-      const reread = await handleRead({ file_path: f, projectDir: testDir });
+      const reread = await handleRead({ file_path: f, projectDir: testDir() });
       expect(reread.isError).toBeUndefined();
     }
   });
@@ -110,12 +101,12 @@ describe("edit engine bug hunt, round 2", () => {
   // A U+FEFF opening line 1 of a BOM-less file becomes a real BOM on disk. transcodedLines strips it
   // on the next read, so the ref the edit returned (hashed with the BOM bytes) never matches again.
   test("bug: ref returned after writing U+FEFF into line 1 matches a fresh read", async () => {
-    const f = writeTestFile(testDir, "notes.txt", "alpha\nbeta\n");
+    const f = writeTestFile(testDir(), "notes.txt", "alpha\nbeta\n");
     const ref = await readRef(f);
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       edits: [{ ref, range: `${lineHash("alpha")}1`, content: "\uFEFFalpha" }],
     });
 
@@ -133,12 +124,12 @@ describe("edit engine bug hunt, round 2", () => {
 
     for (let trial = 0; trial < 10; trial++) {
       const lines = Array.from({ length: 50 }, (_, i) => `line${i + 1}`);
-      const f = writeTestFile(testDir, `race-${trial}.txt`, `${lines.join("\n")}\n`);
+      const f = writeTestFile(testDir(), `race-${trial}.txt`, `${lines.join("\n")}\n`);
       const ref = await readRef(f);
       const edit = (n: number) =>
         handleEdit({
           file_path: f,
-          projectDir: testDir,
+          projectDir: testDir(),
           edits: [{ ref, range: `${lineHash(`line${n}`)}${n}`, content: `EDITED${n}` }],
         });
 
@@ -154,15 +145,15 @@ describe("edit engine bug hunt, round 2", () => {
   // The flat --ref/--range/--content flags are wrapped into a one-element --edits array before
   // validation, so a forgotten --ref is reported as a problem with a flag the user never passed.
   test("bug: a missing --ref names the flat flag, not --edits", () => {
-    const f = writeTestFile(testDir, "names.txt", "alpha\nbeta\n");
-    const home = join(testDir, "home");
+    const f = writeTestFile(testDir(), "names.txt", "alpha\nbeta\n");
+    const home = join(testDir(), "home");
     mkdirSync(home);
 
     const child = spawnSync("bun", [CLI, "edit", f, "--range", `${lineHash("beta")}2`, "--content", "BETA"], {
-      cwd: testDir,
+      cwd: testDir(),
       encoding: "utf-8",
       timeout: 15_000,
-      env: { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: testDir },
+      env: { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: testDir() },
     });
 
     expect(child.status).not.toBe(0);
@@ -173,7 +164,7 @@ describe("edit engine bug hunt, round 2", () => {
   // The file_path property says relative paths are rejected (they resolve against a stale project
   // root), and requireAbsolutePath enforces it, yet the description's own example uses "foo.ts".
   test("bug: the trueline_edit description example uses a path the tool accepts", () => {
-    const home = join(testDir, "home");
+    const home = join(testDir(), "home");
     mkdirSync(home);
 
     const request = `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })}\n`;
@@ -181,7 +172,7 @@ describe("edit engine bug hunt, round 2", () => {
       input: request,
       encoding: "utf-8",
       timeout: 15_000,
-      env: { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: testDir },
+      env: { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: testDir() },
     });
     const reply = JSON.parse(child.stdout.split("\n")[0]) as {
       result: { tools: { name: string; description: string }[] };

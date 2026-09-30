@@ -1,22 +1,11 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
 import { handleEdit } from "../../src/tools/edit.ts";
-import { lineHash, setupFile } from "../helpers.ts";
+import { lineHash, setupFile, useTestDir } from "../helpers.ts";
 
-let testDir: string;
-
-beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-edit-summary-")));
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
-});
+const testDir = useTestDir("trueline-edit-summary-");
 
 function edit(params: { file_path: string; edits: { ref: string; range: string; content: string }[] }) {
-  return handleEdit({ ...params, projectDir: testDir });
+  return handleEdit({ ...params, projectDir: testDir() });
 }
 
 // =============================================================================
@@ -93,7 +82,7 @@ describe("edit summary", () => {
       contains: ["~1 ->", "+1 @3"],
     },
   ])("$name", async ({ content, edits, contains, matches }) => {
-    const { path, ref } = setupFile(testDir, "summary.txt", content);
+    const { path, ref } = setupFile(testDir(), "summary.txt", content);
 
     const result = await edit({ file_path: path, edits: edits.map((e) => ({ ref, ...e })) });
 

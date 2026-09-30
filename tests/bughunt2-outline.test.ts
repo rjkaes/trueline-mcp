@@ -1,25 +1,16 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractOutline } from "../src/outline/extract.ts";
 import { getLanguageConfig } from "../src/outline/languages.ts";
 import { extractMarkdownOutline } from "../src/outline/markdown.ts";
 import { handleOutline } from "../src/tools/outline.ts";
-import { getText } from "./helpers.ts";
+import { getText, useTestDir } from "./helpers.ts";
 
-let testDir: string;
-
-beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-bughunt2-outline-")));
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
-});
+const testDir = useTestDir("trueline-bughunt2-outline-");
 
 function writeFixture(name: string, content: string | Buffer): string {
-  const path = join(testDir, name);
+  const path = join(testDir(), name);
   writeFileSync(path, content);
   return path;
 }
@@ -174,7 +165,7 @@ describe("line ranges", () => {
       "three.ts",
       ["export function a() {}", "export function b() {}", "export const c = 1;", ""].join("\n"),
     );
-    const text = getText(await handleOutline({ file_paths: [file], projectDir: testDir }));
+    const text = getText(await handleOutline({ file_paths: [file], projectDir: testDir() }));
     expect(text).toContain("3 source lines");
   });
 });
@@ -194,7 +185,7 @@ describe("extension mapping", () => {
   test("bug: common XML file types are outlined as XML", async () => {
     for (const name of ["schema.xsd", "Info.plist", "Strings.resx"]) {
       const file = writeFixture(name, "<root>\n  <child/>\n</root>\n");
-      const text = getText(await handleOutline({ file_paths: [file], projectDir: testDir }));
+      const text = getText(await handleOutline({ file_paths: [file], projectDir: testDir() }));
       expect(text).not.toContain("No outline support");
     }
   });
@@ -224,7 +215,7 @@ describe("markdown edge cases", () => {
   // Heading depth is level - 1, so a document that starts at `##` has no depth-0 entries.
   test("bug: depth 0 lists the top-level headings of a document without an h1", async () => {
     const file = writeFixture("docs.md", ["## Install", "", "### Linux", "", "## Usage", ""].join("\n"));
-    const text = getText(await handleOutline({ file_paths: [file], depth: 0, projectDir: testDir }));
+    const text = getText(await handleOutline({ file_paths: [file], depth: 0, projectDir: testDir() }));
     expect(text).toContain("## Install");
     expect(text).toContain("## Usage");
     expect(text).not.toContain("### Linux");

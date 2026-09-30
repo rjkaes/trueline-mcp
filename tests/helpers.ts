@@ -1,7 +1,8 @@
 import { checksumToLetters, FNV_OFFSET_BASIS, foldHash, fnv1aHash, hashToLetters } from "../src/hash.ts";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach } from "bun:test";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 // Fold loop shared by rangeChecksum (prints the clamped end line) and
@@ -119,4 +120,22 @@ export function makeGitRepo(prefix: string) {
   git("config", "user.name", "Test");
   git("config", "commit.gpgsign", "false");
   return { dir, git };
+}
+
+/**
+ * Give every test in the current scope a fresh temp dir, removed afterwards.
+ *
+ * Call the returned getter inside tests: the dir only exists between beforeEach and afterEach.
+ * Realpath'd so the paths code under test resolves (allowed-dir checks, node's __dirname) equal
+ * ours: macOS /var and Windows 8.3 temp paths differ from their resolved form.
+ */
+export function useTestDir(prefix: string): () => string {
+  let dir: string;
+  beforeEach(() => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+  return () => dir;
 }

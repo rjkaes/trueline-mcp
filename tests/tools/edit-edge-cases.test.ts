@@ -1,20 +1,10 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { writeFileSync, readFileSync, statSync } from "node:fs";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
-import { lineHash, rangeChecksum, issueTestRef, setupFile, writeTestFile } from "../helpers.ts";
+import { lineHash, rangeChecksum, issueTestRef, setupFile, writeTestFile, useTestDir } from "../helpers.ts";
 
-let testDir: string;
-
-beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-edit-edge-")));
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
-});
+const testDir = useTestDir("trueline-edit-edge-");
 
 // =============================================================================
 // Single-edit results (one handleEdit call, then the file contents)
@@ -29,12 +19,12 @@ interface EditCase {
 }
 
 async function expectEditResult({ content, edits, expected }: EditCase) {
-  const { path, lines, ref } = setupFile(testDir, "fixture.txt", content);
+  const { path, lines, ref } = setupFile(testDir(), "fixture.txt", content);
 
   const result = await handleEdit({
     file_path: path,
     edits: edits.map(({ refLines, ...edit }) => ({ ref: refLines ? issueTestRef(lines, ...refLines) : ref, ...edit })),
-    projectDir: testDir,
+    projectDir: testDir(),
   });
 
   expect(result.isError).toBeUndefined();
@@ -217,7 +207,7 @@ describe("single-edit results", () => {
 
 describe("empty file operations", () => {
   test("insert into empty file via +0: prefix", async () => {
-    const { path, ref } = setupFile(testDir, "empty.txt", "");
+    const { path, ref } = setupFile(testDir(), "empty.txt", "");
 
     const result = await handleEdit({
       file_path: path,
@@ -228,7 +218,7 @@ describe("empty file operations", () => {
           content: "first\nsecond",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -238,7 +228,7 @@ describe("empty file operations", () => {
   });
 
   test("line 0 without + prefix is rejected", async () => {
-    const { path, ref } = setupFile(testDir, "empty2.txt", "");
+    const { path, ref } = setupFile(testDir(), "empty2.txt", "");
 
     const result = await handleEdit({
       file_path: path,
@@ -249,7 +239,7 @@ describe("empty file operations", () => {
           content: "nope",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBe(true);
@@ -257,7 +247,7 @@ describe("empty file operations", () => {
   });
 
   test("empty-file checksum against non-empty file fails", async () => {
-    const { path } = setupFile(testDir, "not-empty.txt", "content\n");
+    const { path } = setupFile(testDir(), "not-empty.txt", "content\n");
     const emptyRef = "0-0/aaaaaa";
 
     const result = await handleEdit({
@@ -269,7 +259,7 @@ describe("empty file operations", () => {
           content: "prepend",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBe(true);
@@ -282,7 +272,7 @@ describe("empty file operations", () => {
 
 describe("insert-after (+ prefix)", () => {
   test("+0: prefix prepends before all content", async () => {
-    const { path, ref } = setupFile(testDir, "prepend.txt", "existing\n");
+    const { path, ref } = setupFile(testDir(), "prepend.txt", "existing\n");
 
     const result = await handleEdit({
       file_path: path,
@@ -293,7 +283,7 @@ describe("insert-after (+ prefix)", () => {
           content: "prepended",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -308,7 +298,7 @@ describe("insert-after (+ prefix)", () => {
 
 describe("no-op detection", () => {
   test("replacing range with identical multi-line content is no-op", async () => {
-    const { path, ref } = setupFile(testDir, "noop-multi.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir(), "noop-multi.txt", "aaa\nbbb\nccc\n");
 
     const result = await handleEdit({
       file_path: path,
@@ -319,7 +309,7 @@ describe("no-op detection", () => {
           content: "aaa\nbbb\nccc",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -333,7 +323,7 @@ describe("no-op detection", () => {
 
 describe("checksum validation", () => {
   test("checksum range must cover edit range — too narrow fails", async () => {
-    const { path, lines } = setupFile(testDir, "too-narrow.txt", "aaa\nbbb\nccc\nddd\neee\n");
+    const { path, lines } = setupFile(testDir(), "too-narrow.txt", "aaa\nbbb\nccc\nddd\neee\n");
     const narrowRef = issueTestRef(lines, 2, 3);
 
     const result = await handleEdit({
@@ -345,7 +335,7 @@ describe("checksum validation", () => {
           content: "DDD",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBe(true);
@@ -353,7 +343,7 @@ describe("checksum validation", () => {
   });
 
   test("checksum range exceeding file length fails", async () => {
-    const { path, lines } = setupFile(testDir, "short.txt", "aaa\nbbb\n");
+    const { path, lines } = setupFile(testDir(), "short.txt", "aaa\nbbb\n");
     // Fabricate a ref claiming to cover lines 1-10 with the correct hash for lines 1-2
     const cs = rangeChecksum(lines, 1, 2);
     const hashHex = cs.slice(cs.indexOf("/") + 1);
@@ -368,7 +358,7 @@ describe("checksum validation", () => {
           content: "AAA",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBe(true);
@@ -382,7 +372,7 @@ describe("checksum validation", () => {
 
 describe("line ending preservation", () => {
   test("bare CR file preserves CR endings", async () => {
-    const f = writeTestFile(testDir, "cr.txt", "aaa\rbbb\rccc\r");
+    const f = writeTestFile(testDir(), "cr.txt", "aaa\rbbb\rccc\r");
 
     const lines = ["aaa", "bbb", "ccc"];
     const ref = issueTestRef(lines, 1, 3);
@@ -396,7 +386,7 @@ describe("line ending preservation", () => {
           content: "BBB",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -406,7 +396,7 @@ describe("line ending preservation", () => {
   });
 
   test("CRLF file preserves CRLF after multi-line replacement", async () => {
-    const f = writeTestFile(testDir, "crlf-multi.txt", "aaa\r\nbbb\r\nccc\r\n");
+    const f = writeTestFile(testDir(), "crlf-multi.txt", "aaa\r\nbbb\r\nccc\r\n");
 
     const lines = ["aaa", "bbb", "ccc"];
     const ref = issueTestRef(lines, 1, 3);
@@ -420,7 +410,7 @@ describe("line ending preservation", () => {
           content: "XXX\nYYY\nZZZ",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -429,7 +419,7 @@ describe("line ending preservation", () => {
   });
 
   test("no trailing newline preserved after insert-after at last line", async () => {
-    const f = writeTestFile(testDir, "no-nl-insert.txt", "aaa\nbbb");
+    const f = writeTestFile(testDir(), "no-nl-insert.txt", "aaa\nbbb");
 
     const lines = ["aaa", "bbb"];
     const ref = issueTestRef(lines, 1, 2);
@@ -443,7 +433,7 @@ describe("line ending preservation", () => {
           content: "appended",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -460,10 +450,10 @@ describe("line ending preservation", () => {
 
 describe("read-then-edit round-trip", () => {
   test("ref from handleRead works as handleEdit input", async () => {
-    const f = writeTestFile(testDir, "roundtrip.txt", "alpha\nbeta\ngamma\n");
+    const f = writeTestFile(testDir(), "roundtrip.txt", "alpha\nbeta\ngamma\n");
 
     // Read the file
-    const readResult = await handleRead({ file_path: f, projectDir: testDir });
+    const readResult = await handleRead({ file_path: f, projectDir: testDir() });
     expect(readResult.isError).toBeUndefined();
     const text = readResult.content[0].text;
 
@@ -487,7 +477,7 @@ describe("read-then-edit round-trip", () => {
           content: "BETA",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(editResult.isError).toBeUndefined();
@@ -495,14 +485,14 @@ describe("read-then-edit round-trip", () => {
   });
 
   test("partial-range read ref works for edit", async () => {
-    const f = writeTestFile(testDir, "partial-roundtrip.txt", "aaa\nbbb\nccc\nddd\neee\n");
+    const f = writeTestFile(testDir(), "partial-roundtrip.txt", "aaa\nbbb\nccc\nddd\neee\n");
 
     // Read only lines 2-4
     const readResult = await handleRead({
       file_path: f,
       start_line: 2,
       end_line: 4,
-      projectDir: testDir,
+      projectDir: testDir(),
     });
     expect(readResult.isError).toBeUndefined();
     const text = readResult.content[0].text;
@@ -521,7 +511,7 @@ describe("read-then-edit round-trip", () => {
           content: "CCC",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(editResult.isError).toBeUndefined();
@@ -535,7 +525,7 @@ describe("read-then-edit round-trip", () => {
 
 describe("overlap detection", () => {
   test("two replace ops on the same line are rejected", async () => {
-    const { path, ref } = setupFile(testDir, "same-line.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir(), "same-line.txt", "aaa\nbbb\nccc\n");
 
     const result = await handleEdit({
       file_path: path,
@@ -543,7 +533,7 @@ describe("overlap detection", () => {
         { ref, range: `${lineHash("bbb")}2`, content: "X" },
         { ref, range: `${lineHash("bbb")}2`, content: "Y" },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBe(true);
@@ -551,7 +541,7 @@ describe("overlap detection", () => {
   });
 
   test("insert-after ops at the same line do not count as overlapping", async () => {
-    const { path, ref } = setupFile(testDir, "multi-ia.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile(testDir(), "multi-ia.txt", "aaa\nbbb\n");
 
     const result = await handleEdit({
       file_path: path,
@@ -567,7 +557,7 @@ describe("overlap detection", () => {
           content: "ins2",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -583,7 +573,7 @@ describe("overlap detection", () => {
 
 describe("hash verification", () => {
   test("wrong start hash on multi-line range is rejected", async () => {
-    const { path, ref } = setupFile(testDir, "bad-start.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir(), "bad-start.txt", "aaa\nbbb\nccc\n");
 
     const result = await handleEdit({
       file_path: path,
@@ -595,7 +585,7 @@ describe("hash verification", () => {
           content: "new",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBe(true);
@@ -603,7 +593,7 @@ describe("hash verification", () => {
   });
 
   test("wrong end hash on multi-line range is rejected", async () => {
-    const { path, ref } = setupFile(testDir, "bad-end.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir(), "bad-end.txt", "aaa\nbbb\nccc\n");
 
     const result = await handleEdit({
       file_path: path,
@@ -614,7 +604,7 @@ describe("hash verification", () => {
           content: "new",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBe(true);
@@ -628,7 +618,7 @@ describe("hash verification", () => {
 
 describe("stale file detection", () => {
   test("file content changed (checksum mismatch)", async () => {
-    const { path, ref } = setupFile(testDir, "stale.txt", "aaa\nbbb\nccc\n");
+    const { path, ref } = setupFile(testDir(), "stale.txt", "aaa\nbbb\nccc\n");
 
     // Externally modify the file
     writeFileSync(path, "aaa\nXXX\nccc\n");
@@ -642,7 +632,7 @@ describe("stale file detection", () => {
           content: "BBB",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBe(true);
@@ -658,7 +648,7 @@ describe("stale file detection", () => {
 describe("file metadata", () => {
   // Windows doesn't support Unix file permissions — chmod is a no-op.
   test.skipIf(process.platform === "win32")("file permissions are preserved after edit", async () => {
-    const { path, ref } = setupFile(testDir, "perms.txt", "aaa\nbbb\n");
+    const { path, ref } = setupFile(testDir(), "perms.txt", "aaa\nbbb\n");
 
     // Make file executable
     const { mode: origMode } = statSync(path);
@@ -675,7 +665,7 @@ describe("file metadata", () => {
           content: "AAA",
         },
       ],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();

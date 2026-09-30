@@ -1,26 +1,17 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractOutline } from "../src/outline/extract.ts";
 import { getLanguageConfig } from "../src/outline/languages.ts";
 import { extractMarkdownOutline } from "../src/outline/markdown.ts";
 import { extractXmlOutline } from "../src/outline/xml.ts";
 import { handleOutline } from "../src/tools/outline.ts";
-import { getText } from "./helpers.ts";
+import { getText, useTestDir } from "./helpers.ts";
 
-let testDir: string;
-
-beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-bughunt-outline-")));
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
-});
+const testDir = useTestDir("trueline-bughunt-outline-");
 
 function writeFixture(name: string, content: string | Buffer): string {
-  const path = join(testDir, name);
+  const path = join(testDir(), name);
   writeFileSync(path, content);
   return path;
 }
@@ -126,7 +117,7 @@ describe("language configs outline mainstream constructs", () => {
       "order.ts",
       ["export interface Order {", "  id: string;", "  total(): number;", "}", ""].join("\n"),
     );
-    const text = getText(await handleOutline({ file_paths: [file], depth: 1, projectDir: testDir }));
+    const text = getText(await handleOutline({ file_paths: [file], depth: 1, projectDir: testDir() }));
     expect(text).toContain("total(): number;");
   });
 
@@ -284,7 +275,7 @@ describe("XML outline ordering", () => {
 describe("markdown outline", () => {
   test("depth parameter limits markdown headings", async () => {
     const file = writeFixture("guide.md", ["# Billing", "", "## Invoices", "", "### Refunds", ""].join("\n"));
-    const text = getText(await handleOutline({ file_paths: [file], depth: 0, projectDir: testDir }));
+    const text = getText(await handleOutline({ file_paths: [file], depth: 0, projectDir: testDir() }));
     expect(text).toContain("# Billing");
     expect(text).not.toContain("## Invoices");
   });
@@ -305,7 +296,7 @@ describe("markdown outline", () => {
       Buffer.from(["# Billing", "", "## Invoices", ""].join("\n"), "utf16le"),
     ]);
     const file = writeFixture("utf16.md", utf16);
-    const text = getText(await handleOutline({ file_paths: [file], projectDir: testDir }));
+    const text = getText(await handleOutline({ file_paths: [file], projectDir: testDir() }));
     expect(text).toContain("# Billing");
   });
 });
@@ -315,7 +306,7 @@ describe("UTF-16 sources and XML", () => {
 
   test("a UTF-16 source file is outlined, not rejected as binary", async () => {
     const file = writeFixture("order.ts", utf16le("export function total(): number {\n  return 1;\n}\n"));
-    const text = getText(await handleOutline({ file_paths: [file], projectDir: testDir }));
+    const text = getText(await handleOutline({ file_paths: [file], projectDir: testDir() }));
     expect(text).toContain("export function total(): number {");
   });
 
@@ -327,7 +318,7 @@ describe("UTF-16 sources and XML", () => {
 
   test("a source file with null bytes and no BOM is still binary", async () => {
     const file = writeFixture("blob.ts", Buffer.from([0x65, 0x00, 0x66, 0x0a]));
-    const result = await handleOutline({ file_paths: [file], projectDir: testDir });
+    const result = await handleOutline({ file_paths: [file], projectDir: testDir() });
     expect(getText(result)).toContain("appears to be a binary file");
   });
 });

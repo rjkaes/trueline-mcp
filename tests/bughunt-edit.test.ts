@@ -1,21 +1,12 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { handleEdit } from "../src/tools/edit.ts";
 import { handleRead } from "../src/tools/read.ts";
-import { getText, issueTestRef, lineHash, writeTestFile } from "./helpers.ts";
+import { getText, issueTestRef, lineHash, writeTestFile, useTestDir } from "./helpers.ts";
 import type { ToolResult } from "../src/tools/types.ts";
 
-let testDir: string;
-
-beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-bughunt-edit-")));
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
-});
+const testDir = useTestDir("trueline-bughunt-edit-");
 
 function refOf(text: string): string {
   const match = text.match(/ref: (\S+)/);
@@ -34,21 +25,21 @@ describe("edit engine bug hunt", () => {
   // Buffer.from(str, "latin1") keeps only the low byte of each code unit, so
   // U+010D (č) is written as 0x0D, a CR that splits the line on the next read.
   test("latin1 edit with a code point above U+00FF does not split the line or return a stale ref", async () => {
-    const f = join(testDir, "pets.txt");
+    const f = join(testDir(), "pets.txt");
     writeFileSync(f, Buffer.from("caf\xe9\nend\n", "latin1"));
-    const readText = getText(await handleRead({ file_path: f, projectDir: testDir, encoding: "latin1" }));
+    const readText = getText(await handleRead({ file_path: f, projectDir: testDir(), encoding: "latin1" }));
     const ref = refOf(readText);
     const line1 = readText.split("\n")[0].split("\t")[0];
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       encoding: "latin1",
       edits: [{ ref, range: line1, content: "kočka" }],
     });
 
     if (!result.isError) {
-      const reread = getText(await handleRead({ file_path: f, projectDir: testDir, encoding: "latin1" }));
+      const reread = getText(await handleRead({ file_path: f, projectDir: testDir(), encoding: "latin1" }));
       expect(refOf(reread)).toBe(refOf(getText(result)));
     }
     expect(readFileSync(f).includes(0x0d)).toBe(false);
@@ -59,7 +50,7 @@ describe("edit engine bug hunt", () => {
   // first ref's mismatch had already returned.
   test("stale-ref hint does not call a line past a truncated EOF unchanged", async () => {
     const lines = ["alpha", "beta", "gamma", "delta", "epsilon"];
-    const f = writeTestFile(testDir, "greek.txt", `${lines.join("\n")}\n`);
+    const f = writeTestFile(testDir(), "greek.txt", `${lines.join("\n")}\n`);
     // Narrow refs as trueline_read would issue them for lines 1-4 and line 5.
     const refHead = issueTestRef(lines, 1, 4);
     const refTail = issueTestRef(lines, 5, 5);
@@ -69,7 +60,7 @@ describe("edit engine bug hunt", () => {
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       edits: [
         { ref: refHead, range: `${lineHash("delta")}4`, content: "DELTA" },
         { ref: refTail, range: `${lineHash("epsilon")}5`, content: "EPSILON" },
@@ -82,12 +73,12 @@ describe("edit engine bug hunt", () => {
   // git apply and patch both reject a hunk whose last context line claims a
   // newline the file does not have.
   test("dry_run diff marks a missing trailing newline", async () => {
-    const f = writeTestFile(testDir, "config.ini", "debug=false\nport=8080");
-    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir })));
+    const f = writeTestFile(testDir(), "config.ini", "debug=false\nport=8080");
+    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir() })));
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       dry_run: true,
       edits: [{ ref, range: `${lineHash("debug=false")}1`, content: "debug=true" }],
     });
@@ -131,13 +122,13 @@ describe("lone CR followed by an empty LF line", () => {
       bytes: "header\r\r\nfooter\n",
     },
   ])("$name keeps every line", async ({ source, edit, lines, bytes }) => {
-    const f = writeTestFile(testDir, "mixed.txt", source);
-    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir })));
+    const f = writeTestFile(testDir(), "mixed.txt", source);
+    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir() })));
 
-    const result = await handleEdit({ file_path: f, projectDir: testDir, edits: [{ ref, ...edit }] });
+    const result = await handleEdit({ file_path: f, projectDir: testDir(), edits: [{ ref, ...edit }] });
     expect(result.isError).toBeUndefined();
 
-    const reread = getText(await handleRead({ file_path: f, projectDir: testDir }));
+    const reread = getText(await handleRead({ file_path: f, projectDir: testDir() }));
     expect(linesOf(reread)).toEqual([...lines]);
     expect(refOf(reread)).toBe(refOf(getText(result)));
     // One CR added before the blank line's LF; the lone-CR line keeps its bytes.
@@ -147,12 +138,12 @@ describe("lone CR followed by an empty LF line", () => {
 
 describe("single-byte encodings reject unrepresentable content", () => {
   test("ascii edit rejects a non-ASCII character before writing anything", async () => {
-    const f = writeTestFile(testDir, "motd.txt", "hello\nbye\n");
-    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir, encoding: "ascii" })));
+    const f = writeTestFile(testDir(), "motd.txt", "hello\nbye\n");
+    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir(), encoding: "ascii" })));
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       encoding: "ascii",
       edits: [{ ref, range: `${lineHash("hello")}1`, content: "café" }],
     });
@@ -162,12 +153,12 @@ describe("single-byte encodings reject unrepresentable content", () => {
   });
 
   test("latin1 dry run rejects a code point above U+00FF", async () => {
-    const f = writeTestFile(testDir, "pets.txt", "cat\n");
-    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir, encoding: "latin1" })));
+    const f = writeTestFile(testDir(), "pets.txt", "cat\n");
+    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir(), encoding: "latin1" })));
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       encoding: "latin1",
       dry_run: true,
       edits: [{ ref, range: `${lineHash("cat")}1`, content: "kočka" }],
@@ -178,14 +169,14 @@ describe("single-byte encodings reject unrepresentable content", () => {
 
   // A BOM overrides the encoding parameter, so UTF-16 content is not limited to latin1.
   test("latin1 encoding on a UTF-16 file still accepts any character", async () => {
-    const f = join(testDir, "pets16.txt");
+    const f = join(testDir(), "pets16.txt");
     const bom = Buffer.from([0xff, 0xfe]);
     writeFileSync(f, Buffer.concat([bom, Buffer.from("cat\n", "utf16le")]));
-    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir })));
+    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir() })));
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       encoding: "latin1",
       edits: [{ ref, range: `${lineHash("cat")}1`, content: "kočka" }],
     });
@@ -222,10 +213,10 @@ describe("dry_run diff: missing final newline", () => {
       diff: "@@ -0,0 +1 @@\n+hello\n\\ No newline at end of file\n",
     },
   ])("$name", async ({ source, edit, diff }) => {
-    const f = writeTestFile(testDir, "notes.txt", source);
-    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir })));
+    const f = writeTestFile(testDir(), "notes.txt", source);
+    const ref = refOf(getText(await handleRead({ file_path: f, projectDir: testDir() })));
 
-    const result = await handleEdit({ file_path: f, projectDir: testDir, dry_run: true, edits: [{ ref, ...edit }] });
+    const result = await handleEdit({ file_path: f, projectDir: testDir(), dry_run: true, edits: [{ ref, ...edit }] });
     expect(result.isError).toBeUndefined();
     expect(getText(result)).toBe(`--- a/notes.txt\n+++ b/notes.txt\n${diff}`);
   });
@@ -237,18 +228,18 @@ describe("UTF-16 untouched lines round-trip byte-exact", () => {
   const be = (text: string) => Buffer.from(text, "utf16le").swap16();
 
   async function editLine1(f: string): Promise<void> {
-    const readText = getText(await handleRead({ file_path: f, projectDir: testDir }));
+    const readText = getText(await handleRead({ file_path: f, projectDir: testDir() }));
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       edits: [{ ref: refOf(readText), range: `${lineHash("alpha")}1`, content: "ALPHA" }],
     });
     expect(result.isError).toBeUndefined();
-    expect(refOf(getText(await handleRead({ file_path: f, projectDir: testDir })))).toBe(refOf(getText(result)));
+    expect(refOf(getText(await handleRead({ file_path: f, projectDir: testDir() })))).toBe(refOf(getText(result)));
   }
 
   test("odd trailing byte on the last line", async () => {
-    const f = join(testDir, "odd.txt");
+    const f = join(testDir(), "odd.txt");
     const tail = Buffer.concat([Buffer.from("omega", "utf16le"), Buffer.from([0x41])]);
     writeFileSync(f, Buffer.concat([bomLE, Buffer.from("alpha\n", "utf16le"), tail]));
 
@@ -260,18 +251,18 @@ describe("UTF-16 untouched lines round-trip byte-exact", () => {
 
   // The unpaired byte is not a character; lines appended after it must not shift into it.
   test("appending after the last line keeps the odd byte at EOF", async () => {
-    const f = join(testDir, "odd-append.txt");
+    const f = join(testDir(), "odd-append.txt");
     writeFileSync(f, Buffer.concat([bomLE, Buffer.from("alpha\nomega", "utf16le"), Buffer.from([0x41])]));
-    const readText = getText(await handleRead({ file_path: f, projectDir: testDir }));
+    const readText = getText(await handleRead({ file_path: f, projectDir: testDir() }));
     expect(linesOf(readText)).toEqual(["alpha", "omega"]);
 
     const result = await handleEdit({
       file_path: f,
-      projectDir: testDir,
+      projectDir: testDir(),
       edits: [{ ref: refOf(readText), range: `+${lineHash("omega")}2`, content: "tail" }],
     });
     expect(result.isError).toBeUndefined();
-    const reread = getText(await handleRead({ file_path: f, projectDir: testDir }));
+    const reread = getText(await handleRead({ file_path: f, projectDir: testDir() }));
     expect(linesOf(reread)).toEqual(["alpha", "omega", "tail"]);
     expect(refOf(reread)).toBe(refOf(getText(result)));
     expect(readFileSync(f).toString("hex")).toBe(
@@ -279,7 +270,7 @@ describe("UTF-16 untouched lines round-trip byte-exact", () => {
     );
   });
   test("lone low surrogate in a big-endian file", async () => {
-    const f = join(testDir, "be.txt");
+    const f = join(testDir(), "be.txt");
     const line2 = Buffer.concat([Buffer.from([0xdc, 0x00]), be("x\n")]);
     writeFileSync(f, Buffer.concat([bomBE, be("alpha\n"), line2]));
 
@@ -288,7 +279,7 @@ describe("UTF-16 untouched lines round-trip byte-exact", () => {
   });
 
   test("lone high surrogate in a little-endian file", async () => {
-    const f = join(testDir, "le.txt");
+    const f = join(testDir(), "le.txt");
     const line2 = Buffer.concat([Buffer.from([0x00, 0xd8]), Buffer.from("x\n", "utf16le")]);
     writeFileSync(f, Buffer.concat([bomLE, Buffer.from("alpha\n", "utf16le"), line2]));
 
@@ -300,11 +291,11 @@ describe("UTF-16 untouched lines round-trip byte-exact", () => {
 
   // 32766 units after the 2-byte BOM end the first 64 KB read between the pair's halves.
   test("surrogate pair split across a read chunk still decodes as one character", async () => {
-    const f = join(testDir, "emoji.txt");
+    const f = join(testDir(), "emoji.txt");
     const line2 = Buffer.from(`${"a".repeat(32760)}\u{1F600}\n`, "utf16le");
     writeFileSync(f, Buffer.concat([bomLE, Buffer.from("alpha\n", "utf16le"), line2]));
 
-    const readText = getText(await handleRead({ file_path: f, projectDir: testDir }));
+    const readText = getText(await handleRead({ file_path: f, projectDir: testDir() }));
     expect(linesOf(readText)[1].endsWith("a\u{1F600}")).toBe(true);
     await editLine1(f);
     expect(readFileSync(f).toString("hex")).toBe(
@@ -331,14 +322,14 @@ describe("UTF-32 files are refused", () => {
     ["UTF-32LE", true],
     ["UTF-32BE", false],
   ])("%s is refused by read and edit, and the file is left alone", async (_label, littleEndian) => {
-    const f = join(testDir, "wide.txt");
+    const f = join(testDir(), "wide.txt");
     const original = utf32("hi\nthere\n", littleEndian);
     writeFileSync(f, original);
 
-    expect(await outcome(handleRead({ file_path: f, projectDir: testDir }))).toContain("UTF-32 is not supported");
+    expect(await outcome(handleRead({ file_path: f, projectDir: testDir() }))).toContain("UTF-32 is not supported");
 
     const edit = { ref: issueTestRef(["hi", "there"], 1, 2), range: `${lineHash("hi")}1`, content: "hello" };
-    expect(await outcome(handleEdit({ file_path: f, projectDir: testDir, edits: [edit] }))).toContain(
+    expect(await outcome(handleEdit({ file_path: f, projectDir: testDir(), edits: [edit] }))).toContain(
       "UTF-32 is not supported",
     );
     expect(readFileSync(f).equals(original)).toBe(true);

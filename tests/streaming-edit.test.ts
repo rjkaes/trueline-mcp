@@ -1,30 +1,13 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import {
-  mkdtempSync,
-  readdirSync,
-  realpathSync,
-  writeFileSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-} from "node:fs";
+import { readdirSync, writeFileSync, readFileSync, statSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { lineHash, rangeChecksum, writeTestFile } from "./helpers.ts";
+import { lineHash, rangeChecksum, writeTestFile, useTestDir } from "./helpers.ts";
 import { type EditInput, validateEdits } from "../src/tools/shared.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
 
-let testDir: string;
+const testDir = useTestDir("trueline-stream-test-");
 
-beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-stream-test-")));
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
-});
 /**
  * Issue a ref from a checksum string like "1-4/abcdef".
  * For validateEdits tests that don't use real files, filePath defaults to "test.txt".
@@ -142,7 +125,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("replaces a single line", async () => {
-    const f = writeTestFile(testDir, "replace.txt", "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir(), "replace.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
@@ -154,7 +137,7 @@ describe("streamingEdit", () => {
   });
 
   test("replaces a range of lines", async () => {
-    const f = writeTestFile(testDir, "range.txt", "line 1\nline 2\nline 3\nline 4\n");
+    const f = writeTestFile(testDir(), "range.txt", "line 1\nline 2\nline 3\nline 4\n");
     const lines = ["line 1", "line 2", "line 3", "line 4"];
     const cs = rangeChecksum(lines, 1, 4);
     const h2 = lineHash("line 2");
@@ -166,7 +149,7 @@ describe("streamingEdit", () => {
   });
 
   test("deletes lines (empty replacement)", async () => {
-    const f = writeTestFile(testDir, "delete.txt", "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir(), "delete.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
@@ -177,7 +160,7 @@ describe("streamingEdit", () => {
   });
 
   test("returns correct full-file checksum after edit", async () => {
-    const f = writeTestFile(testDir, "checksum.txt", "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir(), "checksum.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
@@ -195,7 +178,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("inserts after a line", async () => {
-    const f = writeTestFile(testDir, "insert.txt", "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir(), "insert.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h1 = lineHash("line 1");
@@ -206,7 +189,7 @@ describe("streamingEdit", () => {
   });
 
   test("multiple insert_after at same anchor preserves input order", async () => {
-    const f = writeTestFile(testDir, "multi-insert.txt", "anchor\nnext\n");
+    const f = writeTestFile(testDir(), "multi-insert.txt", "anchor\nnext\n");
     const lines = ["anchor", "next"];
     const cs = rangeChecksum(lines, 1, 2);
     const h = lineHash("anchor");
@@ -229,7 +212,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("handles multiple replace edits", async () => {
-    const f = writeTestFile(testDir, "multi-replace.txt", "line 1\nline 2\nline 3\nline 4\n");
+    const f = writeTestFile(testDir(), "multi-replace.txt", "line 1\nline 2\nline 3\nline 4\n");
     const lines = ["line 1", "line 2", "line 3", "line 4"];
     const cs = rangeChecksum(lines, 1, 4);
     const h1 = lineHash("line 1");
@@ -248,7 +231,7 @@ describe("streamingEdit", () => {
   });
 
   test("handles replace + insert_after in same batch", async () => {
-    const f = writeTestFile(testDir, "mixed-ops.txt", "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir(), "mixed-ops.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h1 = lineHash("line 1");
@@ -271,7 +254,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("rejects stale checksum", async () => {
-    const f = writeTestFile(testDir, "stale.txt", "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir(), "stale.txt", "line 1\nline 2\nline 3\n");
     const { mtimeMs } = statSync(f);
 
     const validated = validateEdits([{ ref: refFromChecksum("1-3/aaaaaa", f), range: "aa1-aa1", content: "nope" }]);
@@ -283,7 +266,7 @@ describe("streamingEdit", () => {
   });
 
   test("rejects wrong line hash at boundary", async () => {
-    const f = writeTestFile(testDir, "bad-hash.txt", "line 1\nline 2\nline 3\n");
+    const f = writeTestFile(testDir(), "bad-hash.txt", "line 1\nline 2\nline 3\n");
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const { mtimeMs } = statSync(f);
@@ -297,7 +280,7 @@ describe("streamingEdit", () => {
   });
 
   test("rejects checksum range exceeding file length", async () => {
-    const f = writeTestFile(testDir, "short.txt", "only\n");
+    const f = writeTestFile(testDir(), "short.txt", "only\n");
     const { mtimeMs } = statSync(f);
     const h = lineHash("only");
 
@@ -314,7 +297,7 @@ describe("streamingEdit", () => {
   // --------------------------------------------------------------------------
 
   test("rejects binary file", async () => {
-    const f = join(testDir, "binary.bin");
+    const f = join(testDir(), "binary.bin");
     writeFileSync(f, Buffer.from([0x68, 0x65, 0x00, 0x6c, 0x6f]));
     const { mtimeMs } = statSync(f);
 
@@ -327,7 +310,7 @@ describe("streamingEdit", () => {
   });
 
   test("handles empty file with insert_after", async () => {
-    const f = writeTestFile(testDir, "empty.txt", "");
+    const f = writeTestFile(testDir(), "empty.txt", "");
     const { mtimeMs } = statSync(f);
 
     const validated = validateEdits([{ ref: refFromChecksum("0-0/aaaaaa", f), range: "+0", content: "new content" }]);
@@ -339,7 +322,7 @@ describe("streamingEdit", () => {
   });
 
   test("detects concurrent modification via mtime", async () => {
-    const f = writeTestFile(testDir, "mtime.txt", "line 1\nline 2\n");
+    const f = writeTestFile(testDir(), "mtime.txt", "line 1\nline 2\n");
     const { mtimeMs: oldMtime } = statSync(f);
 
     await new Promise((r) => setTimeout(r, 50));
@@ -360,7 +343,7 @@ describe("streamingEdit", () => {
   });
 
   test("error messages include file path", async () => {
-    const f = writeTestFile(testDir, "path-in-error.txt", "line 1\nline 2\n");
+    const f = writeTestFile(testDir(), "path-in-error.txt", "line 1\nline 2\n");
     const { mtimeMs } = statSync(f);
 
     // Wrong checksum to trigger a mismatch error
@@ -375,7 +358,7 @@ describe("streamingEdit", () => {
   });
 
   test("binary detection error includes file path", async () => {
-    const f = join(testDir, "binary-path.bin");
+    const f = join(testDir(), "binary-path.bin");
     writeFileSync(f, Buffer.from([0x68, 0x65, 0x00, 0x6c, 0x6f]));
     const { mtimeMs } = statSync(f);
 
@@ -392,8 +375,8 @@ describe("streamingEdit", () => {
 
   // O_NOFOLLOW makes the source open fail with ELOOP after the temp file exists.
   test.skipIf(process.platform === "win32")("leaves no temp file behind when the source cannot be opened", async () => {
-    const realFile = writeTestFile(testDir, "real.txt", "line 1\nline 2\n");
-    const linkPath = join(testDir, "linked.txt");
+    const realFile = writeTestFile(testDir(), "real.txt", "line 1\nline 2\n");
+    const linkPath = join(testDir(), "linked.txt");
     symlinkSync(realFile, linkPath);
     const { mtimeMs } = statSync(linkPath);
     const cs = rangeChecksum(["line 1", "line 2"], 1, 2);
@@ -405,7 +388,7 @@ describe("streamingEdit", () => {
     await expect(streamingEdit(linkPath, validated.ops, validated.checksumRefs, mtimeMs)).rejects.toMatchObject({
       code: "ELOOP",
     });
-    expect(readdirSync(testDir).filter((name) => name.startsWith(".trueline-tmp-"))).toEqual([]);
+    expect(readdirSync(testDir()).filter((name) => name.startsWith(".trueline-tmp-"))).toEqual([]);
   });
 });
 
@@ -447,10 +430,10 @@ describe.skipIf(process.platform === "win32")("streamingEdit — write failure b
     return JSON.parse(child.stdout) as { threw?: string; resolved?: boolean; leakedFds: number };
   }
 
-  const leftoverTempFiles = () => readdirSync(testDir).filter((name) => name.startsWith(".trueline-tmp-"));
+  const leftoverTempFiles = () => readdirSync(testDir()).filter((name) => name.startsWith(".trueline-tmp-"));
 
   test("closes both fds and removes the temp file when the BOM write fails", () => {
-    const f = join(testDir, "bom.txt");
+    const f = join(testDir(), "bom.txt");
     writeFileSync(f, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("line 1\nline 2\n")]));
     const cs = rangeChecksum(["line 1", "line 2"], 1, 2);
 
@@ -462,7 +445,7 @@ describe.skipIf(process.platform === "win32")("streamingEdit — write failure b
   });
 
   test("closes both fds and removes the temp file when the line-0 prepend write fails", () => {
-    const f = writeTestFile(testDir, "prepend.txt", "existing\n");
+    const f = writeTestFile(testDir(), "prepend.txt", "existing\n");
     const cs = rangeChecksum(["existing"], 1, 1);
     // The first line exceeds the 64KB write buffer, so enqueueing the second writes it out.
     const content = `${"x".repeat(70_000)}\ntail`;

@@ -1,32 +1,23 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { handleRead, handleReadMulti } from "../src/tools/read.ts";
 import { handleSearch } from "../src/tools/search.ts";
-import { getText } from "./helpers.ts";
+import { getText, useTestDir } from "./helpers.ts";
 
-let testDir: string;
-
-beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-bughunt2-read-search-")));
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
-});
+const testDir = useTestDir("trueline-bughunt2-read-search-");
 
 describe("read: 2000-line cap counts boundary context against requested lines", () => {
   // read.ts:148-152 drops only a trailing boundary line at the cap. A leading boundary line
   // (start-1) is output first and uses one of the 2000 slots, so a mid-file range of exactly
   // 2000 lines loses its last line and reports truncation, while 1-2000 is served whole.
   test("bug: a mid-file range of exactly 2000 lines is served whole", async () => {
-    const file = join(testDir, "migrations.sql");
+    const file = join(testDir(), "migrations.sql");
     writeFileSync(file, `${Array.from({ length: 2100 }, (_, i) => `-- step ${i + 1}`).join("\n")}\n`);
 
-    const text = getText(await handleRead({ file_path: file, ranges: ["2-2001"], projectDir: testDir }));
+    const text = getText(await handleRead({ file_path: file, ranges: ["2-2001"], projectDir: testDir() }));
 
     expect(text).toMatch(/^[a-z]{2}2001\t-- step 2001$/m);
     expect(text).not.toContain("truncated");
@@ -38,10 +29,10 @@ describe("read: a skipped past-EOF range", () => {
   // starts one line past EOF still emits the last line (and its own ref) as "boundary context".
   // A lone "6" on a 5-line file is an error for exactly this reason (read.test.ts:349).
   test("bug: does not leak the last line as boundary context", async () => {
-    const file = join(testDir, "ten-lines.txt");
+    const file = join(testDir(), "ten-lines.txt");
     writeFileSync(file, `${Array.from({ length: 10 }, (_, i) => `l${i + 1}`).join("\n")}\n`);
 
-    const text = getText(await handleRead({ file_path: file, ranges: ["5-6", "11"], projectDir: testDir }));
+    const text = getText(await handleRead({ file_path: file, ranges: ["5-6", "11"], projectDir: testDir() }));
 
     expect(text).toContain("range 11 skipped");
     expect(text).not.toMatch(/^[a-z]{2}10\tl10$/m);
@@ -54,11 +45,11 @@ describe("read: inline range suffix", () => {
   // whose name ends in ":<digits>" is read as line <digits> of a sibling (or reported not found).
   // trueline_search takes the same entry as the file it names, and expandGlobs stats the literal first.
   test("bug: an existing file named with a trailing :<digits> is read as that file", async () => {
-    const named = join(testDir, "snapshot-10:30");
+    const named = join(testDir(), "snapshot-10:30");
     writeFileSync(named, "only line\n");
-    writeFileSync(join(testDir, "snapshot-10"), "l1\nl2\nl3\n");
+    writeFileSync(join(testDir(), "snapshot-10"), "l1\nl2\nl3\n");
 
-    const result = await handleReadMulti({ file_paths: [named], projectDir: testDir, requireAbsolutePath: true });
+    const result = await handleReadMulti({ file_paths: [named], projectDir: testDir(), requireAbsolutePath: true });
 
     expect(getText(result)).toContain("only line");
   });
@@ -69,9 +60,9 @@ describe("search: error text", () => {
   // matches nothing blames a file_paths array that was not empty.
   test("bug: a glob matching no file does not claim file_paths is empty", async () => {
     const result = await handleSearch({
-      file_paths: [join(testDir, "*.nomatch")],
+      file_paths: [join(testDir(), "*.nomatch")],
       pattern: "needle",
-      projectDir: testDir,
+      projectDir: testDir(),
       requireAbsolutePath: true,
     });
 
@@ -81,14 +72,14 @@ describe("search: error text", () => {
   // search.ts:97-102 rejects a real newline in a line-mode pattern and points to multiline=true.
   // The escaped form in regex mode can never match either, but only says "No matches".
   test("bug: an escaped \\n in a line-mode regex points to multiline instead of a bare No matches", async () => {
-    const file = join(testDir, "names.txt");
+    const file = join(testDir(), "names.txt");
     writeFileSync(file, "alpha\nbeta\n");
 
     const result = await handleSearch({
       file_paths: [file],
       pattern: "alpha\\nbeta",
       regex: true,
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(getText(result)).toContain("multiline");
@@ -126,8 +117,8 @@ describe("batch reads keep other files when one cannot be opened", () => {
   }
 
   function batch(): { readable: string; locked: string } {
-    const readable = join(testDir, "readable.txt");
-    const locked = join(testDir, "locked.txt");
+    const readable = join(testDir(), "readable.txt");
+    const locked = join(testDir(), "locked.txt");
     writeFileSync(readable, "needle in readable\n");
     writeFileSync(locked, "needle in locked\n");
     chmodSync(locked, 0o000);
@@ -138,7 +129,7 @@ describe("batch reads keep other files when one cannot be opened", () => {
     const { readable, locked } = batch();
     try {
       const out = underNode(
-        `handleReadMulti({ file_paths: [${JSON.stringify(readable)}, ${JSON.stringify(locked)}], projectDir: ${JSON.stringify(testDir)} })`,
+        `handleReadMulti({ file_paths: [${JSON.stringify(readable)}, ${JSON.stringify(locked)}], projectDir: ${JSON.stringify(testDir())} })`,
       );
 
       expect(out.status).toBe(0);
@@ -153,7 +144,7 @@ describe("batch reads keep other files when one cannot be opened", () => {
     const { readable, locked } = batch();
     try {
       const out = underNode(
-        `handleSearch({ file_paths: [${JSON.stringify(readable)}, ${JSON.stringify(locked)}], pattern: "needle", projectDir: ${JSON.stringify(testDir)} })`,
+        `handleSearch({ file_paths: [${JSON.stringify(readable)}, ${JSON.stringify(locked)}], pattern: "needle", projectDir: ${JSON.stringify(testDir())} })`,
       );
 
       expect(out.status).toBe(0);

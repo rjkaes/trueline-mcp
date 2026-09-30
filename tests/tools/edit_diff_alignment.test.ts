@@ -5,23 +5,17 @@
 // never pays a delete plus an insert for a line it can match for free.  These
 // tests pin that behavior for the diff DiffCollector.format() produces.
 
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
+import { describe, expect, test, beforeEach } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
-import { lineHash, issueTestRef } from "../helpers.ts";
+import { lineHash, issueTestRef, useTestDir } from "../helpers.ts";
 
-let testDir: string;
+const testDir = useTestDir("trueline-diff-align-test-");
 let testFile: string;
 
 beforeEach(() => {
-  testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-diff-align-test-")));
-  testFile = join(testDir, "target.ts");
-});
-
-afterEach(() => {
-  rmSync(testDir, { recursive: true, force: true });
+  testFile = join(testDir(), "target.ts");
 });
 
 describe("unified diff alignment", () => {
@@ -35,7 +29,7 @@ describe("unified diff alignment", () => {
       file_path: testFile,
       dry_run: true,
       edits: [{ ref, range: `${h2}2-${h2}2`, content: "  const a = 70;\n  const b = 71;" }],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -56,7 +50,7 @@ describe("unified diff alignment", () => {
       file_path: testFile,
       dry_run: true,
       edits: [{ ref, range: `${h2}2-${h2}2`, content: "inserted\nomega" }],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -77,7 +71,7 @@ describe("unified diff alignment", () => {
       file_path: testFile,
       dry_run: true,
       edits: [{ ref, range: `${h1}1-${h5}5`, content: "ALPHA\nbravo\ncharlie\ndelta\nECHO" }],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();
@@ -104,7 +98,7 @@ describe("unified diff alignment", () => {
       file_path: testFile,
       dry_run: true,
       edits: [{ ref, range: `${h1}1-${h2}2`, content: "one\ntwo" }],
-      projectDir: testDir,
+      projectDir: testDir(),
     });
 
     expect(result.isError).toBeUndefined();

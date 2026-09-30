@@ -1,12 +1,12 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
+import { useTestDir } from "./helpers.ts";
 
 const scriptsDir = join(import.meta.dir, "..", "scripts");
 
-let pluginRoot: string;
+const pluginRoot = useTestDir("resolve-binary-");
 let fakeBinDir: string;
 
 // Stands in for bun: passes hasBun()'s `--version` probe, then echoes the
@@ -14,27 +14,21 @@ let fakeBinDir: string;
 const FAKE_BUN = '#!/bin/sh\n[ "$1" = "--version" ] && exit 0\necho "$@"\n';
 
 beforeEach(() => {
-  // realpath: node resolves __dirname through the macOS /var -> /private/var symlink.
-  pluginRoot = realpathSync(mkdtempSync(join(tmpdir(), "resolve-binary-")));
-  mkdirSync(join(pluginRoot, "scripts"));
-  copyFileSync(join(scriptsDir, "resolve-binary.cjs"), join(pluginRoot, "scripts", "resolve-binary.cjs"));
+  mkdirSync(join(pluginRoot(), "scripts"));
+  copyFileSync(join(scriptsDir, "resolve-binary.cjs"), join(pluginRoot(), "scripts", "resolve-binary.cjs"));
   // Present node_modules makes ensureDeps() skip the first-run install.
-  mkdirSync(join(pluginRoot, "node_modules"));
-  mkdirSync(join(pluginRoot, "dist"));
-  writeFileSync(join(pluginRoot, "dist", "cli.js"), "");
-  writeFileSync(join(pluginRoot, "dist", "server.js"), "");
+  mkdirSync(join(pluginRoot(), "node_modules"));
+  mkdirSync(join(pluginRoot(), "dist"));
+  writeFileSync(join(pluginRoot(), "dist", "cli.js"), "");
+  writeFileSync(join(pluginRoot(), "dist", "server.js"), "");
 
-  fakeBinDir = join(pluginRoot, "fake-bin");
+  fakeBinDir = join(pluginRoot(), "fake-bin");
   mkdirSync(fakeBinDir);
   writeFileSync(join(fakeBinDir, "bun"), FAKE_BUN, { mode: 0o755 });
 });
 
-afterEach(() => {
-  rmSync(pluginRoot, { recursive: true, force: true });
-});
-
 function runLauncher(entry: "cli" | "server"): string {
-  const result = spawnSync("node", [join(pluginRoot, "scripts", "resolve-binary.cjs"), entry, "--help"], {
+  const result = spawnSync("node", [join(pluginRoot(), "scripts", "resolve-binary.cjs"), entry, "--help"], {
     env: { ...process.env, PATH: `${fakeBinDir}${delimiter}${process.env.PATH}` },
     encoding: "utf8",
   });
@@ -45,16 +39,16 @@ function runLauncher(entry: "cli" | "server"): string {
 // The fake bun is a POSIX shell script; Windows can't exec it without a shell.
 describe.skipIf(process.platform === "win32")("resolve-binary.cjs under bun", () => {
   test("runs dist/cli.js when src/ isn't published (npm install)", () => {
-    expect(runLauncher("cli")).toBe(`${join(pluginRoot, "dist", "cli.js")} --help`);
+    expect(runLauncher("cli")).toBe(`${join(pluginRoot(), "dist", "cli.js")} --help`);
   });
 
   test("runs src/cli.ts when the source is present (plugin clone)", () => {
-    mkdirSync(join(pluginRoot, "src"));
-    writeFileSync(join(pluginRoot, "src", "cli.ts"), "");
-    expect(runLauncher("cli")).toBe(`${join(pluginRoot, "src", "cli.ts")} --help`);
+    mkdirSync(join(pluginRoot(), "src"));
+    writeFileSync(join(pluginRoot(), "src", "cli.ts"), "");
+    expect(runLauncher("cli")).toBe(`${join(pluginRoot(), "src", "cli.ts")} --help`);
   });
 
   test("runs dist/server.js for the server entry the same way", () => {
-    expect(runLauncher("server")).toBe(`${join(pluginRoot, "dist", "server.js")} --help`);
+    expect(runLauncher("server")).toBe(`${join(pluginRoot(), "dist", "server.js")} --help`);
   });
 });
