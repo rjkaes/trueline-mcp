@@ -101,13 +101,36 @@ export async function streamingEdit(
   // Temp opens first: transcodedLines' source fd is released only once its
   // lines are consumed, so a failed temp open after it would leak that fd.
   // Rethrow keeps the existing contract for open failures (thrown, not { ok: false }).
-  const transcoded = await transcodedLines(resolvedPath, { detectBinary: true }).catch(async (err: unknown) => {
+  // A UTF-32 refusal is a content verdict, like binary content mid-stream, so it is a result.
+  let transcoded: Awaited<ReturnType<typeof transcodedLines>>;
+  try {
+    transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("binary")) return await fail(err.message);
     await cleanupTmp();
     throw err;
-  });
+  }
   const targetEncoding = transcoded.bomInfo.encoding;
   // UTF-16 lines are already UTF-8; the caller's encoding applies to UTF-8 files only.
   const textEncoding: BufferEncoding = targetEncoding === "utf-8" ? encoding : "utf-8";
+
+  // latin1 and ascii writes keep only each code unit's low byte, so "č" (U+010D)
+  // would land as a CR and split the line. Refuse before anything is written.
+  const unrepresentable =
+    textEncoding === "latin1" ? /[\u{100}-\u{10FFFF}]/u : textEncoding === "ascii" ? /[\u{80}-\u{10FFFF}]/u : undefined;
+  if (unrepresentable) {
+    for (const op of ops) {
+      for (const line of op.content) {
+        const ch = unrepresentable.exec(line)?.[0];
+        if (ch === undefined) continue;
+        await transcoded.close();
+        const codePoint = (ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0");
+        return await fail(
+          `${textEncoding} cannot represent "${ch}" (U+${codePoint}) in the edit content; nothing was written.`,
+        );
+      }
+    }
+  }
 
   // Buffered writer — accumulates small writes and flushes at 64KB to
   // minimize syscalls. This is dramatically faster than createWriteStream
@@ -173,9 +196,15 @@ export async function streamingEdit(
   }
 
   async function enqueueLine(buf: Buffer, precomputedHash?: number, eol?: Buffer): Promise<void> {
+    const prevEndsWithLoneCR = pendingWrite !== null && pendingEol.length === 1 && pendingEol[0] === 0x0d;
     await flushPending();
     pendingWrite = buf;
     pendingEol = eol ?? detectedEol;
+    // "\r" + "" + "\n" reads back as one CRLF, so an edit that puts an empty LF line
+    // after a lone-CR line would lose a line. Making the empty line CRLF adds one
+    // byte and leaves the lone-CR line intact; turning its LF into CR instead would
+    // carry the same collision on to a following empty LF line.
+    if (prevEndsWithLoneCR && buf.length === 0 && pendingEol[0] === 0x0a) pendingEol = Buffer.from("\r\n");
     const lineH = precomputedHash ?? fnv1aHashBytes(buf);
     if (outputLineCount === 0) outputFirstLineHash = lineH;
     outputLastLineHash = lineH;
@@ -411,9 +440,15 @@ export async function streamingEdit(
         await writeBytes(encodeBuffer(pendingEol, targetEncoding));
       }
     }
+    // Half a UTF-16 code unit only fits at EOF: anywhere else it would shift every later unit.
+    await writeBytes(transcoded.trailingByte());
   } catch (err) {
     return await fail(`flush last line failed: ${(err as Error).message}`);
   }
+  collector?.setMissingFinalNewline(
+    totalLines > 0 && lastEolBytes.length === 0,
+    pendingWrite !== null && lastEolBytes.length === 0 && pendingWrite.length > 0,
+  );
 
   // Flush remaining buffered bytes and close the file descriptor.
   try {
@@ -438,6 +473,17 @@ export async function streamingEdit(
   }
 
   // ---- Verify checksums ----
+  // Every ref's length check runs before any checksum mismatch returns: the
+  // stale-ref hint below assumes each edit's boundary lines streamed by.
+  for (const { ref } of csAccumulators) {
+    if (ref.endLine > totalLines) {
+      return await fail(
+        `Edit range ${ref.startLine}-${ref.endLine} exceeds file length (${totalLines} lines). ` +
+          `The file may have been truncated since your last read. Re-read with trueline_read.`,
+      );
+    }
+  }
+
   for (const acc of csAccumulators) {
     const ref = acc.ref;
 
@@ -449,14 +495,6 @@ export async function streamingEdit(
         );
       }
       continue;
-    }
-
-    // Check if checksum range exceeds file length
-    if (ref.endLine > totalLines) {
-      return await fail(
-        `Edit range ${ref.startLine}-${ref.endLine} exceeds file length (${totalLines} lines). ` +
-          `The file may have been truncated since your last read. Re-read with trueline_read.`,
-      );
     }
 
     const expected = ref.hash;

@@ -27,6 +27,8 @@ const CONTEXT_LINES = 3;
 
 const LINE_PREFIX: Record<DiffEntry["type"], string> = { ctx: " ", del: "-", ins: "+" };
 
+const NO_FINAL_NEWLINE = "\n\\ No newline at end of file";
+
 /** Rewrite every run of del/ins entries as a minimal edit script. */
 function realign(entries: DiffEntry[]): DiffEntry[] {
   const out: DiffEntry[] = [];
@@ -143,6 +145,8 @@ function lcsScript(oldMid: string[], newMid: string[]): DiffEntry[] {
 
 export class DiffCollector {
   private entries: DiffEntry[] = [];
+  private oldLacksFinalNewline = false;
+  private newLacksFinalNewline = false;
 
   context(text: string): void {
     this.entries.push({ type: "ctx", text });
@@ -156,13 +160,32 @@ export class DiffCollector {
     this.entries.push({ type: "ins", text });
   }
 
+  setMissingFinalNewline(oldSide: boolean, newSide: boolean): void {
+    this.oldLacksFinalNewline = oldSide;
+    this.newLacksFinalNewline = newSide;
+  }
+
   /**
    * Format collected entries as a unified diff string.
    * Returns an empty string when there are no changes.
    */
   format(oldPath: string, newPath: string): string {
     if (this.entries.length === 0) return "";
-    const entries = realign(this.entries);
+
+    // diff counts a line's newline as part of it: a last line without one carries
+    // the marker, so it no longer matches the same text followed by a newline.
+    const oldLast = this.entries.findLastIndex((e) => e.type !== "ins");
+    const newLast = this.entries.findLastIndex((e) => e.type !== "del");
+    const marked: DiffEntry[] = [];
+    this.entries.forEach(({ type, text }, i) => {
+      const oldText = i === oldLast && this.oldLacksFinalNewline ? `${text}${NO_FINAL_NEWLINE}` : text;
+      const newText = i === newLast && this.newLacksFinalNewline ? `${text}${NO_FINAL_NEWLINE}` : text;
+      if (type === "del") marked.push({ type, text: oldText });
+      else if (type === "ins") marked.push({ type, text: newText });
+      else if (oldText === newText) marked.push({ type, text: oldText });
+      else marked.push({ type: "del", text: oldText }, { type: "ins", text: newText });
+    });
+    const entries = realign(marked);
 
     // Find indices of all change (non-context) entries
     const changeIndices: number[] = [];
