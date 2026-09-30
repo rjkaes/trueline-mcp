@@ -34,7 +34,7 @@ Add to `~/.gemini/settings.json`:
 
 ### 2. Add the instruction file
 
-Copy `configs/gemini-cli/GEMINI.md` into your project root. This tells the
+Copy `configs/AGENTS.md` into your project root as `GEMINI.md`. This tells the
 agent to prefer trueline tools over built-in `read_file` and `edit_file`.
 
 ### 3. Add hooks (optional, recommended)
@@ -81,8 +81,10 @@ Add to `.vscode/mcp.json` in your project:
 
 ### 2. Add the instruction file
 
-Copy `configs/vscode-copilot/copilot-instructions.md` into your project's
-`.github/` directory (or wherever your Copilot instructions live).
+Copy `configs/AGENTS.md` into your project's `.github/` directory as
+`copilot-instructions.md` (or wherever your Copilot instructions live). This
+tells the agent to prefer trueline tools over the built-in Read, Edit, and
+MultiEdit tools.
 
 ### 3. Add hooks (optional, recommended)
 
@@ -117,7 +119,7 @@ Add to your `opencode.json`:
 
 ### 2. Add the instruction file
 
-Copy `configs/opencode/AGENTS.md` into your project root. This tells the
+Copy `configs/AGENTS.md` into your project root. This tells the
 agent to use trueline tools instead of built-in `view` and `edit`.
 
 ### 3. Hooks
@@ -140,7 +142,7 @@ args = ["-y", "trueline-mcp@latest"]
 
 ### 2. Add the instruction file
 
-Copy `configs/codex/AGENTS.md` into your project root. This tells the agent
+Copy `configs/AGENTS.md` into your project root. This tells the agent
 to use trueline tools instead of `read_file` and `shell cat`.
 
 ### 3. Hooks
