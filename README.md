@@ -59,7 +59,7 @@ source file, that's 10-20 lines instead of hundreds.
 51-76: export function scheduleUpdateCheck(currentVersion: string, onUpdate: (info: { current: string; latest: string }) => void,
 79-87: function compareVersions(a: string, b: string): number {
 
-(11 symbols, 88 source lines)
+(11 symbols, 87 source lines)
 ```
 
 The agent sees the full structure, then uses `trueline_read` to fetch only

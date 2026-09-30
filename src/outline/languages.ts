@@ -211,6 +211,9 @@ const c: LanguageConfig = {
   ]),
 };
 
+// A .h file may hold C++ classes, which the C grammar misparses. The C++ grammar reads C too, but C headers need their typedefs.
+const header: LanguageConfig = { ...cpp, outline: new Set([...cpp.outline, "type_definition"]) };
+
 const csharp: LanguageConfig = {
   grammar: "c_sharp",
   outline: new Set([
@@ -364,11 +367,12 @@ export const LANGUAGES: Record<string, LanguageConfig> = {
   ".java": java,
   // C / C++
   ".c": c,
-  ".h": c,
+  ".h": header,
   ".cpp": cpp,
   ".cc": cpp,
   ".cxx": cpp,
   ".hpp": cpp,
+  ".hxx": cpp,
   ".hh": cpp,
   // C#
   ".cs": csharp,

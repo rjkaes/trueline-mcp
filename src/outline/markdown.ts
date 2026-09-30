@@ -8,7 +8,8 @@
 import { transcodedLines } from "../encoding.ts";
 import type { OutlineEntry } from "./extract.ts";
 
-const HEADING_RE = /^(#{1,6})\s+(.+)$/;
+// CommonMark allows up to 3 spaces of indent before the #s.
+const HEADING_RE = /^ {0,3}(#{1,6})\s+(.+)$/;
 // CommonMark allows up to 3 spaces of indent on a fence, opening or closing.
 const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(\s*(\S+))?/;
 const SETEXT_UNDERLINE_RE = /^ {0,3}(=+|-+)\s*$/;
@@ -23,11 +24,13 @@ const HTML_BLOCK_START_RE = new RegExp(
 );
 const HTML_LONE_TAG_RE = /^ {0,3}<\/?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?\/?>\s*$/;
 const THEMATIC_BREAK_RE = /^ {0,3}([-*_])( *\1){2,} *$/;
+const HTML_COMMENT_OPEN_RE = /^ {0,3}<!--/;
 
 enum State {
   NORMAL,
   IN_FRONTMATTER,
   IN_FENCE,
+  IN_HTML_COMMENT,
 }
 
 /** Extract outline entries from a markdown file by streaming it line-by-line. */
@@ -45,6 +48,7 @@ export async function extractMarkdownOutline(
   let state = State.NORMAL as State;
   let currentHeadingDepth = -1; // depth of the most recent heading (-1 = none seen)
   let lastHeadingIdx = -1; // index into entries[] of the most recent heading
+  let shallowestLevel = 7; // fewest #s among the headings seen (7 = none)
 
   // Frontmatter state
   let frontmatterStart = 0;
@@ -60,7 +64,7 @@ export async function extractMarkdownOutline(
   let paragraphText = "";
   // A list, quote, code or HTML block, which runs to the next blank line: an underline inside is not setext.
   // TODO: a block that starts directly under a paragraph should end it, and HTML blocks of types 1-5
-  // (script, comment, ...) end at their closing marker rather than a blank line.
+  // (script, pre, style, ...) end at their closing marker rather than a blank line. Comments do: IN_HTML_COMMENT.
   let blockOpen: "" | "html" | "other" = "";
 
   function elementDepth(): number {
@@ -71,6 +75,7 @@ export async function extractMarkdownOutline(
     // Close the previous heading's range just before this line.
     if (lastHeadingIdx >= 0) entries[lastHeadingIdx].endLine = lineNumber - 1;
     currentHeadingDepth = level - 1;
+    shallowestLevel = Math.min(shallowestLevel, level);
     lastHeadingIdx = entries.length; // index of the entry we're about to push
     entries.push({
       startLine: lineNumber,
@@ -120,6 +125,11 @@ export async function extractMarkdownOutline(
         return;
       }
 
+      case State.IN_HTML_COMMENT: {
+        if (line.includes("-->")) state = State.NORMAL;
+        return;
+      }
+
       case State.NORMAL: {
         // Frontmatter: only on line 1
         if (lineNumber === 1 && line === "---") {
@@ -139,6 +149,14 @@ export async function extractMarkdownOutline(
           fenceCount = fenceMatch[1].length;
           fenceStart = lineNumber;
           fenceLang = fenceMatch[3] || "";
+          return;
+        }
+
+        // An HTML comment block ends at its `-->` line, not at a blank line: nothing inside it is markdown.
+        if (HTML_COMMENT_OPEN_RE.test(line) && !line.includes("-->")) {
+          state = State.IN_HTML_COMMENT;
+          paragraphStart = 0;
+          blockOpen = "";
           return;
         }
 
@@ -198,6 +216,12 @@ export async function extractMarkdownOutline(
   // Fix up the last heading's endLine to the actual last line
   if (lastHeadingIdx >= 0) {
     entries[lastHeadingIdx].endLine = totalLines;
+  }
+
+  // Depth is relative to the shallowest heading, so a document that starts at `##` has top-level entries.
+  // Entries at depth 0 (frontmatter, fences before any heading) stay put.
+  if (shallowestLevel > 1 && shallowestLevel < 7) {
+    for (const entry of entries) if (entry.depth > 0) entry.depth -= shallowestLevel - 1;
   }
 
   return { entries: entries.filter((entry) => entry.depth <= maxDepth), totalLines };

@@ -290,7 +290,7 @@ describe("trueline_outline", () => {
     const result = await handleOutline({ file_paths: [file], projectDir: testDir });
     const text = getText(result);
     expect(text).toContain("3 symbols");
-    expect(text).toContain("4 source lines");
+    expect(text).toContain("3 source lines");
   });
 
   test("expression_statement only at top level for TypeScript", async () => {

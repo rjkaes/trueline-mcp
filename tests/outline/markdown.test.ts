@@ -256,11 +256,11 @@ describe("depth assignment", () => {
     expect(entries[0].depth).toBe(0);
   });
 
-  test("elements after h2 get depth 2 (h2 depth 1 + 1)", async () => {
+  test("elements after the shallowest heading (h2) get depth 1, relative to it", async () => {
     const file = writeTestFile("depth-after-h2.md", ["## Section", "", "```js", "code", "```", ""].join("\n"));
     const { entries } = await extractMarkdownOutline(file);
     const fence = entries.find((e) => e.nodeType === "fenced_code");
-    expect(fence!.depth).toBe(2);
+    expect(fence!.depth).toBe(1);
   });
 });
 

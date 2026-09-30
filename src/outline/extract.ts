@@ -11,6 +11,9 @@ import type { Node as SyntaxNode } from "web-tree-sitter";
 // web-tree-sitter 0.25 types child slots as nullable.
 const childrenOf = (node: SyntaxNode): SyntaxNode[] => node.children.filter((c): c is SyntaxNode => c !== null);
 
+// A `{` inside a string literal is not a body brace: `@GetMapping("/orders/{id}")`.
+const hasBodyBrace = (line: string): boolean => line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, "").includes("{");
+
 /** The node holding a declaration's body, looking through export, decorator and `const f = ...` wrappers. */
 function findBody(node: SyntaxNode): SyntaxNode | undefined {
   let target: SyntaxNode | null = node;
@@ -74,6 +77,12 @@ export async function extractOutline(
     return row + 1;
   }
 
+  /** Dart signatures end before their body, a `function_body` sibling of the signature or of its `method_signature` wrapper. */
+  function trailingBody(node: SyntaxNode): SyntaxNode | undefined {
+    const next = node.nextSibling ?? node.parent?.nextSibling;
+    return next?.type === "function_body" ? next : undefined;
+  }
+
   /**
    * Extract a compact signature for the node.
    *
@@ -85,12 +94,13 @@ export async function extractOutline(
   function extractSignature(node: SyntaxNode): Pick<OutlineEntry, "text" | "head" | "bodyStart"> {
     const startRow = node.startPosition.row;
     const endRow = node.endPosition.row;
-    const fl = lines[startRow]?.trimEnd() ?? "";
+    const firstLine = lines[startRow] ?? "";
+    const fl = firstLine.trim();
 
     const body = findBody(node);
     const bodyStart = body && { line: body.startPosition.row + 1, column: body.startPosition.column };
     // Without a body node, a brace on the first line is taken as the body's.
-    const bodyOnFirstLine = body ? body.startPosition.row === startRow : fl.includes("{");
+    const bodyOnFirstLine = body ? body.startPosition.row === startRow : hasBodyBrace(fl);
 
     // Join and collapse internal whitespace, clean up signature formatting
     const collapse = (parts: string[]): string =>
@@ -104,7 +114,9 @@ export async function extractOutline(
     // Single-line or short node — return as-is (preserving current behavior)
     if (startRow === endRow || bodyOnFirstLine) {
       const text = fl.length > 200 ? `${fl.slice(0, 197)}...` : fl;
-      return { text, head: body && collapse([fl.slice(0, body.startPosition.column)]).trim(), bodyStart };
+      // From the node's own column: a member can share its line with the class.
+      const head = body && collapse([firstLine.slice(node.startPosition.column, body.startPosition.column)]).trim();
+      return { text, head, bodyStart };
     }
 
     // Multi-line: join lines from startRow until we find the opening brace or
@@ -119,6 +131,17 @@ export async function extractOutline(
       const sharesRow = (lines[bodyRow] ?? "").slice(0, body.startPosition.column).trim() !== "";
       headLast = sharesRow ? bodyRow : bodyRow - 1;
       lastRow = Math.min(lastRow, headLast);
+    } else {
+      // Neither Ruby's closing `end` nor the specs of Go's grouped `type ( ... )` belong to the signature.
+      const closer = node.lastChild;
+      if (
+        closer?.type === "end" &&
+        (lines[closer.startPosition.row] ?? "").slice(0, closer.startPosition.column).trim() === ""
+      ) {
+        lastRow = Math.min(lastRow, closer.startPosition.row - 1);
+      }
+      const groupOpen = closer?.type === ")" ? childrenOf(node).find((c) => c.type === "(") : undefined;
+      if (groupOpen) lastRow = Math.min(lastRow, groupOpen.startPosition.row);
     }
     const commentsUntil = Math.max(lastRow, headLast ?? 0);
     // A comment in the signature would make editing it read as a signature change.
@@ -150,7 +173,7 @@ export async function extractOutline(
     for (let row = startRow + 1; row <= lastRow; row++) {
       const line = codeOnRow(row);
       parts.push(line.trim());
-      if (!body && line.includes("{")) break;
+      if (!body && hasBodyBrace(line)) break;
     }
 
     let head: string | undefined;
@@ -158,12 +181,12 @@ export async function extractOutline(
       const headParts: string[] = [];
       for (let row = startRow; row <= headLast; row++) {
         const line = codeOnRow(row, row === body.startPosition.row ? body.startPosition.column : undefined);
-        headParts.push(row === startRow ? line : line.trim());
+        headParts.push(row === startRow ? line.slice(node.startPosition.column) : line.trim());
       }
       head = collapse(headParts).trim();
     }
 
-    let sig = collapse(parts);
+    let sig = collapse(parts).trim();
     if (sig.length > 200) sig = `${sig.slice(0, 197)}...`;
     return { text: sig, head, bodyStart };
   }
@@ -229,7 +252,7 @@ export async function extractOutline(
 
       entries.push({
         startLine: node.startPosition.row + 1,
-        endLine: lastLine(node),
+        endLine: lastLine(trailingBody(node) ?? node),
         depth,
         nodeType: node.type,
         ...extractSignature(node),

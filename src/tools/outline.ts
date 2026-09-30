@@ -41,6 +41,9 @@ const XML_EXTENSIONS = new Set([
   ".targets",
   ".fxml",
   ".xaml",
+  ".xsd",
+  ".plist",
+  ".resx",
 ]);
 
 interface OutlineParams extends ToolContext {
@@ -114,7 +117,8 @@ async function outlineOneFile(
     return errorResult(`Error reading file: ${(err as Error).message}`);
   }
 
-  const totalLines = source.split("\n").length;
+  // A trailing newline ends the last line; it does not start another.
+  const totalLines = source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
 
   const config = getLanguageConfig(ext);
   if (!config) {
