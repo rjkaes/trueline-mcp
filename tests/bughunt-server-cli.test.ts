@@ -12,8 +12,10 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { clearCaches, evaluateFilePath } from "../src/security.js";
 import { validatePath } from "../src/tools/shared.ts";
 import { issueTestRef } from "./helpers.ts";
@@ -194,12 +196,13 @@ describe("allowed-dirs.js project dir", () => {
   // `?? process.cwd()` kept "". Bun's realpath("") happens to return cwd, but node's (the
   // launcher's fallback runtime for dist/*.js) throws, so projectDir stayed "". validatePath then
   // used cwd for containment (falsy check) while readToolDenyPatterns skipped project settings.
-  test("empty CLAUDE_PROJECT_DIR under node resolves to cwd, so the project's deny rules apply", () => {
+  test("empty CLAUDE_PROJECT_DIR under node resolves to cwd, so the project's deny rules apply", async () => {
     const dir = project("empty-project-dir", { "ledger.csv": "id,amount\n" }, ["Read(ledger.csv)"]);
     const src = join(import.meta.dir, "..", "src");
+    // File URLs: Windows node reads a bare "D:\..." specifier as URL scheme "d:".
     const script = `
-      import { resolveProjectDirs } from ${JSON.stringify(join(src, "allowed-dirs.js"))};
-      import { readToolDenyPatterns } from ${JSON.stringify(join(src, "security.js"))};
+      import { resolveProjectDirs } from ${JSON.stringify(pathToFileURL(join(src, "allowed-dirs.js")).href)};
+      import { readToolDenyPatterns } from ${JSON.stringify(pathToFileURL(join(src, "security.js")).href)};
       const { projectDir } = await resolveProjectDirs();
       const deny = (await readToolDenyPatterns("Read", projectDir)).flat();
       console.log(JSON.stringify({ projectDir, deny }));`;
@@ -213,16 +216,17 @@ describe("allowed-dirs.js project dir", () => {
     const { projectDir, deny } = JSON.parse(result.stdout) as { projectDir: string; deny: string[] };
 
     expect(deny).toContain("ledger.csv");
-    expect(projectDir).toBe(dir);
+    // Async realpath, as production uses: realpathSync keeps Windows 8.3 names (RUNNER~1).
+    expect(projectDir).toBe(await realpath(dir));
   });
 
   // security.js read user settings from $CLAUDE_CONFIG_DIR, but the allowed dir stayed ~/.claude,
   // so memory and plans under a relocated config dir were unreachable.
-  test("CLAUDE_CONFIG_DIR is the allowed config dir under Claude Code", () => {
+  test("CLAUDE_CONFIG_DIR is the allowed config dir under Claude Code", async () => {
     const configDir = join(sandbox, "relocated-config");
     mkdirSync(configDir, { recursive: true });
     const script = `
-      import { resolveAllowedDirs } from ${JSON.stringify(join(import.meta.dir, "..", "src", "allowed-dirs.js"))};
+      import { resolveAllowedDirs } from ${JSON.stringify(pathToFileURL(join(import.meta.dir, "..", "src", "allowed-dirs.js")).href)};
       console.log(JSON.stringify(await resolveAllowedDirs()));`;
 
     const result = spawnSync("node", ["--input-type=module", "-e", script], {
@@ -233,7 +237,7 @@ describe("allowed-dirs.js project dir", () => {
     });
     const dirs = JSON.parse(result.stdout) as string[];
 
-    expect(dirs).toContain(configDir);
+    expect(dirs).toContain(await realpath(configDir));
     expect(dirs).not.toContain(join(fakeHome, ".claude"));
   });
 });
