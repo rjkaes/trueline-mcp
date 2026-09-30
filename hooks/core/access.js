@@ -49,9 +49,12 @@ export async function createAccessChecker(projectDir) {
 
     if (!isContained(realPath, allowedBases)) return false;
 
-    // Check deny patterns for this tool.
+    // Deny rules match the requested path and the file it resolves to, as
+    // checkPathBoundary does, so a rule that names a symlink applies too.
     const denyGlobs = await readToolDenyPatterns(toolName, projectDir);
-    const { denied } = evaluateFilePath(realPath, denyGlobs);
-    return !denied;
+    for (const candidate of new Set([realPath, resolve(resolvedPath)])) {
+      if (evaluateFilePath(candidate, denyGlobs).denied) return false;
+    }
+    return true;
   };
 }

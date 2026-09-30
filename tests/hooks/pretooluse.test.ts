@@ -1,9 +1,10 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll, afterEach } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { processHookEvent } from "../../hooks/pretooluse.js";
+import { createAccessChecker } from "../../hooks/core/access.js";
 import { clearCaches } from "../../src/security.js";
 import { writeTestFile } from "../helpers.ts";
 
@@ -213,6 +214,69 @@ describe("PreToolUse hook — other tools", () => {
       const out = result as { hookSpecificOutput: { additionalContext: string } };
       expect(out.hookSpecificOutput.additionalContext).toContain("cat");
     }
+  });
+});
+
+// validatePath checks the requested path as well as the file it resolves to; the hook must too.
+describe.skipIf(process.platform === "win32")("PreToolUse hook — deny rules on symlinked paths", () => {
+  const claudeDir = () => join(projectDir, ".claude");
+  const dataDir = () => join(projectDir, "data");
+  const vaultLink = () => join(projectDir, "vault");
+
+  function denyRules(...deny: string[]): void {
+    mkdirSync(claudeDir(), { recursive: true });
+    writeFileSync(join(claudeDir(), "settings.json"), JSON.stringify({ permissions: { deny } }));
+    clearCaches();
+  }
+
+  beforeAll(() => {
+    mkdirSync(dataDir());
+    writeFileSync(join(dataDir(), "keystore.txt"), "k\n");
+    writeFileSync(join(dataDir(), "inventory.log"), "x\n".repeat(10000)); // ~20KB
+    symlinkSync(dataDir(), vaultLink());
+  });
+
+  afterEach(() => {
+    rmSync(claudeDir(), { recursive: true, force: true });
+    clearCaches();
+  });
+
+  afterAll(() => {
+    rmSync(vaultLink(), { force: true });
+    rmSync(dataDir(), { recursive: true, force: true });
+  });
+
+  test("a rule naming the link denies trueline access through it", async () => {
+    denyRules("Read(vault/**)");
+    const canAccess = await createAccessChecker(projectDir);
+
+    expect(await canAccess(join(vaultLink(), "keystore.txt"), "Read")).toBe(false);
+    expect(await canAccess("vault/keystore.txt", "Read")).toBe(false);
+    // The rule names the link, so the real location stays accessible.
+    expect(await canAccess(join(dataDir(), "keystore.txt"), "Read")).toBe(true);
+  });
+
+  test("a rule naming the link target still denies access through the link", async () => {
+    denyRules("Read(**/data/**)");
+    const canAccess = await createAccessChecker(projectDir);
+
+    expect(await canAccess(join(vaultLink(), "keystore.txt"), "Read")).toBe(false);
+  });
+
+  test("Read of a large file through a denied link is left to the built-in tool", async () => {
+    denyRules("Read(vault/**)");
+
+    const viaLink = await processHookEvent({
+      tool_name: "Read",
+      tool_input: { file_path: join(vaultLink(), "inventory.log") },
+    });
+    expect(viaLink).toBeNull();
+
+    const direct = await processHookEvent({
+      tool_name: "Read",
+      tool_input: { file_path: join(dataDir(), "inventory.log") },
+    });
+    expect(direct?.hookSpecificOutput?.permissionDecision).toBe("deny");
   });
 });
 
