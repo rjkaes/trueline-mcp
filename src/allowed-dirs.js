@@ -9,16 +9,17 @@ import { delimiter, join, sep } from "node:path";
  *
  * Callers are expected to prepend projectDir themselves (so the server can
  * pass it separately from the allow-list).
- * The ~/.claude/ entry is added only when running under Claude Code.
+ * The Claude config dir entry is added only when running under Claude Code.
  * @returns {Promise<string[]>}
  */
 export async function resolveAllowedDirs() {
   /** @type {string[]} */
   const dirs = [];
 
-  // ~/.claude/ — only relevant for Claude Code
+  // Claude Code's config dir — only relevant for Claude Code. CLAUDE_CONFIG_DIR relocates it,
+  // as security.js assumes for settings.json.
   if (process.env.CLAUDE_CODE_ENTRYPOINT) {
-    const claudeDir = join(homedir(), ".claude");
+    const claudeDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
     await mkdir(claudeDir, { recursive: true }).catch(() => {});
     const realClaudeDir = await realpath(claudeDir).catch(() => null);
     if (realClaudeDir) dirs.push(realClaudeDir);
@@ -43,7 +44,8 @@ export async function resolveAllowedDirs() {
  * @returns {Promise<{ projectDir: string; allowedDirs: string[] }>}
  */
 export async function resolveProjectDirs() {
-  const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+  // `||`, not `??`: an empty CLAUDE_PROJECT_DIR means unset, and realpath("") throws under node.
+  const rawProjectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
   const allowedDirs = await resolveAllowedDirs();
   return { projectDir, allowedDirs };

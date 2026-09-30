@@ -9,7 +9,7 @@
 // regardless of which subcommand is invoked.
 
 import pkg from "../package.json";
-import { type CliSubcommand, UsageError } from "./cli/io.ts";
+import { type CliSubcommand, HelpRequested, UsageError } from "./cli/io.ts";
 
 // Read with Object.hasOwn: names like `constructor` must not resolve to Object.prototype members.
 const SUBCOMMAND_LOADERS: Record<string, () => Promise<{ default: CliSubcommand }>> = {
@@ -39,14 +39,15 @@ Run "trueline <command> --help" for command-specific options.
 }
 
 async function main(argv: string[]): Promise<void> {
-  // Past "--" everything is an operand (e.g. a search pattern that is literally "--help").
+  const [name, ...rest] = argv;
+  const load = name !== undefined && Object.hasOwn(SUBCOMMAND_LOADERS, name) ? SUBCOMMAND_LOADERS[name] : undefined;
+
+  // A subcommand finds --help/-h while parsing, where it can tell an option from an option's
+  // value (--content -h). Without one, past "--" everything is an operand.
   const dashDash = argv.indexOf("--");
   const optionArgs = dashDash === -1 ? argv : argv.slice(0, dashDash);
-  if (optionArgs.includes("--help") || optionArgs.includes("-h")) {
-    const load =
-      argv[0] !== undefined && Object.hasOwn(SUBCOMMAND_LOADERS, argv[0]) ? SUBCOMMAND_LOADERS[argv[0]] : undefined;
-    const mod = load ? await load() : undefined;
-    process.stdout.write(mod ? mod.default.usage : rootUsage());
+  if (!load && (optionArgs.includes("--help") || optionArgs.includes("-h"))) {
+    process.stdout.write(rootUsage());
     return;
   }
 
@@ -55,19 +56,17 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
-  const [name, ...rest] = argv;
   if (name === undefined) {
     process.stderr.write("No command specified.\n");
     process.stdout.write(rootUsage());
-    process.exitCode = 1;
+    process.exitCode = 3;
     return;
   }
 
-  const load = Object.hasOwn(SUBCOMMAND_LOADERS, name) ? SUBCOMMAND_LOADERS[name] : undefined;
   if (!load) {
     process.stderr.write(`Unknown command ${name}\n`);
     process.stdout.write(rootUsage());
-    process.exitCode = 1;
+    process.exitCode = 3;
     return;
   }
 
@@ -75,6 +74,10 @@ async function main(argv: string[]): Promise<void> {
   try {
     await mod.default.run(rest);
   } catch (err) {
+    if (err instanceof HelpRequested) {
+      process.stdout.write(mod.default.usage);
+      return;
+    }
     if (err instanceof UsageError) {
       process.stderr.write(`trueline: ${err.message}\n`);
       process.exitCode = 3;
@@ -86,5 +89,6 @@ async function main(argv: string[]): Promise<void> {
 
 main(process.argv.slice(2)).catch((err: unknown) => {
   console.error(err);
-  process.exitCode = 1;
+  // 2, the io.ts code for a runtime failure; 1 means search found no matches.
+  process.exitCode = 2;
 });

@@ -333,7 +333,7 @@ const searchJsonSchema = {
       description: "Enable multiline matching. Pattern can span multiple lines. Implies regex=true. Default: false.",
     },
   },
-  required: ["pattern"],
+  required: ["file_paths", "pattern"],
 };
 
 const verifyJsonSchema = {

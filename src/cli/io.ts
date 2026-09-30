@@ -36,6 +36,9 @@ export class UsageError extends Error {
   }
 }
 
+/** Thrown by parseCliArgs for a --help/-h option token; cli.ts prints the subcommand's usage. */
+export class HelpRequested extends Error {}
+
 // ---------------------------------------------------------------------------
 // Arg parsing
 // ---------------------------------------------------------------------------
@@ -55,6 +58,10 @@ const LONG_FLAG_LIKE = /^--[A-Za-z]/;
 export function parseCliArgs<T extends ParseArgsOptionsConfig>(argv: string[], options: T) {
   const config: ParseArgsConfig = { args: argv, options, allowPositionals: true, strict: false, tokens: true };
   const { values, positionals, tokens = [] } = parseArgs(config);
+  // Only an option token asks for help: a value (--content -h) or an operand after "--" does not.
+  if (tokens.some((token) => token.kind === "option" && (token.rawName === "--help" || token.rawName === "-h"))) {
+    throw new HelpRequested();
+  }
   // Loose parsing hands a string option the next argv entry even when it is a flag
   // (--content --dry-run), and a typo of one (--dryrun) would be written as the value.
   // Long flag-like values must use the --name=value form; short flags are matched by name.
@@ -138,7 +145,12 @@ export function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): unk
     if (process.stdin.isTTY) {
       throw new UsageError("stdin is a TTY; pipe data in or use @file");
     }
-    raw = stripBom(readFileSync(0, "utf-8"));
+    try {
+      raw = stripBom(readFileSync(0, "utf-8"));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new UsageError(`cannot read stdin: ${msg}`);
+    }
   } else {
     raw = value;
   }

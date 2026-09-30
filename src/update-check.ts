@@ -12,10 +12,18 @@ interface CachedCheck {
   latestVersion: string;
 }
 
+// The cache sits in a temp dir other users can write (Linux /tmp), and the version is relayed
+// verbatim to stderr and the agent, so only a semver string passes.
+const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const isVersion = (value: unknown): value is string => typeof value === "string" && SEMVER.test(value);
+
 async function readCache(): Promise<CachedCheck | null> {
   try {
     const raw = await readFile(CACHE_FILE, "utf-8");
-    return JSON.parse(raw) as CachedCheck;
+    const parsed = JSON.parse(raw) as Partial<CachedCheck> | null;
+    return typeof parsed?.timestamp === "number" && isVersion(parsed.latestVersion)
+      ? { timestamp: parsed.timestamp, latestVersion: parsed.latestVersion }
+      : null;
   } catch {
     return null;
   }
@@ -32,7 +40,7 @@ async function fetchLatestVersion(): Promise<string | null> {
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { version?: string };
-    return data.version ?? null;
+    return isVersion(data.version) ? data.version : null;
   } catch {
     return null;
   }

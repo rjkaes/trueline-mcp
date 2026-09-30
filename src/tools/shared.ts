@@ -1,5 +1,5 @@
-import { realpath, stat } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { lstat, realpath, stat } from "node:fs/promises";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { isContained } from "../allowed-dirs.js";
 import { type ChecksumRef, parseChecksum, parseFilePathWithRanges, parseRange } from "../parse.ts";
@@ -86,6 +86,9 @@ type Result<T> = ({ ok: true } & T) | { ok: false; error: ToolResult };
 
 const failed = (msg: string) => ({ ok: false as const, error: errorResult(msg) });
 
+// The one answer for a path outside the boundary, whatever exists there.
+const outsideBoundary = (file_path: string) => failed(`Access denied: "${file_path}" is outside the project directory`);
+
 type ValidatePathResult = Result<{ resolvedPath: string; size: number; mtimeMs: number }>;
 
 /**
@@ -128,7 +131,7 @@ export async function checkPathBoundary(
   );
   const allBases = [realBase, ...resolvedAllowed];
   if (!isContained(realPath, allBases)) {
-    return failed(`Access denied: "${file_path}" is outside the project directory`);
+    return outsideBoundary(file_path);
   }
   // Deny rules match the requested path and the file it resolves to, so a rule that names
   // a symlink (`vault/**`) applies as well as one that names its target.
@@ -159,16 +162,31 @@ export async function validatePath(
     return failed('Wildcard "*" is only supported by trueline_changes. Pass an explicit file path.');
   }
 
-  const resolvedPath = file_path.startsWith("/") ? file_path : resolve(projectDir ?? process.cwd(), file_path);
+  // Normalized even when absolute: ".." is taken lexically, as the missing-path walk below
+  // does, so realpath never walks ".." through a symlink to somewhere the walk cannot see.
+  const resolvedPath = resolve(projectDir ?? process.cwd(), file_path);
 
-  // Resolve symlinks and check containment to prevent path traversal (#4/#5).
-  // realpath throws if the path doesn't exist — treat as file-not-found.
-  let realPath: string;
-  try {
-    realPath = await realpath(resolvedPath);
-  } catch {
-    return failed(`Error reading file: "${file_path}" not found`);
+  // Check the boundary before reporting "not found" or "not a regular file": otherwise those
+  // answers reveal what exists outside it. A missing path is placed by its nearest existing
+  // ancestor's realpath, so a symlink out of the project, or a symlinked project spelling
+  // (macOS /var -> /private/var), is judged by where it leads.
+  let realPath = await realpath(resolvedPath).catch(() => null);
+  const missing = realPath === null;
+  let ancestor = resolvedPath;
+  while (realPath === null) {
+    // Present but unresolvable (a dangling or looping symlink): where it leads is unknown.
+    const present = await lstat(ancestor).then(
+      () => true,
+      () => false,
+    );
+    if (present || dirname(ancestor) === ancestor) return outsideBoundary(file_path);
+    ancestor = dirname(ancestor);
+    const realAncestor = await realpath(ancestor).catch(() => null);
+    if (realAncestor !== null) realPath = join(realAncestor, relative(ancestor, resolvedPath));
   }
+  const boundary = await checkPathBoundary(file_path, resolvedPath, realPath, toolName, projectDir, allowedDirs);
+  if (!boundary.ok) return boundary;
+  if (missing) return failed(`Error reading file: "${file_path}" not found`);
 
   // Reject directories, symlinks to directories, and special files (devices,
   // FIFOs, sockets). Only regular files are safe to read and write.
@@ -176,8 +194,6 @@ export async function validatePath(
   if (!fileStat.isFile()) {
     return failed(`"${file_path}" is not a regular file`);
   }
-  const boundary = await checkPathBoundary(file_path, resolvedPath, realPath, toolName, projectDir, allowedDirs);
-  if (!boundary.ok) return boundary;
 
   // Reject files over 10 MB to avoid unbounded memory/time in downstream tools.
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -431,7 +447,8 @@ export async function expandGlobs(
   let roots: GlobRoot[] | undefined;
 
   function add(rawPath: string): void {
-    paths.add(rawPath.replaceAll("\\", "/"));
+    // A backslash is a filename character on POSIX.
+    paths.add(process.platform === "win32" ? rawPath.replaceAll("\\", "/") : rawPath);
   }
 
   // Async realpath, like validatePath: sync and async disagree on Windows 8.3 names.

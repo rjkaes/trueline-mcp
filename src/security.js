@@ -144,7 +144,7 @@ function posixForms(dir) {
  * Precedence order (most local first):
  *   1. .claude/settings.local.json  (project-local)
  *   2. .claude/settings.json        (project-shared)
- *   3. ~/.claude/settings.json      (global)
+ *   3. $CLAUDE_CONFIG_DIR/settings.json, else ~/.claude/settings.json (global)
  *
  * @param {string} toolName
  * @param {string} [projectDir]
@@ -213,7 +213,9 @@ export async function readToolDenyPatterns(toolName, projectDir, globalSettingsP
     sources.push([resolve(projectDir, ".claude", "settings.local.json"), projectDir]);
     sources.push([resolve(projectDir, ".claude", "settings.json"), projectDir]);
   }
-  const globalPath = globalSettingsPath ?? resolve(homedir(), ".claude", "settings.json");
+  // CLAUDE_CONFIG_DIR relocates the user settings file (https://code.claude.com/docs/en/env-vars).
+  const configDir = process.env.CLAUDE_CONFIG_DIR || resolve(homedir(), ".claude");
+  const globalPath = globalSettingsPath ?? resolve(configDir, "settings.json");
   sources.push([globalPath, dirname(globalPath)]);
 
   // Read all settings files in parallel — they're independent.
@@ -249,14 +251,21 @@ function expandPathPrefix(glob) {
  *
  * Normalizes backslashes to forward slashes before matching so that
  * Windows paths work with Unix-style glob patterns. As in gitignore, a rule
- * that matches a directory also denies everything under it.
+ * that matches a directory also denies everything under it, and a "!" rule
+ * reopens what earlier relative rules from the same source matched.
+ * https://code.claude.com/docs/en/permissions ("Read and Edit")
  *
  * @param {string} filePath
- * @param {string[][]} denyGlobs
- * @param {boolean} [caseInsensitive]
+ * @param {string[][]} denyGlobs one list per settings source, in file order
+ * @param {boolean} [caseInsensitive] defaults on for win32 and darwin, whose default
+ *   filesystems are case-insensitive: "VAULT/key" must not dodge a "vault/**" rule
  * @returns {{ denied: boolean; matchedPattern?: string }}
  */
-export function evaluateFilePath(filePath, denyGlobs, caseInsensitive = process.platform === "win32") {
+export function evaluateFilePath(
+  filePath,
+  denyGlobs,
+  caseInsensitive = process.platform === "win32" || process.platform === "darwin",
+) {
   // Test the path and each of its parent directories, so a rule naming a
   // directory covers its contents.
   /** @type {string[]} */
@@ -265,32 +274,54 @@ export function evaluateFilePath(filePath, denyGlobs, caseInsensitive = process.
     targets.push(path);
   }
 
-  /** @param {string} expanded @returns {boolean} */
-  const matchesExpanded = (expanded) => {
+  /** @param {string} expanded @param {string} target @returns {boolean} */
+  const matchesExpanded = (expanded, target) => {
     // A trailing "/" limits a gitignore rule to directories. What kind of path
     // this is isn't known here, so the rule applies to either (fail-closed).
     const glob = toPosix(expanded).replace(/(?<=.)\/+$/, "");
     const re = fileGlobToRegex(glob, caseInsensitive);
-    return targets.some((target) => {
-      if (re.test(target)) return true;
+    if (re.test(target)) return true;
 
-      // Glob without "/" — also test the basename so that a simple pattern like
-      // ".env" matches "/any/path/.env" (gitignore semantics).
-      if (!glob.includes("/")) return re.test(target.slice(target.lastIndexOf("/") + 1));
+    // Glob without "/" — also test the basename so that a simple pattern like
+    // ".env" matches "/any/path/.env" (gitignore semantics).
+    if (!glob.includes("/")) return re.test(target.slice(target.lastIndexOf("/") + 1));
 
-      // Relative glob with "/" — treat as a suffix match via globstar prefix.
-      // e.g. deny pattern "src/.env" should match "/project/src/.env".
-      if (!glob.startsWith("/") && !glob.startsWith("*")) {
-        return fileGlobToRegex(`**/${glob}`, caseInsensitive).test(target);
-      }
+    // Relative glob with "/" — treat as a suffix match via globstar prefix.
+    // e.g. deny pattern "src/.env" should match "/project/src/.env".
+    if (!glob.startsWith("/") && !glob.startsWith("**/")) {
+      return fileGlobToRegex(`**/${glob}`, caseInsensitive).test(target);
+    }
 
-      return false;
-    });
+    return false;
   };
 
-  /** @param {string} declared @returns {boolean} */
-  const matches = (declared) => expandPathPrefix(declared).some(matchesExpanded);
+  /** @param {string} declared @param {string} target @returns {boolean} */
+  const matches = (declared, target) =>
+    expandPathPrefix(declared).some((expanded) => matchesExpanded(expanded, target));
 
-  const matchedPattern = denyGlobs.flat().find(matches);
-  return matchedPattern ? { denied: true, matchedPattern } : { denied: false };
+  // Claude Code reads a "!" body relative to the working directory, which is not
+  // known here, so only a bare name ("!sample.env") reopens anything. Anything
+  // with a "/" reopens nothing, and names match case-sensitively: both err
+  // toward denying.
+  /** @param {string} negated @param {string} target @returns {boolean} */
+  const reopens = (negated, target) =>
+    !negated.includes("/") && fileGlobToRegex(negated).test(target.slice(target.lastIndexOf("/") + 1));
+
+  for (const rules of denyGlobs) {
+    for (const target of targets) {
+      /** @type {string | undefined} */
+      let relativeMatch;
+      for (const rule of rules) {
+        if (rule.startsWith("!")) {
+          if (relativeMatch && reopens(rule.slice(1), target)) relativeMatch = undefined;
+        } else if (matches(rule, target)) {
+          // A "!" rule cannot reach a rule anchored with "/", "//" or "~/".
+          if (/^~?\//.test(toPosix(rule))) return { denied: true, matchedPattern: rule };
+          relativeMatch ??= rule;
+        }
+      }
+      if (relativeMatch) return { denied: true, matchedPattern: relativeMatch };
+    }
+  }
+  return { denied: false };
 }
