@@ -58,6 +58,9 @@ export function parseToolPattern(pattern) {
  * - `**` matches any number of path segments (including zero)
  * - `*` matches anything except path separators
  * - `?` matches a single non-separator character
+ * - `[abc]`, `[a-z]`, `[!abc]` and `[^abc]` match a single non-separator character; an
+ *   unclosed `[` is literal
+ * - `\` makes the next character literal, as in gitignore
  * - Paths are matched with forward slashes (callers normalize first)
  *
  * @param {string} glob
@@ -72,12 +75,45 @@ export function fileGlobToRegex(glob, caseInsensitive = false) {
   // Collapse consecutive globstars ("**/**/**/") into a single "**/" to
   // prevent exponential backtracking — each `**/` becomes `(.*/)?` in the
   // regex, and multiple adjacent groups cause catastrophic backtracking.
-  glob = glob.replace(/(\*\*\/)+/g, "**/");
+  // Only at a boundary: a mid-segment "**" is a plain star, so folding "a**/**/x" to "a**/x"
+  // would narrow the rule. The same lookbehind keeps an escaped star (`\*`) from pairing up.
+  glob = glob.replace(/(?<=^|\/)(\*\*\/)+/g, "**/");
 
-  // Tokenize the glob: match globstar+slash, globstar, single-star, question
-  // mark, or a run of literal characters — then map each token to its regex.
-  const regexStr = glob.replace(/\*\*\/|\*\*|\*|\?|[^*?]+/g, (token, offset) => {
+  // Tokenize the glob one unit at a time: globstar+slash, globstar, single-star, question
+  // mark, a backslash escape, or any other character — then map each token to its regex.
+  // A "[" that opens a class is scanned to its "]" here, and the tokens it spans are skipped.
+  let classEnd = 0;
+  // ReDoS: once a "[" finds no closing "]", no later one can (backslashes pair up the same way
+  // from any later start), so the scan for a closer never runs twice over the same tail.
+  let unclosed = false;
+  const regexStr = glob.replace(/\*\*\/|\*\*|\*|\?|\\([\s\S])|[\s\S]/gu, (token, escaped, offset) => {
+    if (offset < classEnd) return "";
     const atBoundary = offset === 0 || glob[offset - 1] === "/";
+    if (token === "[" && !unclosed) {
+      const negated = glob[offset + 1] === "!" || glob[offset + 1] === "^";
+      const first = offset + (negated ? 2 : 1);
+      // The first member is taken as is, so "[]a]" holds "]" and "a".
+      let end = first + (glob[first] === "\\" ? 2 : 1);
+      while (end < glob.length && glob[end] !== "]") end += glob[end] === "\\" ? 2 : 1;
+      if (end >= glob.length) {
+        unclosed = true;
+      } else {
+        // Only "\", "]", "^" and "-" need escaping inside a class; an unescaped "-" stays a range.
+        const members = glob.slice(first, end).replace(/\\([\s\S])|[\]^]/g, (member, literal) => {
+          const char = literal ?? member;
+          return "\\]^-[".includes(char) ? `\\${char}` : char;
+        });
+        // (?!/): no class, however written, matches a path separator.
+        const charClass = `(?!/)[${negated ? "^" : ""}${members}]`;
+        try {
+          new RegExp(charClass, "u");
+          classEnd = end + 1;
+          return charClass;
+        } catch {
+          // An out-of-order range such as "[z-a]" is no class: its brackets fall through as literals.
+        }
+      }
+    }
     switch (token) {
       case "**/":
         return atBoundary ? "(.*/)?" : "[^/]*/";
@@ -88,13 +124,16 @@ export function fileGlobToRegex(glob, caseInsensitive = false) {
       case "?":
         return "[^/]";
       default:
-        return token.replace(/[.+^${}()|[\]\\/-]/g, "\\$&");
+        // `-` is not special outside a class and `\-` is a syntax error under the `u` flag below.
+        return (escaped ?? token).replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
     }
   });
 
   // dotAll: `**` compiles to `.*`, which must span names holding \n, \r, U+2028 or U+2029
   // just as `[^/]*` does; otherwise a rule covering a directory misses such names.
-  const re = new RegExp(`^${regexStr}$`, caseInsensitive ? "is" : "s");
+  // `u` makes `i` fold by Unicode simple case folding, as APFS does (U+017F "ſ" names "s");
+  // without it only ASCII and toUpperCase() pairs fold, and "ſecrets" dodges "secrets/**".
+  const re = new RegExp(`^${regexStr}$`, caseInsensitive ? "isu" : "su");
   regexCache.set(cacheKey, re);
   return re;
 }
@@ -105,11 +144,11 @@ export function fileGlobToRegex(glob, caseInsensitive = false) {
  * segment ("C:\Users" -> "/c/Users"), and a UNC root collapses to the
  * single-slash path its documented "//srv/share" spelling names.
  * @param {string} path
+ * @param {boolean} [keepEscapes] leave backslashes alone: in a rule one may escape the next character
  * @returns {string}
  */
-function toPosix(path) {
-  return path
-    .replace(/\\/g, "/")
+function toPosix(path, keepEscapes = false) {
+  return (keepEscapes ? path : path.replace(/\\/g, "/"))
     .replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`)
     .replace(/^\/{2,}/, "/");
 }
@@ -199,6 +238,15 @@ export async function readToolDenyPatterns(toolName, projectDir, globalSettingsP
         // A single leading "/" is relative to the settings source, not the filesystem root.
         if (tp.glob.startsWith("/") && !tp.glob.startsWith("//")) {
           globs.push(...anchors.map((anchor) => `${anchor}${tp.glob}`));
+        } else if (tp.glob.startsWith("//")) {
+          // Taken as written, a "//" rule spelled through a symlinked directory (macOS /var ->
+          // /private/var) misses the real path validatePath tests. Like the anchors above, also
+          // spell it through the realpath of its literal leading directories.
+          const wildcard = tp.glob.search(/[*?[\\]/);
+          const dirEnd = tp.glob.lastIndexOf("/", wildcard < 0 ? Infinity : wildcard);
+          const dirs = dirEnd > 1 ? posixForms(tp.glob.slice(1, dirEnd)) : [];
+          const spellings = dirs.map((dir) => `/${dir}${tp.glob.slice(dirEnd)}`);
+          globs.push(...new Set([tp.glob, ...spellings]));
         } else {
           globs.push(tp.glob);
         }
@@ -282,11 +330,11 @@ export function evaluateFilePath(
     targets.push(path);
   }
 
-  /** @param {string} expanded @param {string} target @returns {boolean} */
+  /** @param {string} expanded one toPosix reading of a rule @param {string} target @returns {boolean} */
   const matchesExpanded = (expanded, target) => {
     // A trailing "/" limits a gitignore rule to directories. What kind of path
     // this is isn't known here, so the rule applies to either (fail-closed).
-    const glob = fold(toPosix(expanded)).replace(/(?<=.)\/+$/, "");
+    const glob = fold(expanded).replace(/(?<=.)\/+$/, "");
     const re = fileGlobToRegex(glob, caseInsensitive);
     if (re.test(target)) return true;
 
@@ -303,9 +351,18 @@ export function evaluateFilePath(
     return false;
   };
 
+  // A rule denies a path if any reading of it matches. Claude Code reads Read/Edit rules as
+  // gitignore patterns: "[...]" is a class and "\" escapes, so "key[12].pem" guards key1.pem.
+  // Earlier releases took brackets literally and "\" as a Windows separator ("C:\secrets\**");
+  // both readings stay, so files named like the rule and rules written that way remain guarded.
+  // https://code.claude.com/docs/en/permissions ("Read and Edit")
   /** @param {string} declared @param {string} target @returns {boolean} */
   const matches = (declared, target) =>
-    expandPathPrefix(declared).some((expanded) => matchesExpanded(expanded, target));
+    expandPathPrefix(declared).some((expanded) =>
+      [toPosix(expanded, true), toPosix(expanded).replace(/[[\]]/g, "\\$&")].some((reading) =>
+        matchesExpanded(reading, target),
+      ),
+    );
 
   // Claude Code reads a "!" body relative to the working directory, which is not
   // known here, so only a bare name ("!sample.env") reopens anything. Anything

@@ -84,16 +84,112 @@ describe("fileGlobToRegex", () => {
     expect(re.test("x/y/z/b")).toBe(false);
   });
 
+  // A mid-segment "**" is a plain star (gitignore), so only globstars at a boundary may collapse:
+  // "a**/**/x" folded to "a**/x" would stop matching below the first directory.
+  test("globstar collapse does not narrow a rule whose first ** is mid-segment", () => {
+    const re = fileGlobToRegex("vault**/**/key.pem");
+    expect(re.test("vault-prod/eu/west/key.pem")).toBe(true);
+    expect(re.test("vault-prod/key.pem")).toBe(true);
+  });
+
+  // Updated for the bracket-class change: "[1]" used to be literal here and is now a one-character
+  // class (see "bracket classes" below), so this asserts on the metacharacters that stay literal.
   test("escapes regex metacharacters in glob literals", () => {
-    const re = fileGlobToRegex("file[1].ts");
-    expect(re.test("file[1].ts")).toBe(true);
-    expect(re.test("fileX.ts")).toBe(false); // would match if [] were treated as char class
+    const re = fileGlobToRegex("a+b(c){2}$^|.ts");
+    expect(re.test("a+b(c){2}$^|.ts")).toBe(true);
+    expect(re.test("aab(c)(c).ts")).toBe(false);
   });
 
   test("dot is literal not regex wildcard", () => {
     const re = fileGlobToRegex("*.env");
     expect(re.test("app.env")).toBe(true);
     expect(re.test("appXenv")).toBe(false); // would match if . were regex any-char
+  });
+});
+
+// Claude Code's Read/Edit rules are gitignore patterns in which "[", "]" and "*" are pattern characters
+// and a backslash escapes one: https://code.claude.com/docs/en/permissions ("Read and Edit").
+describe("fileGlobToRegex bracket classes", () => {
+  test("[12] matches exactly one listed character", () => {
+    const re = fileGlobToRegex("key[12].pem");
+    expect(re.test("key1.pem")).toBe(true);
+    expect(re.test("key2.pem")).toBe(true);
+    expect(re.test("key3.pem")).toBe(false);
+    expect(re.test("key12.pem")).toBe(false);
+    expect(re.test("key.pem")).toBe(false);
+  });
+
+  test("ranges and [!..] / [^..] negation", () => {
+    const range = fileGlobToRegex("v[a-c]");
+    expect(["va", "vb", "vc"].every((name) => range.test(name))).toBe(true);
+    expect(range.test("vd")).toBe(false);
+
+    for (const glob of ["log[!0-9].txt", "log[^0-9].txt"]) {
+      const re = fileGlobToRegex(glob);
+      expect(re.test("logx.txt")).toBe(true);
+      expect(re.test("log5.txt")).toBe(false);
+      expect(re.test("log.txt")).toBe(false);
+    }
+  });
+
+  test("a class never matches a path separator", () => {
+    expect(fileGlobToRegex("a[!x]b").test("a/b")).toBe(false);
+    expect(fileGlobToRegex("a[/]b").test("a/b")).toBe(false);
+    // "!-~" spans U+002F
+    expect(fileGlobToRegex("a[!-~]b").test("a/b")).toBe(false);
+    expect(fileGlobToRegex("a[!-~]b").test("a!b")).toBe(true);
+  });
+
+  test("a backslash escapes the next character", () => {
+    const re = fileGlobToRegex("\\[2024-06\\] Reports/**");
+    expect(re.test("[2024-06] Reports/q3.csv")).toBe(true);
+    expect(re.test("2024-06 Reports/q3.csv")).toBe(false);
+    expect(re.test("0 Reports/q3.csv")).toBe(false);
+
+    expect(fileGlobToRegex("a\\*b").test("a*b")).toBe(true);
+    expect(fileGlobToRegex("a\\*b").test("axb")).toBe(false);
+    expect(fileGlobToRegex("a\\sb").test("asb")).toBe(true); // not the regex class \\s
+    expect(fileGlobToRegex("a\\sb").test("a b")).toBe(false);
+  });
+
+  test("an unclosed [ and a trailing backslash are literal", () => {
+    expect(fileGlobToRegex("file[1.ts").test("file[1.ts")).toBe(true);
+    expect(fileGlobToRegex("file[1.ts").test("file1.ts")).toBe(false);
+    expect(fileGlobToRegex("a[]b").test("a[]b")).toBe(true);
+    expect(fileGlobToRegex("dir\\").test("dir\\")).toBe(true);
+  });
+
+  test("regex-special characters inside a class stay literal", () => {
+    const specials = fileGlobToRegex("[$^.+(){}|]x");
+    for (const char of "$^.+(){}|") expect(specials.test(`${char}x`)).toBe(true);
+    expect(specials.test("ax")).toBe(false);
+
+    expect(fileGlobToRegex("[]a]").test("]")).toBe(true); // a leading "]" is a member
+    expect(fileGlobToRegex("[]a]").test("a")).toBe(true);
+    expect(fileGlobToRegex("[a\\]b]").test("]")).toBe(true);
+    expect(fileGlobToRegex("[a\\-z]").test("-")).toBe(true);
+    expect(fileGlobToRegex("[a\\-z]").test("b")).toBe(false);
+    expect(fileGlobToRegex("[[:x:]").test(":")).toBe(true);
+  });
+
+  test("an out-of-order range does not throw; its brackets stay literal", () => {
+    expect(fileGlobToRegex("f[z-a]").test("fm")).toBe(false);
+    expect(fileGlobToRegex("f[z-a]").test("f[z-a]")).toBe(true);
+  });
+
+  test("case-insensitive mode folds class members, Unicode simple folds included", () => {
+    expect(fileGlobToRegex("key[a-c].pem", true).test("KEYB.pem")).toBe(true);
+    expect(fileGlobToRegex("key[a-c].pem").test("KEYB.pem")).toBe(false);
+    expect(fileGlobToRegex("[s]ecrets", true).test("ſecrets")).toBe(true);
+    expect(fileGlobToRegex("[!s]ecrets", true).test("ſecrets")).toBe(false);
+  });
+
+  test("compiling and matching stay linear on adversarial classes", () => {
+    const start = performance.now();
+    expect(fileGlobToRegex(`${"[a-z]".repeat(300)}!`).test("a".repeat(20_000))).toBe(false);
+    expect(fileGlobToRegex(`${"[".repeat(20_000)}\\]`).test("[")).toBe(false);
+    expect(fileGlobToRegex(`${"[\\]".repeat(5_000)}x`).test("x")).toBe(false);
+    expect(performance.now() - start).toBeLessThan(2_000);
   });
 });
 
@@ -179,6 +275,84 @@ describe("evaluateFilePath", () => {
     expect(result.denied).toBe(true);
     const noMatch = evaluateFilePath("/project/fileX.ts", [["file[1].ts"]]);
     expect(noMatch.denied).toBe(false);
+  });
+});
+
+// Fail closed: a rule denies a path when ANY reading of it matches. Claude Code reads Read/Edit rules
+// as gitignore patterns (classes, backslash escapes); the literal-bracket and Windows-separator
+// readings predate that and still guard files named like the rule.
+// https://code.claude.com/docs/en/permissions ("Read and Edit")
+describe("bracket classes in deny rules", () => {
+  test("Read(key[12].pem) denies key1.pem and key2.pem, not key3.pem, and still the literal name", () => {
+    const rules = [["key[12].pem"]];
+    expect(evaluateFilePath("/project/key1.pem", rules).denied).toBe(true);
+    expect(evaluateFilePath("/project/certs/key2.pem", rules).denied).toBe(true);
+    expect(evaluateFilePath("/project/key3.pem", rules).denied).toBe(false);
+    expect(evaluateFilePath("/project/key[12].pem", rules).denied).toBe(true);
+  });
+
+  test("[!0-9] and [^0-9] negate, and the literal name stays denied", () => {
+    for (const glob of ["log[!0-9].txt", "log[^0-9].txt"]) {
+      expect(evaluateFilePath("/project/logx.txt", [[glob]]).denied).toBe(true);
+      expect(evaluateFilePath("/project/log5.txt", [[glob]]).denied).toBe(false);
+      expect(evaluateFilePath(`/project/${glob}`, [[glob]]).denied).toBe(true);
+    }
+  });
+
+  test("a class never matches a separator", () => {
+    expect(evaluateFilePath("/project/src/app.ts", [["src[!x]app.ts"]]).denied).toBe(false);
+    expect(evaluateFilePath("/project/src/app.ts", [["src[/]app.ts"]]).denied).toBe(false);
+  });
+
+  test("escaped brackets denote a directory whose name holds them", () => {
+    const rules = [["\\[2024-06\\] Reports/**"]];
+    expect(evaluateFilePath("/project/[2024-06] Reports/q3.csv", rules).denied).toBe(true);
+    expect(evaluateFilePath("/project/2024-06 Reports/q3.csv", rules).denied).toBe(false);
+    expect(evaluateFilePath("/project/0 Reports/q3.csv", rules).denied).toBe(false);
+  });
+
+  test("Read(file[1].ts) still denies the file literally named file[1].ts", () => {
+    expect(evaluateFilePath("/project/file[1].ts", [["file[1].ts"]]).denied).toBe(true);
+    expect(evaluateFilePath("/project/file1.ts", [["file[1].ts"]]).denied).toBe(true);
+  });
+
+  test("an unclosed [ is literal", () => {
+    expect(evaluateFilePath("/project/file[1.ts", [["file[1.ts"]]).denied).toBe(true);
+    expect(evaluateFilePath("/project/file1.ts", [["file[1.ts"]]).denied).toBe(false);
+  });
+
+  test("classes work under ~/, // and absolute anchors", () => {
+    const home = homedir();
+    expect(evaluateFilePath(`${home}/.ssh/id_rsa`, [["~/.ssh/id_[rd]sa"]]).denied).toBe(true);
+    expect(evaluateFilePath(`${home}/.ssh/id_xsa`, [["~/.ssh/id_[rd]sa"]]).denied).toBe(false);
+    expect(evaluateFilePath("/etc/ssl/key2.pem", [["//etc/ssl/key[12].pem"]]).denied).toBe(true);
+    expect(evaluateFilePath("/etc/ssl/key3.pem", [["//etc/ssl/key[12].pem"]]).denied).toBe(false);
+    expect(evaluateFilePath("/work/billing/key1.pem", [["/work/billing/key[12].pem"]]).denied).toBe(true);
+  });
+
+  test("backslash stays a Windows separator beside literal brackets", () => {
+    expect(evaluateFilePath("C:\\secrets\\[q3]\\a.pem", [["C:\\secrets\\[q3]\\**"]]).denied).toBe(true);
+    expect(evaluateFilePath("C:\\secrets\\vault\\a.pem", [["C:\\secrets\\**"]]).denied).toBe(true);
+  });
+
+  test("case-insensitive mode applies to classes, Unicode simple folds included", () => {
+    expect(evaluateFilePath("/project/KEYB.pem", [["key[a-c].pem"]], true).denied).toBe(true);
+    expect(evaluateFilePath("/project/KEYB.pem", [["key[a-c].pem"]], false).denied).toBe(false);
+    expect(evaluateFilePath("/work/ſecrets/key.txt", [["[s]ecrets/**"]], true).denied).toBe(true);
+  });
+
+  test("validatePath enforces Read(key[12].pem) from project settings", async () => {
+    const project = makeProject("trueline-bracket-class-");
+    try {
+      writeProjectDeny(project, ["Read(key[12].pem)"]);
+      for (const name of ["key1.pem", "key2.pem", "key3.pem"]) writeFileSync(join(project, name), "k\n");
+
+      expect((await validatePath(join(project, "key1.pem"), "Read", project, [])).ok).toBe(false);
+      expect((await validatePath(join(project, "key2.pem"), "Read", project, [])).ok).toBe(false);
+      expect((await validatePath(join(project, "key3.pem"), "Read", project, [])).ok).toBe(true);
+    } finally {
+      rmSync(project, { recursive: true, force: true });
+    }
   });
 });
 
