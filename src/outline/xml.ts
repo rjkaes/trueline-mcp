@@ -6,7 +6,7 @@
  * open/close/self-closing elements and processing instructions; skips comments,
  * CDATA sections, and DTD declarations.
  */
-import { splitLines } from "../line-splitter.ts";
+import { transcodedLines } from "../encoding.ts";
 import type { OutlineEntry } from "./extract.ts";
 
 // ==============================================================================
@@ -26,10 +26,8 @@ type State = (typeof State)[keyof typeof State];
 
 interface ElementFrame {
   tagName: string;
-  depth: number;
-  startLine: number;
-  /** Opening tag text for the signature (tag name + attributes), truncated */
-  signature: string;
+  /** Listed when the tag opens, so entries stay in document order; its endLine is set at the close. */
+  entry: OutlineEntry;
 }
 
 /**
@@ -60,10 +58,10 @@ export async function extractXmlOutline(
   // Quote character of the attribute value being read; a '>' inside it does not end the tag
   let tagQuote = "";
 
-  function addElement(startLine: number, endLine: number, depth: number, text: string): void {
-    if (depth <= maxDepth) {
-      entries.push({ startLine, endLine, depth, nodeType: "element", text });
-    }
+  function addElement(startLine: number, endLine: number, depth: number, text: string): OutlineEntry {
+    const entry: OutlineEntry = { startLine, endLine, depth, nodeType: "element", text };
+    if (depth <= maxDepth) entries.push(entry);
+    return entry;
   }
 
   /** Process a complete tag (everything between < and >, exclusive). */
@@ -85,22 +83,17 @@ export async function extractXmlOutline(
       if (i === -1) return;
       const frame = stack[i];
       // Elements left open inside the matched one end with it
-      for (const open of stack.slice(i + 1)) addElement(open.startLine, endLine, open.depth, open.signature);
+      for (const open of stack.slice(i + 1)) open.entry.endLine = endLine;
       // Pop everything from i onward (handles mismatched nesting gracefully)
       stack.length = i;
-      addElement(frame.startLine, endLine, frame.depth, frame.signature);
+      frame.entry.endLine = endLine;
       return;
     }
 
     // Open tag: <foo attr="val">
     const tagName = extractTagName(content);
-    const depth = stack.length;
-    stack.push({
-      tagName,
-      depth,
-      startLine: tokenStartLine,
-      signature: formatSignature(tagName, content),
-    });
+    const entry = addElement(tokenStartLine, tokenStartLine, stack.length, formatSignature(tagName, content));
+    stack.push({ tagName, entry });
   }
 
   /** Process a complete processing instruction (everything between <? and ?>). */
@@ -123,7 +116,8 @@ export async function extractXmlOutline(
   // Stream through file line by line
   // ==============================================================================
 
-  for await (const { lineBytes, lineNumber } of splitLines(filePath, { detectBinary: true })) {
+  const { lines } = await transcodedLines(filePath, { detectBinary: true });
+  for await (const { lineBytes, lineNumber } of lines) {
     totalLines = lineNumber;
     const line = lineBytes.toString("utf-8");
 
@@ -218,14 +212,8 @@ export async function extractXmlOutline(
     }
   }
 
-  // Any unclosed elements on the stack get entries ending at EOF
-  while (stack.length > 0) {
-    const frame = stack.pop()!;
-    addElement(frame.startLine, totalLines, frame.depth, frame.signature);
-  }
-
-  // Sort by startLine (close-tag entries from the stack are appended out of order)
-  entries.sort((a, b) => a.startLine - b.startLine || a.depth - b.depth);
+  // Any unclosed elements on the stack end at EOF
+  for (const open of stack) open.entry.endLine = totalLines;
 
   return { entries, totalLines };
 }

@@ -22,6 +22,8 @@ export interface LanguageConfig {
   /** Whether to list the members of a recurse target, given the node that owns it.
    *  For languages where function bodies and class bodies share a node type. */
   canRecurse?: (owner: SyntaxNode) => boolean;
+  /** Narrows an outline type: a node of that type is listed only when this returns true. */
+  include?: (node: SyntaxNode) => boolean;
   /** Node types whose children are visited at the same depth, without an entry of their own. */
   transparent?: Set<string>;
   /** Whitespace normalization for semantic diffing body hashes.
@@ -46,9 +48,12 @@ const typescript: LanguageConfig = {
     "method_definition",
     "abstract_method_signature",
     "public_field_definition",
+    "ambient_declaration",
+    "property_signature",
+    "method_signature",
   ]),
   skip: new Set(["import_statement"]),
-  recurse: new Set(["class_body"]),
+  recurse: new Set(["class_body", "interface_body"]),
 };
 
 const tsx: LanguageConfig = {
@@ -130,7 +135,7 @@ const java: LanguageConfig = {
     "constant_declaration",
   ]),
   skip: new Set(["package_declaration", "import_declaration"]),
-  recurse: new Set(["class_body", "interface_body"]),
+  recurse: new Set(["class_body", "interface_body", "enum_body_declarations"]),
 };
 
 const ruby: LanguageConfig = {
@@ -147,6 +152,24 @@ const ruby: LanguageConfig = {
   canRecurse: (owner) => owner.type === "class" || owner.type === "module",
 };
 
+/** True when a member declaration's declarator, past any pointer or reference wrapper, is a function. */
+function declaresFunction(node: SyntaxNode): boolean {
+  let declarator = node.childForFieldName("declarator");
+  while (declarator) {
+    // A parenthesized name, as in `int (*cb)(int);`, is a function-pointer field. Keep looking inside it
+    // for `int (*callback())(int);`, a method that returns one.
+    if (
+      declarator.type === "function_declarator" &&
+      declarator.childForFieldName("declarator")?.type !== "parenthesized_declarator"
+    ) {
+      return true;
+    }
+    // A reference_declarator has no `declarator` field.
+    declarator = declarator.childForFieldName("declarator") ?? declarator.firstNamedChild;
+  }
+  return false;
+}
+
 const cpp: LanguageConfig = {
   grammar: "cpp",
   outline: new Set([
@@ -156,19 +179,36 @@ const cpp: LanguageConfig = {
     "enum_specifier",
     "namespace_definition",
     "declaration",
+    "field_declaration",
     "template_declaration",
   ]),
   skip: new Set(["preproc_include"]),
   recurse: new Set(["declaration_list", "field_declaration_list"]),
-  // Include guards and conditional compilation wrap most of a header.
-  transparent: new Set(["preproc_ifdef", "preproc_if", "preproc_else", "preproc_elif"]),
+  // Include guards, conditional compilation and `extern "C"` blocks wrap most of a header.
+  transparent: new Set([
+    "preproc_ifdef",
+    "preproc_if",
+    "preproc_else",
+    "preproc_elif",
+    "linkage_specification",
+    "declaration_list", // body of `extern "C" {`
+  ]),
+  // Data members are noise; member function declarations (`void add(int id);`) are not.
+  include: (node) => node.type !== "field_declaration" || declaresFunction(node),
 };
 
 const c: LanguageConfig = {
   grammar: "c",
   outline: new Set(["function_definition", "struct_specifier", "enum_specifier", "declaration", "type_definition"]),
   skip: new Set(["preproc_include"]),
-  transparent: new Set(["preproc_ifdef", "preproc_if", "preproc_else", "preproc_elif"]),
+  transparent: new Set([
+    "preproc_ifdef",
+    "preproc_if",
+    "preproc_else",
+    "preproc_elif",
+    "linkage_specification",
+    "declaration_list", // body of `extern "C" {`
+  ]),
 };
 
 const csharp: LanguageConfig = {
@@ -193,24 +233,31 @@ const csharp: LanguageConfig = {
 
 const kotlin: LanguageConfig = {
   grammar: "kotlin",
-  outline: new Set(["function_declaration", "class_declaration", "object_declaration", "property_declaration"]),
+  outline: new Set([
+    "function_declaration",
+    "class_declaration",
+    "object_declaration",
+    "companion_object",
+    "property_declaration",
+  ]),
   skip: new Set(["import_list", "package_header"]),
-  recurse: new Set(["class_body"]),
+  recurse: new Set(["class_body", "enum_class_body"]),
 };
 
 const swift: LanguageConfig = {
   grammar: "swift",
+  // struct, enum, extension and actor are all class_declaration in this grammar.
   outline: new Set([
     "function_declaration",
     "class_declaration",
-    "struct_declaration",
-    "enum_declaration",
     "protocol_declaration",
-    "extension_declaration",
     "property_declaration",
+    "init_declaration",
+    "protocol_function_declaration",
+    "protocol_property_declaration",
   ]),
   skip: new Set(["import_declaration"]),
-  recurse: new Set(["class_body"]),
+  recurse: new Set(["class_body", "enum_class_body", "protocol_body"]),
 };
 
 const php: LanguageConfig = {
@@ -220,22 +267,26 @@ const php: LanguageConfig = {
     "class_declaration",
     "interface_declaration",
     "trait_declaration",
+    "enum_declaration",
     "method_declaration",
     "property_declaration",
   ]),
   skip: new Set(["namespace_use_declaration"]),
-  recurse: new Set(["declaration_list"]),
+  recurse: new Set(["declaration_list", "enum_declaration_list"]),
 };
 
 const scala: LanguageConfig = {
   grammar: "scala",
   outline: new Set([
     "function_definition",
+    "function_declaration",
     "class_definition",
     "object_definition",
     "trait_definition",
     "val_definition",
+    "val_declaration",
     "var_definition",
+    "var_declaration",
     "type_definition",
   ]),
   skip: new Set(["import_declaration"]),

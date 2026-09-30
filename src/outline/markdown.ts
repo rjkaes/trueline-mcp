@@ -3,13 +3,14 @@
  *
  * Single-pass state machine that extracts headings, YAML frontmatter,
  * and fenced code blocks by streaming the file line-by-line through
- * splitLines. Never loads the full file into memory.
+ * transcodedLines. Never loads the full file into memory.
  */
-import { splitLines } from "../line-splitter.ts";
+import { transcodedLines } from "../encoding.ts";
 import type { OutlineEntry } from "./extract.ts";
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
-const FENCE_OPEN_RE = /^(`{3,}|~{3,})(\s*(\S+))?/;
+// CommonMark allows up to 3 spaces of indent on a fence, opening or closing.
+const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(\s*(\S+))?/;
 const SETEXT_UNDERLINE_RE = /^ {0,3}(=+|-+)\s*$/;
 // Indented code, list items and block quotes: an underline below them is not a setext underline.
 const NON_PARAGRAPH_RE = /^( {4}|\t|\s*[-*+]\s|\s*\d+[.)]\s|\s*>)/;
@@ -30,7 +31,10 @@ enum State {
 }
 
 /** Extract outline entries from a markdown file by streaming it line-by-line. */
-export async function extractMarkdownOutline(filePath: string): Promise<{
+export async function extractMarkdownOutline(
+  filePath: string,
+  maxDepth = Infinity,
+): Promise<{
   entries: OutlineEntry[];
   totalLines: number;
 }> {
@@ -108,7 +112,7 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
 
       case State.IN_FENCE: {
         // Closing fence: same char, at least as many repeats, nothing else
-        const trimmed = line.trimEnd();
+        const trimmed = line.trimEnd().replace(/^ {0,3}(?=[`~])/, "");
         if (trimmed.length >= fenceCount && trimmed === fenceChar.repeat(trimmed.length)) {
           emitFence(lineNumber);
           state = State.NORMAL;
@@ -127,7 +131,7 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
         // Fenced code block
         const fenceMatch = FENCE_OPEN_RE.exec(line);
         // A backtick fence's info string cannot contain backticks: ```code``` is inline code.
-        if (fenceMatch && !(fenceMatch[1][0] === "`" && line.includes("`", fenceMatch[1].length))) {
+        if (fenceMatch && !(fenceMatch[1][0] === "`" && line.trimStart().includes("`", fenceMatch[1].length))) {
           state = State.IN_FENCE;
           paragraphStart = 0;
           blockOpen = "";
@@ -179,7 +183,8 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
   // ==============================================================================
   // Main loop: stream lines
   // ==============================================================================
-  for await (const { lineBytes, lineNumber } of splitLines(filePath)) {
+  const { lines } = await transcodedLines(filePath);
+  for await (const { lineBytes, lineNumber } of lines) {
     totalLines = lineNumber;
     processLine(lineBytes.toString("utf-8"), lineNumber);
   }
@@ -195,5 +200,5 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
     entries[lastHeadingIdx].endLine = totalLines;
   }
 
-  return { entries, totalLines };
+  return { entries: entries.filter((entry) => entry.depth <= maxDepth), totalLines };
 }

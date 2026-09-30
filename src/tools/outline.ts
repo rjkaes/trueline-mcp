@@ -5,7 +5,7 @@
  * Much smaller than reading the full file — useful for navigation and
  * understanding file structure before reading specific ranges.
  */
-import { readTextNoFollow } from "../line-splitter.ts";
+import { transcodedLines } from "../encoding.ts";
 import { extname } from "node:path";
 import { extractOutline, formatOutline } from "../outline/extract.ts";
 import type { OutlineEntry } from "../outline/extract.ts";
@@ -13,10 +13,12 @@ import { getLanguageConfig } from "../outline/languages.ts";
 import { extractMarkdownOutline } from "../outline/markdown.ts";
 import { extractXmlOutline } from "../outline/xml.ts";
 import {
+  binaryFileError,
   displayPath,
   expandGlobs,
   filterAbsolutePaths,
   isAbsolutePathArg,
+  isBinaryError,
   relativePathError,
   type ToolContext,
   validatePath,
@@ -97,21 +99,19 @@ async function outlineOneFile(
 
   // Streaming extractors (no tree-sitter, no full-file load)
   if (MARKDOWN_EXTENSIONS.has(ext)) {
-    return runStreamingExtractor("Markdown", () => extractMarkdownOutline(resolvedPath));
+    return runStreamingExtractor("Markdown", () => extractMarkdownOutline(resolvedPath, depth));
   }
 
   if (XML_EXTENSIONS.has(ext)) {
     return runStreamingExtractor("XML", () => extractXmlOutline(resolvedPath, depth));
   }
 
-  let source: string | null;
+  let source: string;
   try {
-    source = await readTextNoFollow(resolvedPath);
+    source = await readSource(resolvedPath);
   } catch (err: unknown) {
+    if (isBinaryError(err)) return binaryFileError(file_path);
     return errorResult(`Error reading file: ${(err as Error).message}`);
-  }
-  if (source === null) {
-    return errorResult(`"${file_path}" appears to be a binary file`);
   }
 
   const totalLines = source.split("\n").length;
@@ -131,6 +131,14 @@ async function outlineOneFile(
   } catch (err: unknown) {
     return errorResult(`Outline extraction failed: ${(err as Error).message}`);
   }
+}
+
+/** Decoded file text via the BOM-aware path trueline_read uses, so UTF-16 is not mistaken for binary. */
+async function readSource(filePath: string): Promise<string> {
+  const { lines } = await transcodedLines(filePath, { detectBinary: true });
+  const chunks: Buffer[] = [];
+  for await (const { lineBytes, eolBytes } of lines) chunks.push(lineBytes, eolBytes);
+  return Buffer.concat(chunks).toString("utf-8");
 }
 
 /** Shared try/format/empty-check/error-label plumbing for the streaming (markdown, XML) extractors. */

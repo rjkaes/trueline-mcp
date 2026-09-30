@@ -11,6 +11,26 @@ import type { Node as SyntaxNode } from "web-tree-sitter";
 // web-tree-sitter 0.25 types child slots as nullable.
 const childrenOf = (node: SyntaxNode): SyntaxNode[] => node.children.filter((c): c is SyntaxNode => c !== null);
 
+/** The node holding a declaration's body, looking through export, decorator and `const f = ...` wrappers. */
+function findBody(node: SyntaxNode): SyntaxNode | undefined {
+  let target: SyntaxNode | null = node;
+  while (target) {
+    const body = target.childForFieldName("body") ?? childrenOf(target).find((c) => c.type === "do_block");
+    if (body) return body;
+    target =
+      target.childForFieldName("definition") ?? // Python decorated_definition
+      target.childForFieldName("declaration") ??
+      target.childForFieldName("value") ??
+      childrenOf(target).find((c) => c.type === "variable_declarator") ??
+      // C++ template_declaration: the declaration follows the parameter list, unlabelled.
+      (target.type === "template_declaration"
+        ? childrenOf(target).find((c) => c.isNamed && !["template_parameter_list", "requires_clause"].includes(c.type))
+        : undefined) ??
+      null;
+  }
+  return undefined;
+}
+
 export interface OutlineEntry {
   /** 1-based start line */
   startLine: number;
@@ -22,6 +42,10 @@ export interface OutlineEntry {
   nodeType: string;
   /** First line of source for this node, trimmed */
   text: string;
+  /** Signature up to the body node, untruncated and without comments. Absent when the node has no body node. */
+  head?: string;
+  /** Where the body node starts (1-based line, 0-based column). Absent when the node has no body node. */
+  bodyStart?: { line: number; column: number };
 }
 
 /** Extract outline entries from source code. */
@@ -58,33 +82,50 @@ export async function extractOutline(
    * the signature by joining lines up through the closing paren and return type,
    * collapsing whitespace into single spaces. Truncates at 200 chars.
    */
-  function extractSignature(node: SyntaxNode): string {
+  function extractSignature(node: SyntaxNode): Pick<OutlineEntry, "text" | "head" | "bodyStart"> {
     const startRow = node.startPosition.row;
     const endRow = node.endPosition.row;
     const fl = lines[startRow]?.trimEnd() ?? "";
 
+    const body = findBody(node);
+    const bodyStart = body && { line: body.startPosition.row + 1, column: body.startPosition.column };
+    // Without a body node, a brace on the first line is taken as the body's.
+    const bodyOnFirstLine = body ? body.startPosition.row === startRow : fl.includes("{");
+
+    // Join and collapse internal whitespace, clean up signature formatting
+    const collapse = (parts: string[]): string =>
+      parts
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .replace(/\(\s+/g, "(")
+        .replace(/,\s*\)/g, ")")
+        .replace(/\s*\{\s*$/, "");
+
     // Single-line or short node — return as-is (preserving current behavior)
-    if (startRow === endRow || fl.includes("{")) {
-      return fl.length > 200 ? `${fl.slice(0, 197)}...` : fl;
+    if (startRow === endRow || bodyOnFirstLine) {
+      const text = fl.length > 200 ? `${fl.slice(0, 197)}...` : fl;
+      return { text, head: body && collapse([fl.slice(0, body.startPosition.column)]).trim(), bodyStart };
     }
 
     // Multi-line: join lines from startRow until we find the opening brace or
     // reach the end of the node, whichever comes first. A body also ends the join:
     // Python and Ruby have no brace, and their body starts on the line after the
     // signature. Elixir's `do` block starts on the signature's last line.
-    const definition = node.childForFieldName("definition") ?? node; // Python decorated_definition
-    const body = definition.childForFieldName("body") ?? childrenOf(definition).find((c) => c.type === "do_block");
     let lastRow = Math.min(endRow, startRow + 20);
+    // The head is not capped at 20 rows: a wrapped signature is compared whole.
+    let headLast: number | undefined;
     if (body) {
       const bodyRow = body.startPosition.row;
       const sharesRow = (lines[bodyRow] ?? "").slice(0, body.startPosition.column).trim() !== "";
-      lastRow = Math.min(lastRow, sharesRow ? bodyRow : bodyRow - 1);
+      headLast = sharesRow ? bodyRow : bodyRow - 1;
+      lastRow = Math.min(lastRow, headLast);
     }
+    const commentsUntil = Math.max(lastRow, headLast ?? 0);
     // A comment in the signature would make editing it read as a signature change.
     const comments: SyntaxNode[] = [];
     const collectComments = (parent: SyntaxNode): void => {
       for (const child of childrenOf(parent)) {
-        if (child.startPosition.row > lastRow) break;
+        if (child.startPosition.row > commentsUntil) break;
         if (child.type.includes("comment")) comments.push(child);
         else collectComments(child);
       }
@@ -94,8 +135,8 @@ export async function extractOutline(
     for (let next = node.nextSibling; next && next.startPosition.row === endRow; next = next.nextSibling) {
       if (next.type.includes("comment")) comments.push(next);
     }
-    const codeOnRow = (row: number): string => {
-      let line = lines[row] ?? "";
+    const codeOnRow = (row: number, end?: number): string => {
+      let line = (lines[row] ?? "").slice(0, end);
       // Right to left, so earlier columns stay valid.
       for (const comment of [...comments].reverse()) {
         if (comment.startPosition.row > row || comment.endPosition.row < row) continue;
@@ -109,18 +150,22 @@ export async function extractOutline(
     for (let row = startRow + 1; row <= lastRow; row++) {
       const line = codeOnRow(row);
       parts.push(line.trim());
-      if (line.includes("{")) break;
+      if (!body && line.includes("{")) break;
     }
 
-    // Join and collapse internal whitespace, clean up signature formatting
-    let sig = parts
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .replace(/\(\s+/g, "(")
-      .replace(/,\s*\)/g, ")")
-      .replace(/\s*\{\s*$/, "");
+    let head: string | undefined;
+    if (body && headLast !== undefined) {
+      const headParts: string[] = [];
+      for (let row = startRow; row <= headLast; row++) {
+        const line = codeOnRow(row, row === body.startPosition.row ? body.startPosition.column : undefined);
+        headParts.push(row === startRow ? line : line.trim());
+      }
+      head = collapse(headParts).trim();
+    }
+
+    let sig = collapse(parts);
     if (sig.length > 200) sig = `${sig.slice(0, 197)}...`;
-    return sig;
+    return { text: sig, head, bodyStart };
   }
 
   // Track skipped nodes to emit a collapsed summary
@@ -178,7 +223,7 @@ export async function extractOutline(
       return;
     }
 
-    if (config.outline.has(node.type)) {
+    if (config.outline.has(node.type) && (config.include?.(node) ?? true)) {
       // Flush any pending skipped nodes before this entry
       if (isRootChild) flushSkipped();
 
@@ -187,7 +232,7 @@ export async function extractOutline(
         endLine: lastLine(node),
         depth,
         nodeType: node.type,
-        text: extractSignature(node),
+        ...extractSignature(node),
       });
 
       // For recurse types (e.g. class_body), visit their children to extract
