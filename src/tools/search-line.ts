@@ -50,12 +50,11 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
     if (captured) {
       matchesCaptured++;
 
-      if (currentLines === null) {
-        // Drain pre-context into the new window
-        currentLines = pre.splice(0);
-      }
-
-      currentLines.push(decoded);
+      // Gap lines since the last window join it (there are at most contextLines of
+      // them, or it was flushed), so windows with touching context merge as in
+      // multiline mode.
+      currentLines ??= [];
+      currentLines.push(...pre.splice(0), decoded);
       postRemaining = contextLines;
 
       if (matchesCaptured >= maxMatches && postRemaining === 0) {
@@ -68,17 +67,16 @@ export async function searchLineByLine(params: EngineParams): Promise<FileSearch
       if (postRemaining === 0 && matchesCaptured >= maxMatches) {
         flush();
         done = true;
-      } else if (postRemaining === 0) {
-        flush();
       }
     } else {
-      // context_lines=0: a non-match line arrives while currentLines is open but
-      // postRemaining is already 0.  Flush now so the next match starts a fresh
-      // window -- otherwise non-adjacent matches merge into one sparse window
-      // whose checksum excludes intermediate lines, causing edit verification to fail.
-      flush();
+      // The window stays open while a next match could still merge into it. Once the
+      // gap outgrows contextLines it cannot, and merging across it would leave a
+      // sparse window whose checksum excludes the lines between, failing edit verification.
       pre.push(decoded);
-      if (pre.length > contextLines) pre.shift();
+      if (pre.length > contextLines) {
+        flush();
+        pre.shift();
+      }
     }
   }
 

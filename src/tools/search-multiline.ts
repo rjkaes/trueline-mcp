@@ -25,13 +25,17 @@ export async function searchMultiline(params: MultilineEngineParams): Promise<Fi
   const lines: BufferedLine[] = [];
 
   const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
-  for await (const { lineBytes, lineNumber } of transcoded.lines) {
+  let endsWithEol = false;
+  for await (const { lineBytes, eolBytes, lineNumber } of transcoded.lines) {
     lines.push({ lineNumber, text: lineBytes.toString("utf-8"), bytes: lineBytes });
+    endsWithEol = eolBytes.length > 0;
   }
 
   // Join lines and build a character-offset-to-line-index map
   const lineTexts = lines.map((l) => l.text);
-  const joined = lineTexts.join("\n");
+  // The last line's EOL stays, or a pattern like `\}\n` cannot match at EOF. Its offset
+  // belongs to that last line, so lineOffsets needs no extra entry.
+  const joined = `${lineTexts.join("\n")}${endsWithEol ? "\n" : ""}`;
 
   const lineOffsets: number[] = [];
   let offset = 0;

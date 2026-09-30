@@ -151,9 +151,13 @@ export function coerceParams(val: unknown): unknown {
   // Coerce stringified integers for known numeric fields
   for (const numKey of NUMERIC_KEYS) {
     if (numKey in result && typeof result[numKey] === "string") {
-      const parsed = Number(result[numKey]);
-      if (Number.isFinite(parsed) && Number.isInteger(parsed)) {
-        result[numKey] = parsed;
+      const digits = (result[numKey] as string).trim();
+      if (digits === "") {
+        // Blank means not given, so the default applies; Number("") would be 0.
+        delete result[numKey];
+      } else if (/^\d+$/.test(digits) && Number.isSafeInteger(Number(digits))) {
+        // Decimal digits only, as parse.ts does; Number() also takes "0x10" and "1e1".
+        result[numKey] = Number(digits);
       }
     }
   }
@@ -179,6 +183,12 @@ export function coerceParams(val: unknown): unknown {
               "trueline_edit requires {range, ref, content}. " +
               "Use trueline_search to find the target lines, then pass the range and ref from its output.",
           );
+        }
+
+        // new_string is built-in Edit's name for the replacement text. Dropping it
+        // would turn a range edit into a delete.
+        if ("range" in e && (e.content === null || e.content === undefined) && typeof e.new_string === "string") {
+          e.content = e.new_string;
         }
 
         // content: null/undefined → "" (delete lines)

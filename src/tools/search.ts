@@ -66,7 +66,12 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   // Search each file, tracking global match budget
   let matchBudget = maxMatches;
   const results: FileSearchResult[] = [];
-  const multiFile = filePaths.length > 1 || rejectedSections.length > 0;
+  // Headers follow what expansion did: a glob result differs from the entry written, while
+  // an existing path that merely contains glob characters passes through unchanged.
+  const literalEntries = new Set(
+    candidatePaths.map((entry) => (process.platform === "win32" ? entry.replaceAll("\\", "/") : entry)),
+  );
+  const multiFile = rawPaths.length > 1 || filePaths.some((entry) => !literalEntries.has(entry));
 
   let searchFile: (resolvedPath: string, maxMatches: number) => Promise<FileSearchResult>;
 
@@ -185,9 +190,10 @@ function formatResults(
   }
 
   if (grandTotal === 0) {
-    let msg = multiFile
-      ? `No matches for pattern "${pattern}" across ${filePaths.length} files`
-      : `No matches for pattern "${pattern}" in ${displayPath(filePaths[0], projectDir)}`;
+    let msg =
+      filePaths.length > 1
+        ? `No matches for pattern "${pattern}" across ${filePaths.length} files`
+        : `No matches for pattern "${pattern}" in ${displayPath(filePaths[0], projectDir)}`;
     // Every match was skipped for length, so "No matches" would be false.
     if (oversize > 0) msg = `Pattern "${pattern}" matched, but ${oversizeNote}`;
     if (!isRegex && /[.*+?^${}()|[\]\\]/.test(pattern)) {
@@ -254,7 +260,7 @@ function formatResults(
   if (grandTotal > maxMatches || anyCapped) {
     parts.push("");
     const countLabel = anyCapped ? `${grandTotal}+` : `${grandTotal}`;
-    const scope = multiFile ? ` across ${filePaths.length} files` : "";
+    const scope = filePaths.length > 1 ? ` across ${filePaths.length} files` : "";
     parts.push(`(showing ${maxMatches} of ${countLabel} matches${scope} — increase max_matches to see more)`);
   }
 

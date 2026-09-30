@@ -97,7 +97,14 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   let truncated = false;
 
   // Resolve encoding before streaming — transcodedLines peeks at the BOM.
-  const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
+  // It refuses UTF-32 there; as a result, not a throw, a batch read keeps its other files.
+  let transcoded: Awaited<ReturnType<typeof transcodedLines>>;
+  try {
+    transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
+  } catch (err: unknown) {
+    if (isBinaryError(err)) return errorResult(`"${file_path}": ${err.message}`);
+    throw err;
+  }
   const { bomInfo } = transcoded;
 
   try {
@@ -134,18 +141,20 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       // Within current range — hash and output
       const h = fnv1aHashBytes(lineBytes);
       const letters = hashToLetters(h);
-      if (rangeFirstLine === 0) {
-        rangeFirstLine = lineNumber;
-        rangeFirstLetters = letters;
-      }
       const prefix = Buffer.from(`${letters}${lineNumber}\t`);
       const lineLen = prefix.length + lineBytes.length + 1;
 
       // Check output limits before committing this line
-      outputLines++;
-      if (outputLines > MAX_OUTPUT_LINES || outputLen + lineLen > MAX_OUTPUT_BYTES) {
+      if (outputLines >= MAX_OUTPUT_LINES || outputLen + lineLen > MAX_OUTPUT_BYTES) {
+        // Boundary context is not a requested line, so dropping it is not truncation.
+        if (!requestedRanges.some((r) => lineNumber >= r.start && lineNumber <= r.end)) continue;
         truncated = true;
         break;
+      }
+      outputLines++;
+      if (rangeFirstLine === 0) {
+        rangeFirstLine = lineNumber;
+        rangeFirstLetters = letters;
       }
 
       rangeLastLine = lineNumber;
@@ -191,7 +200,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   // Append truncation notice so the agent knows to use narrower ranges
   if (truncated) {
-    const reason = outputLines > MAX_OUTPUT_LINES ? `${MAX_OUTPUT_LINES} line` : "20 MB output";
+    const reason = outputLines >= MAX_OUTPUT_LINES ? `${MAX_OUTPUT_LINES} line` : "20 MB output";
     const notice = `\n\n(truncated at ${reason} limit — use ranges for specific sections)`;
     trailer += notice;
   }
@@ -234,7 +243,9 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
 
   // Only user-supplied entries carry inline ranges (e.g. "src/foo.ts:10-25").
   // A glob match is a real filename, so one named "backup:5" is never split.
-  const literalEntries = new Set(candidates.map((entry) => entry.replaceAll("\\", "/")));
+  const literalEntries = new Set(
+    candidates.map((entry) => (process.platform === "win32" ? entry.replaceAll("\\", "/") : entry)),
+  );
   const parsed = expanded.map((entry) =>
     literalEntries.has(entry) ? parseFilePathWithRanges(entry) : { path: entry, rangeSpecs: undefined },
   );
@@ -248,8 +259,13 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
     );
   }
 
+  // A glob or several paths get headers even when one file matches, so the output
+  // names the file it came from. An existing path that merely contains glob
+  // characters passes expansion unchanged and is a literal.
+  const headed = file_paths.length > 1 || expanded.some((entry) => !literalEntries.has(entry));
+
   // Single file: top-level ranges still work for backward compat
-  if (parsed.length === 1 && rejectedSections.length === 0) {
+  if (parsed.length === 1 && rejectedSections.length === 0 && !headed) {
     const fp = parsed[0];
     const effectiveRanges = fp.rangeSpecs ?? ranges;
     return handleRead({ ...rest, file_path: fp.path, ranges: effectiveRanges });
@@ -259,7 +275,7 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
   // bad path from a glob doesn't abort the entire batch.
   const parts: string[] = [...rejectedSections];
   for (const fp of parsed) {
-    const result = await handleRead({ ...rest, file_path: fp.path, ranges: fp.rangeSpecs });
+    const result = await handleRead({ ...rest, file_path: fp.path, ranges: fp.rangeSpecs ?? ranges });
     const text = (result.content[0] as { text: string }).text;
     parts.push(`--- ${displayPath(fp.path, rest.projectDir)} ---\n${result.isError ? "error: " : ""}${text}`);
   }
