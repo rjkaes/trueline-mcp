@@ -2,10 +2,11 @@ import { readTextNoFollow } from "../line-splitter.ts";
 import { lcsMiddle, trimCommonEnds } from "../diff-collector.ts";
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { extractSymbols, diffSymbols, type SymbolDiff } from "../semantic-diff.ts";
-import { getLanguageConfig } from "../outline/languages.ts";
+import { extractSymbols, diffSymbols, normalizeBody, type SymbolDiff } from "../semantic-diff.ts";
+import { getLanguageConfig, type LanguageConfig } from "../outline/languages.ts";
 import {
   checkPathBoundary,
+  displayPath,
   gitExec,
   isAbsolutePathArg,
   relativePathError,
@@ -47,7 +48,18 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   if (filePaths.length === 1 && filePaths[0] === "*") {
     const kind = await checkRefOnce();
     if (kind === "invalid") return invalidRef;
-    const changed = await getChangedFiles(cwd, kind === "unborn" ? undefined : compare_against);
+    let changed: Awaited<ReturnType<typeof getChangedFiles>>;
+    try {
+      changed = await getChangedFiles(cwd, kind === "unborn" ? undefined : compare_against);
+    } catch (err) {
+      // A long untracked list overflows gitExec's buffer: answer, rather than reject as an internal error.
+      const { code, stderr = "", message } = err as Error & { code?: string; stderr?: string };
+      const reason =
+        code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+          ? "git's file list is over the 10 MB limit"
+          : (stderr || message).trim().split("\n")[0];
+      return errorResult(`Could not list the changed files: ${reason}. Pass explicit file_paths instead of "*".`);
+    }
     filePaths = changed.files;
     renamedFrom = Promise.resolve(changed.renamedFrom);
     if (filePaths.length === 0) {
@@ -76,6 +88,8 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
       // ref. Rerun its boundary checks (checkPathBoundary) on the nearest existing
       // ancestor plus the missing tail; content then comes from git, not disk.
       const absolute = resolve(cwd, filePath);
+      // Project-relative like every other header; a path that failed validation has no realpath to derive one from.
+      const shown = isAbsolute(filePath) ? displayPath(filePath, cwd) : filePath;
       // Something is on disk (denied, oversize, not a regular file), so this is not a deletion. "*" never is.
       if (
         filePath === "*" ||
@@ -84,13 +98,19 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
           () => false,
         ))
       ) {
-        sections.push(`## ${filePath}\n\nAccess denied.`);
+        // Deny and boundary refusals stay generic; any other reason says what is wrong with the path itself.
+        const refusal = (validated.error.content[0] as { text: string }).text;
+        const reason =
+          filePath === "*" || refusal.startsWith("Access denied")
+            ? "Access denied."
+            : `${refusal.replace(`"${filePath}"`, () => `"${shown}"`)}.`;
+        sections.push(`## ${shown}\n\n${reason}`);
         continue;
       }
       resolvedPath = await resolveMissingPath(absolute);
       const boundary = await checkPathBoundary(filePath, absolute, resolvedPath, "Read", projectDir, allowedDirs);
       if (!boundary.ok) {
-        sections.push(`## ${filePath}\n\nAccess denied.`);
+        sections.push(`## ${shown}\n\nAccess denied.`);
         continue;
       }
       deletedOnDisk = true;
@@ -173,7 +193,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     ]);
 
     const diff = diffSymbols(oldSymbols, newSymbols);
-    sections.push(formatDiffSection(relPath, diff, compare_against));
+    sections.push(formatDiffSection(relPath, diff, compare_against, getLanguageConfig(ext)?.whitespaceMode));
   }
 
   return textResult(sections.join("\n\n"));
@@ -293,7 +313,12 @@ async function getChangedFiles(
 /** Threshold: inline mini-diff for body changes <= this many lines different */
 const INLINE_DIFF_THRESHOLD = 5;
 
-function formatDiffSection(relPath: string, diff: SymbolDiff, ref: string): string {
+function formatDiffSection(
+  relPath: string,
+  diff: SymbolDiff,
+  ref: string,
+  whitespaceMode?: LanguageConfig["whitespaceMode"],
+): string {
   const hasChanges =
     diff.added.length +
       diff.removed.length +
@@ -332,7 +357,7 @@ function formatDiffSection(relPath: string, diff: SymbolDiff, ref: string): stri
   if (diff.logicChanged.length > 0) {
     parts.push("\nbody:");
     for (const s of diff.logicChanged) {
-      const miniDiff = computeMiniDiff(s.oldBody, s.newBody);
+      const miniDiff = computeMiniDiff(s.oldBody, s.newBody, whitespaceMode);
       if (miniDiff) {
         parts.push(`- \`${s.name}\`:\n${miniDiff}`);
       } else {
@@ -345,11 +370,18 @@ function formatDiffSection(relPath: string, diff: SymbolDiff, ref: string): stri
 }
 
 /** Compute a mini inline diff if the change is small enough. */
-export function computeMiniDiff(oldBody?: string, newBody?: string): string | null {
+export function computeMiniDiff(
+  oldBody?: string,
+  newBody?: string,
+  whitespaceMode?: LanguageConfig["whitespaceMode"],
+): string | null {
   if (!oldBody || !newBody) return null;
 
-  const oldLines = oldBody.split("\n");
-  const newLines = newBody.split("\n");
+  // Compare what the logic-change test compares, in the language's whitespace mode: a difference it ignores
+  // (line endings, blank lines, and indentation outside Python-like languages) is no change here and takes no
+  // share of the inline-diff budget.
+  const oldLines = normalizeBody(oldBody, whitespaceMode).split("\n");
+  const newLines = normalizeBody(newBody, whitespaceMode).split("\n");
 
   // Use LCS (longest common subsequence) to find the minimal diff.
   // The greedy approach fails for insertions that shift all lines.
@@ -366,5 +398,5 @@ export function computeMiniDiff(oldBody?: string, newBody?: string): string | nu
   const totalDiffLines = removed.length + added.length;
   if (totalDiffLines === 0 || totalDiffLines > INLINE_DIFF_THRESHOLD) return null;
 
-  return [...removed.map((r) => `-${r.trim()}`), ...added.map((a) => `+${a.trim()}`)].join("\n");
+  return [...removed.map((r) => `-${r}`), ...added.map((a) => `+${a}`)].join("\n");
 }

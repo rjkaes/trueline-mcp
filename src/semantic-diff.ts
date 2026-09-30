@@ -121,7 +121,12 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
       const normalized = /[^\s{}]/.test(body) ? normalizeBody(body, wsMode) : "";
       // The entry's text is cut at 200 chars, which a long decorator can push the name past.
       const nameSource = entry.head ?? entry.text;
-      const name = extractName(constIsModifier ? nameSource.replace(/\bconst\b/g, "") : nameSource);
+      // `typedef struct {` ends before the type name, which follows the closing brace. Without it every
+      // anonymous typedef in a file shares one name and one signature, and pairs with the wrong partner.
+      const typedefName = /^\s*typedef\s+(?:struct|union|enum)\s*$/.test(nameSource.split("{", 1)[0])
+        ? bodyText.slice(bodyText.lastIndexOf("}") + 1).match(/^\s*\**\s*([\p{ID_Continue}$]+)/u)?.[1]
+        : undefined;
+      const name = typedefName ?? extractName(constIsModifier ? nameSource.replace(/\bconst\b/g, "") : nameSource);
       parents.length = entry.depth;
       const scope = parents.join(".");
       parents.push(name);
@@ -141,44 +146,54 @@ export async function extractSymbols(source: string, ext: string): Promise<Symbo
 const CONST_IS_MODIFIER = new Set(["c", "cpp"]);
 
 // Declaration keywords stack (`enum class`, `pub const fn`, `class func`): the name follows the last.
+// A qualified name keeps every segment (Ruby `Admin::Users`, Kotlin `String.shout`, Elixir `Billing.Invoices`):
+// renaming the last one is then a rename, and the same name under two qualifiers stays two symbols.
 // Ruby's `def self.find` is named `find`; Kotlin allows backticked names with spaces.
 const DECLARED_NAME =
-  /\b(?:(?:function|class|interface|type|enum|struct|trait|mod|namespace|object|protocol|extension|module|const|let|var|val|def|defp|defmacro|defmacrop|defmodule|defprotocol|defimpl|fn|func|fun|pub\s+fn|async\s+function)\s+)+(?:self\.)?(\w+|`[^`]+`)/g;
+  /\b(?:(?:function|class|interface|type|enum|struct|trait|mod|namespace|object|protocol|extension|module|const|let|var|val|def|defp|defmacro|defmacrop|defmodule|defprotocol|defimpl|fn|func|fun|pub\s+fn|async\s+function)\s+)+(?:self\.)?(\p{ID_Continue}+(?:(?:::|\.)\p{ID_Continue}+)*|`[^`]+`)/gu;
+
+// Operator methods are named by symbols, not an identifier: Ruby `def ==(o)`, `def []=`, `def -@`, Swift
+// `static func + (a, b)`. Followed by a space or `(`, so the `<` of Kotlin's `fun <T> f()` is not one.
+const OPERATOR_METHOD = /\b(?:def|func|fun)\s+(\[\]=?|[-+*/%=!<>~&|^?.]+@?)(?=\s|\(|$)/;
 
 /** Extract a human-readable name from a signature line. */
 function extractName(sig: string): string {
   // Go method: qualify by receiver type so `A.Run` and `B.Run` stay distinct.
-  const goMethod = sig.match(/^\s*func\s*\((?:[^)]*[\s*])?(\w+)(?:\[[^\]]*\])?\)\s*(\w+)/);
+  const goMethod = sig.match(/^\s*func\s*\((?:[^)]*[\s*])?(\p{ID_Continue}+)(?:\[[^\]]*\])?\)\s*(\p{ID_Continue}+)/u);
   if (goMethod) return `${goMethod[1]}.${goMethod[2]}`;
   // Rust impl: keep the whole target so `impl Foo` and `impl Show for Foo` differ.
   const impl = sig.match(/^\s*(?:unsafe\s+)?impl(?=[\s<])\s*(.+?)\s*(?:\{|\bwhere\b|$)/);
   if (impl) return `impl ${impl[1]}`;
+  const operatorMethod = sig.match(OPERATOR_METHOD);
+  if (operatorMethod) return operatorMethod[1];
   // A keyword inside parentheses is a parameter's qualifier (`int f(const char *s)`), not a declaration.
   for (const match of sig.matchAll(DECLARED_NAME)) {
     const before = sig.slice(0, match.index);
     if (before.split("(").length <= before.split(")").length) return match[1].replaceAll("`", "");
   }
-  const bare = sig.replace(/@\w+(?:\([^)]*\))?\s*/g, "");
+  const bare = sig.replace(/@\p{ID_Continue}+(?:\([^)]*\))?\s*/gu, "");
   // C++ operators: `operator==` and `operator()` are names, not calls of `operator`.
   const op = bare.match(
-    /((?:[\w$~]+::)*)(?<![\w$])operator(?![\w$])\s*(\(\s*\)|\[\s*\]|[^\s\w()[\]]+|\w[\w:]*)(?=\s*\()/,
+    /((?:[\p{ID_Continue}$~]+::)*)(?<![\p{ID_Continue}$])operator(?![\p{ID_Continue}$])\s*(\(\s*\)|\[\s*\]|[^\s\p{ID_Continue}()[\]]+|\p{ID_Continue}[\p{ID_Continue}:]*)(?=\s*\()/u,
   );
-  if (op) return `${op[1]}operator${/^\w/.test(op[2]) ? " " : ""}${op[2].replace(/\s+/g, "")}`;
+  if (op) return `${op[1]}operator${/^\p{ID_Continue}/u.test(op[2]) ? " " : ""}${op[2].replace(/\s+/g, "")}`;
   // Function-pointer declarator (`void (*cb)(int)`): the name sits in the first parentheses, past a `*`, and
   // those parentheses are followed by the pointer's own parameter list (a call's `(*args)` is not).
-  const fnPtr = bare.match(/^[^(=]*\(\s*\*+\s*([\w$]+)(?:\[[^\]]*\]|\([^()]*\))*\s*\)\s*\(/);
+  const fnPtr = bare.match(/^[^(=]*\(\s*\*+\s*([\p{ID_Continue}$]+)(?:\[[^\]]*\]|\([^()]*\))*\s*\)\s*\(/u);
   if (fnPtr) return fnPtr[1];
   // Method-like: the identifier before the first `(`, past modifiers and return types. It may be optional (`m?(`).
-  const methodMatch = bare.match(/((?:[\w$~]+::)*[\w$~]+)\??\s*(?:<[^>]*>)?\s*\(/);
+  const methodMatch = bare.match(/((?:[\p{ID_Continue}$~]+::)*[\p{ID_Continue}$~]+)\??\s*(?:<[^>]*>)?\s*\(/u);
   // A `=` before the name makes it a call in an initializer (`items = new ArrayList<>()`): a field.
   if (methodMatch && !bare.slice(0, methodMatch.index).includes("=")) return methodMatch[1];
   // Field or property: the last identifier before its initializer, type annotation, or accessor block.
   // Modifiers (`private`, `public static`) come first, so they are never the last word.
   // A quoted key (`"content-type": string`) or an optional member (`host?: string`) is still the name.
-  const field = bare.split(/[=;:{]/, 1)[0].match(/(?:([\w$]+)|["']([^"']+)["'])[?!]?\s*(?:\[[^\]]*\]\s*)*$/);
+  const field = bare
+    .split(/[=;:{]/, 1)[0]
+    .match(/(?:([\p{ID_Continue}$]+)|["']([^"']+)["'])[?!]?\s*(?:\[[^\]]*\]\s*)*$/u);
   if (field) return field[1] ?? field[2];
   // Fallback: first word-like token
-  const fallback = bare.match(/(\w+)/);
+  const fallback = bare.match(/(\p{ID_Continue}+)/u);
   return fallback ? fallback[1] : sig.slice(0, 40);
 }
 
@@ -205,7 +220,9 @@ export function diffSymbols(oldSyms: SymbolInfo[], newSyms: SymbolInfo[]): Symbo
       .slice(s.name.lastIndexOf(".") + 1)
       .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
       .replace(/\s+/g, "\\s*");
-    return normalizeBody(rawHead(s).replace(new RegExp(`(?<![\\w$])${bare}(?![\\w$])`), ""));
+    return normalizeBody(
+      rawHead(s).replace(new RegExp(`(?<![\\p{ID_Continue}$])${bare}(?![\\p{ID_Continue}$])`, "u"), ""),
+    );
   };
 
   const pairs = new Map<SymbolInfo, SymbolInfo>();
