@@ -1,8 +1,9 @@
 import { describe, expect, test, beforeAll } from "bun:test";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { run } from "./helpers.ts";
+import { CLI, run } from "./helpers.ts";
 
 let tmpDir: string;
 let tsFile: string;
@@ -52,5 +53,43 @@ describe("outline subcommand", () => {
   test("exits promptly once output is written", () => {
     // A pending WASM-init timeout timer once held the process open for 10 s.
     expect(outlineElapsedMs).toBeLessThan(5_000);
+  });
+});
+
+interface Invocation {
+  cwd?: string;
+  env?: Record<string, string>;
+  input?: string;
+}
+
+// Unlike run() this supports cwd and stdin, and strips an inherited
+// CLAUDE_PROJECT_DIR so results do not depend on the shell the suite runs from.
+function trueline(args: string[], opts: Invocation = {}) {
+  const env: Record<string, string | undefined> = { ...process.env, TRUELINE_ALLOWED_DIRS: tmpDir, ...opts.env };
+  if (opts.env?.CLAUDE_PROJECT_DIR === undefined) delete env.CLAUDE_PROJECT_DIR;
+  const result = spawnSync("bun", [CLI, ...args], {
+    cwd: opts.cwd ?? tmpDir,
+    env,
+    input: opts.input ?? "",
+    encoding: "utf-8",
+    timeout: 20_000,
+  });
+  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", exitCode: result.status ?? -1 };
+}
+
+function scratch(name: string, files: Record<string, string>): string {
+  const dir = join(tmpDir, name);
+  mkdirSync(dir, { recursive: true });
+  for (const [fileName, content] of Object.entries(files)) writeFileSync(join(dir, fileName), content);
+  return dir;
+}
+
+// Zod enforces these minimums for the MCP tools; the CLI skips zod, so io.ts does.
+describe("numeric flags", () => {
+  test.each(["1x", "-1", "1e3"])("outline --depth %s exits 3", (value) => {
+    const dir = scratch("outline-depth", { "m.ts": "export function a() {}\n" });
+    const { exitCode, stderr } = trueline(["outline", join(dir, "m.ts"), "--depth", value]);
+    expect(exitCode).toBe(3);
+    expect(stderr).toContain("--depth");
   });
 });

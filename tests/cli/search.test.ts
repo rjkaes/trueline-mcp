@@ -1,8 +1,9 @@
 import { describe, expect, test, beforeAll } from "bun:test";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { run } from "./helpers.ts";
+import { CLI, run } from "./helpers.ts";
 
 let tmpDir: string;
 let testFile: string;
@@ -75,5 +76,70 @@ describe("search subcommand", () => {
     const { stdout, exitCode } = run(tmpDir, "search", "--", "-foo", dashedFile);
     expect(exitCode).toBe(0);
     expect(stdout).toContain("-foo");
+  });
+});
+
+interface Invocation {
+  cwd?: string;
+  env?: Record<string, string>;
+  input?: string;
+}
+
+// Unlike run() this supports cwd and stdin, and strips an inherited
+// CLAUDE_PROJECT_DIR so results do not depend on the shell the suite runs from.
+function trueline(args: string[], opts: Invocation = {}) {
+  const env: Record<string, string | undefined> = { ...process.env, TRUELINE_ALLOWED_DIRS: tmpDir, ...opts.env };
+  if (opts.env?.CLAUDE_PROJECT_DIR === undefined) delete env.CLAUDE_PROJECT_DIR;
+  const result = spawnSync("bun", [CLI, ...args], {
+    cwd: opts.cwd ?? tmpDir,
+    env,
+    input: opts.input ?? "",
+    encoding: "utf-8",
+    timeout: 20_000,
+  });
+  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", exitCode: result.status ?? -1 };
+}
+
+function scratch(name: string, files: Record<string, string>): string {
+  const dir = join(tmpDir, name);
+  mkdirSync(dir, { recursive: true });
+  for (const [fileName, content] of Object.entries(files)) writeFileSync(join(dir, fileName), content);
+  return dir;
+}
+
+describe("option values", () => {
+  test("search -m with a non-number is rejected, not an empty exit-0 result", () => {
+    const dir = scratch("nan-max", { "f.txt": "alpha\nbeta\n" });
+    const { stdout, exitCode } = trueline(["search", "beta", join(dir, "f.txt"), "-m", "abc"]);
+    expect(exitCode !== 0 || stdout.includes("beta")).toBe(true);
+  });
+});
+
+// Zod enforces these minimums for the MCP tools; the CLI skips zod, so io.ts does.
+describe("numeric flags", () => {
+  const searchWith = (...flags: string[]) => {
+    const dir = scratch("numeric-flags", { "f.txt": "alpha\nbeta\n" });
+    return trueline(["search", "beta", join(dir, "f.txt"), ...flags]);
+  };
+
+  test.each([
+    ["--max", "12abc"],
+    ["--max", "1e3"],
+    ["--max", "1.5"],
+    ["--max", "-1"],
+    ["--max", "0"],
+    ["--max-match-lines", "0"],
+    ["--context", "2x"],
+    ["--context", "-1"],
+  ])("search %s %s exits 3", (flag, value) => {
+    const { exitCode, stderr } = searchWith(flag, value);
+    expect(exitCode).toBe(3);
+    expect(stderr).toContain(flag);
+  });
+
+  test("search accepts --context 0 with positive --max and --max-match-lines", () => {
+    const { stdout, exitCode } = searchWith("--context", "0", "--max", "5", "--max-match-lines", "3");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("beta");
   });
 });

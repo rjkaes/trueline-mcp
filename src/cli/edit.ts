@@ -1,7 +1,16 @@
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleEdit } from "../tools/edit.ts";
 import type { EditInput } from "../tools/shared.ts";
-import { type CliSubcommand, emitResult, jsonFlag, loadAtOrDashOrLiteral, parseCliArgs, UsageError } from "./io.ts";
+import {
+  type CliSubcommand,
+  emitResult,
+  fromCwd,
+  jsonFlag,
+  loadAtOrDashOrLiteral,
+  parseCliArgs,
+  parseIntFlag,
+  UsageError,
+} from "./io.ts";
 
 const OPTIONS = {
   edits: { type: "string" },
@@ -24,7 +33,7 @@ Options:
   --edits <edits>          JSON edit array: @file, - (stdin), or JSON string
   --ref <ref>              Ref from a prior trueline read (single-edit shorthand)
   --range <range>          Range in hashLine format (single-edit shorthand)
-  --content <content>      Replacement content: literal, @file, or - (stdin)
+  --content <content>      Replacement content: literal, @file, or - (stdin); @@ escapes a leading @
   --action <action>        Edit action: replace (default) or insert_after
   --dry-run                Preview edits as unified diff without writing
   --context-lines <n>      Lines of hashLine context to return around each edit site
@@ -62,16 +71,17 @@ export default {
   usage: USAGE,
   async run(argv: string[]): Promise<void> {
     const { values: args, positionals: paths } = parseCliArgs(argv, OPTIONS);
-    if (paths.length === 0) {
-      throw new UsageError("edit requires a file path");
+    if (paths.length !== 1) {
+      throw new UsageError("edit requires exactly one file path");
     }
-    const filePath = paths[0];
+    const filePath = fromCwd(paths[0]);
 
-    const hasFlatFlags = args.ref !== undefined || args.range !== undefined || args.content !== undefined;
+    const hasFlatFlags =
+      args.ref !== undefined || args.range !== undefined || args.content !== undefined || args.action !== undefined;
 
     // Mutually exclusive: --edits vs flat flags
     if (args.edits !== undefined && hasFlatFlags) {
-      throw new UsageError("--edits and --ref/--range/--content are mutually exclusive");
+      throw new UsageError("--edits and --ref/--range/--content/--action are mutually exclusive");
     }
 
     // Both --edits - and --content - would consume stdin
@@ -98,7 +108,7 @@ export default {
     }
     const edits = parseEditsArg(raw);
 
-    const contextLines = args["context-lines"] !== undefined ? Number.parseInt(args["context-lines"], 10) : undefined;
+    const contextLines = parseIntFlag("context-lines", args["context-lines"], 0);
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 

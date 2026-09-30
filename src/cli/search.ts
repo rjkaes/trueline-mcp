@@ -1,6 +1,6 @@
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleSearch } from "../tools/search.ts";
-import { type CliSubcommand, emitResult, jsonFlag, parseCliArgs, UsageError } from "./io.ts";
+import { type CliSubcommand, emitResult, fromCwd, jsonFlag, parseCliArgs, parseIntFlag, UsageError } from "./io.ts";
 
 const OPTIONS = {
   "ignore-case": { type: "boolean", short: "i", default: false },
@@ -41,16 +41,15 @@ export default {
       throw new UsageError("paths required");
     }
 
-    const contextLines = args.context !== undefined ? Number.parseInt(args.context, 10) : undefined;
-    const maxMatches = args.max !== undefined ? Number.parseInt(args.max, 10) : undefined;
-    const maxMatchLines =
-      args["max-match-lines"] !== undefined ? Number.parseInt(args["max-match-lines"], 10) : undefined;
+    const contextLines = parseIntFlag("context", args.context, 0);
+    const maxMatches = parseIntFlag("max", args.max, 1);
+    const maxMatchLines = parseIntFlag("max-match-lines", args["max-match-lines"], 1);
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 
     const result = await handleSearch({
       pattern,
-      file_paths: paths,
+      file_paths: paths.map(fromCwd),
       case_insensitive: Boolean(args["ignore-case"]),
       regex: Boolean(args.regex),
       multiline: Boolean(args.multiline),

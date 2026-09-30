@@ -1,6 +1,14 @@
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleVerify } from "../tools/verify.ts";
-import { type CliSubcommand, emitResult, jsonFlag, loadAtOrDashOrLiteral, parseCliArgs, UsageError } from "./io.ts";
+import {
+  type CliSubcommand,
+  emitResult,
+  fromCwd,
+  jsonFlag,
+  loadAtOrDashOrLiteral,
+  parseCliArgs,
+  UsageError,
+} from "./io.ts";
 
 const OPTIONS = {
   refs: { type: "string", multiple: true },
@@ -53,10 +61,10 @@ export default {
   usage: USAGE,
   async run(argv: string[]): Promise<void> {
     const { values: args, positionals: paths } = parseCliArgs(argv, OPTIONS);
-    if (paths.length === 0) {
-      throw new UsageError("verify requires a file path");
+    if (paths.length !== 1) {
+      throw new UsageError("verify requires exactly one file path");
     }
-    const filePath = paths[0];
+    const filePath = fromCwd(paths[0]);
 
     const refs = parseRefsArg(args.refs ?? []);
 

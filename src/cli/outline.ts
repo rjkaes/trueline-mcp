@@ -1,6 +1,6 @@
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleOutline } from "../tools/outline.ts";
-import { type CliSubcommand, emitResult, jsonFlag, parseCliArgs, UsageError } from "./io.ts";
+import { type CliSubcommand, emitResult, fromCwd, jsonFlag, parseCliArgs, parseIntFlag, UsageError } from "./io.ts";
 
 const OPTIONS = {
   json: jsonFlag,
@@ -24,15 +24,12 @@ export default {
       throw new UsageError("outline requires at least one file path");
     }
 
-    const depthVal = args.depth !== undefined ? Number.parseInt(args.depth, 10) : undefined;
-    if (depthVal !== undefined && Number.isNaN(depthVal)) {
-      throw new UsageError("--depth must be a number");
-    }
+    const depthVal = parseIntFlag("depth", args.depth, 0);
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 
     const result = await handleOutline({
-      file_paths: paths,
+      file_paths: paths.map(fromCwd),
       depth: depthVal,
       projectDir,
       allowedDirs,

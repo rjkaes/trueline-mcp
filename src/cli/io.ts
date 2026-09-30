@@ -5,6 +5,7 @@
 //   2. Result formatting (human-readable vs --json envelope)
 
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { type ParseArgsConfig, type ParseArgsOptionsConfig, parseArgs } from "node:util";
 import type { ToolResult } from "../tools/types.ts";
 
@@ -43,6 +44,9 @@ type ParsedArgs<T extends ParseArgsOptionsConfig> = ReturnType<
   typeof parseArgs<{ options: T; allowPositionals: true }>
 >;
 
+/** A value shaped like a long flag: taken for a mistyped flag, not content. */
+const LONG_FLAG_LIKE = /^--[A-Za-z]/;
+
 /**
  * parseArgs with unknown options rejected. Not strict:true, because strict also rejects
  * option values that start with '-' (--content "- item") as ambiguous. Instead parse
@@ -51,11 +55,19 @@ type ParsedArgs<T extends ParseArgsOptionsConfig> = ReturnType<
 export function parseCliArgs<T extends ParseArgsOptionsConfig>(argv: string[], options: T) {
   const config: ParseArgsConfig = { args: argv, options, allowPositionals: true, strict: false, tokens: true };
   const { values, positionals, tokens = [] } = parseArgs(config);
+  // Loose parsing hands a string option the next argv entry even when it is a flag
+  // (--content --dry-run), and a typo of one (--dryrun) would be written as the value.
+  // Long flag-like values must use the --name=value form; short flags are matched by name.
+  const shortSpellings = new Set(Object.values(options).flatMap(({ short }) => (short ? [`-${short}`] : [])));
   for (const token of tokens) {
     if (token.kind !== "option") continue;
     const option = Object.hasOwn(options, token.name) ? options[token.name] : undefined;
     if (!option) throw new UsageError(`unknown option ${token.rawName}`);
-    if (option.type === "string" && token.value === undefined) {
+    const swallowedFlag =
+      !token.inlineValue &&
+      token.value !== undefined &&
+      (LONG_FLAG_LIKE.test(token.value) || shortSpellings.has(token.value));
+    if (option.type === "string" && (token.value === undefined || swallowedFlag)) {
       throw new UsageError(`option ${token.rawName} requires a value`);
     }
     if (option.type === "boolean" && token.value !== undefined) {
@@ -65,25 +77,59 @@ export function parseCliArgs<T extends ParseArgsOptionsConfig>(argv: string[], o
   return { values: values as unknown as ParsedArgs<T>["values"], positionals };
 }
 
+/**
+ * Strict integer for a numeric flag. The CLI skips the zod schemas the MCP tools use, so
+ * each caller passes the minimum its schema enforces (1 for positive(), otherwise 0).
+ */
+export function parseIntFlag(name: string, raw: string | undefined, min: 0 | 1): number | undefined {
+  if (raw === undefined) return undefined;
+  if (!/^\d+$/.test(raw) || Number(raw) < min) {
+    throw new UsageError(`--${name} must be ${min === 1 ? "a positive" : "a non-negative"} integer`);
+  }
+  return Number(raw);
+}
+
+/**
+ * Make a path argument absolute against the shell cwd. Handlers resolve relative paths
+ * against projectDir, which CLAUDE_PROJECT_DIR can pin somewhere other than cwd; that
+ * is the security boundary, so it stays as is and only the argument changes. Inline
+ * `path:range` suffixes and glob patterns pass through resolve() untouched.
+ */
+export function fromCwd(arg: string): string {
+  return resolve(process.cwd(), arg);
+}
+
 // ---------------------------------------------------------------------------
 // @file / - / literal dispatch
 // ---------------------------------------------------------------------------
 
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
 /**
  * Resolve a CLI value that may be:
  *   "@path"   — read the file at `path`
+ *   "@@text"  — the literal "@text"; the escape for content that starts with @
  *   "-"       — read stdin (raises UsageError if stdin is a TTY)
  *   anything else — return as-is (literal string)
+ *
+ * A missing @path is an error, never a literal: falling back would make the
+ * result depend on which files happen to exist. A leading UTF-8 BOM (added by
+ * some Windows editors) is stripped from file and stdin input so it neither
+ * breaks JSON.parse nor lands in the edited file.
  *
  * When `kind === "json"`, the resolved string is JSON.parsed before return.
  */
 export function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): unknown {
   let raw: string;
 
-  if (value.startsWith("@")) {
+  if (value.startsWith("@@")) {
+    raw = value.slice(1);
+  } else if (value.startsWith("@")) {
     const filePath = value.slice(1);
     try {
-      raw = readFileSync(filePath, "utf-8");
+      raw = stripBom(readFileSync(filePath, "utf-8"));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new UsageError(`cannot read ${filePath}: ${msg}`);
@@ -92,7 +138,7 @@ export function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): unk
     if (process.stdin.isTTY) {
       throw new UsageError("stdin is a TTY; pipe data in or use @file");
     }
-    raw = readFileSync(0, "utf-8");
+    raw = stripBom(readFileSync(0, "utf-8"));
   } else {
     raw = value;
   }

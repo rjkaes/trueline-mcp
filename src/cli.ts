@@ -39,7 +39,10 @@ Run "trueline <command> --help" for command-specific options.
 }
 
 async function main(argv: string[]): Promise<void> {
-  if (argv.includes("--help") || argv.includes("-h")) {
+  // Past "--" everything is an operand (e.g. a search pattern that is literally "--help").
+  const dashDash = argv.indexOf("--");
+  const optionArgs = dashDash === -1 ? argv : argv.slice(0, dashDash);
+  if (optionArgs.includes("--help") || optionArgs.includes("-h")) {
     const load =
       argv[0] !== undefined && Object.hasOwn(SUBCOMMAND_LOADERS, argv[0]) ? SUBCOMMAND_LOADERS[argv[0]] : undefined;
     const mod = load ? await load() : undefined;

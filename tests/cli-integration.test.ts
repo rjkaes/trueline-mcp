@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll } from "bun:test";
-import { execFileSync } from "node:child_process";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { writeTestFile } from "./helpers.ts";
@@ -162,5 +162,43 @@ describe("CLI integration", () => {
     const { exitCode } = run({ CLAUDE_PROJECT_DIR: tmpDir }, "changes");
     // May exit 0 (no changes) or 2 (git error in non-git dir), but never 3 (usage error)
     expect(exitCode).not.toBe(3);
+  });
+});
+
+interface Invocation {
+  cwd?: string;
+  env?: Record<string, string>;
+  input?: string;
+}
+
+// Unlike run() this supports cwd and stdin, and strips an inherited
+// CLAUDE_PROJECT_DIR so results do not depend on the shell the suite runs from.
+function trueline(args: string[], opts: Invocation = {}) {
+  const env: Record<string, string | undefined> = { ...process.env, TRUELINE_ALLOWED_DIRS: tmpDir, ...opts.env };
+  if (opts.env?.CLAUDE_PROJECT_DIR === undefined) delete env.CLAUDE_PROJECT_DIR;
+  const result = spawnSync("bun", [CLI, ...args], {
+    cwd: opts.cwd ?? tmpDir,
+    env,
+    input: opts.input ?? "",
+    encoding: "utf-8",
+    timeout: 20_000,
+  });
+  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", exitCode: result.status ?? -1 };
+}
+
+function scratch(name: string, files: Record<string, string>): string {
+  const dir = join(tmpDir, name);
+  mkdirSync(dir, { recursive: true });
+  for (const [fileName, content] of Object.entries(files)) writeFileSync(join(dir, fileName), content);
+  return dir;
+}
+
+describe("argv scanning in cli.ts", () => {
+  test("`--` protects a literal --help pattern from the help shortcut", () => {
+    const dir = scratch("dashdash-help", { "flags.txt": "--help is a flag\nother\n" });
+    const { stdout, exitCode } = trueline(["search", "--", "--help", join(dir, "flags.txt")]);
+    expect(stdout).not.toContain("Usage:");
+    expect(stdout).toContain("--help is a flag");
+    expect(exitCode).toBe(0);
   });
 });

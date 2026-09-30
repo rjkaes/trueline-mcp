@@ -1,6 +1,6 @@
 import { resolveProjectDirs } from "../allowed-dirs.js";
 import { handleDiff } from "../tools/diff.ts";
-import { type CliSubcommand, emitResult, jsonFlag, parseCliArgs } from "./io.ts";
+import { type CliSubcommand, emitResult, fromCwd, jsonFlag, parseCliArgs } from "./io.ts";
 
 const OPTIONS = {
   against: { type: "string" },
@@ -22,7 +22,8 @@ export default {
   async run(argv: string[]): Promise<void> {
     const { values: args, positionals: paths } = parseCliArgs(argv, OPTIONS);
     // No paths → diff all changed files (handler treats "*" as sentinel)
-    const filePaths = paths.length > 0 ? paths : ["*"];
+    // An explicit "*" stays the sentinel, not a cwd-relative glob.
+    const filePaths = paths.length > 0 ? paths.map((p) => (p === "*" ? p : fromCwd(p))) : ["*"];
 
     const { projectDir, allowedDirs } = await resolveProjectDirs();
 
