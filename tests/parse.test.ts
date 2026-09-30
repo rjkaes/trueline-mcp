@@ -244,3 +244,85 @@ describe("docs examples match the real hashLine/checksum format", () => {
     expect(() => parseChecksum("ab10-cd20/efghij")).not.toThrow();
   });
 });
+
+describe("parseFilePathWithRanges only splits on valid range syntax", () => {
+  test.each([
+    "logs/2024-01-01T10:30:00.log",
+    "notes 12:30.md",
+    "file:2.txt",
+    "/var/log/app:12abc",
+    "src/a.ts:10:abc",
+    "src/a.ts:10,",
+    "src/a.ts:10-20-30",
+    "src/a.ts:1,,2",
+  ])("%p is a plain path", (entry) => {
+    expect(parseFilePathWithRanges(entry)).toEqual({ path: entry, rangeSpecs: undefined });
+  });
+
+  test("valid tails still split", () => {
+    expect(parseFilePathWithRanges("src/a.ts:10")).toEqual({ path: "src/a.ts", rangeSpecs: ["10"] });
+    expect(parseFilePathWithRanges("src/a.ts:10-")).toEqual({ path: "src/a.ts", rangeSpecs: ["10-"] });
+    expect(parseFilePathWithRanges("src/a.ts:1-5, 7")).toEqual({ path: "src/a.ts", rangeSpecs: ["1-5", "7"] });
+    expect(parseFilePathWithRanges("/tmp/a:b:3")).toEqual({ path: "/tmp/a:b", rangeSpecs: ["3"] });
+  });
+
+  test("a well-formed but out-of-range tail still splits, so parseRanges can explain it", () => {
+    expect(parseFilePathWithRanges("src/a.ts:0")).toEqual({ path: "src/a.ts", rangeSpecs: ["0"] });
+  });
+});
+
+describe("parseRanges accepts plain decimal integers only", () => {
+  test.each(["0x10", "1e1", "10.0", "10-Infinity", "10-0x20", "1e3-2e3", "+5", "10-20.5"])("rejects %p", (range) => {
+    expect(() => parseRanges([range])).toThrow(/Invalid range/);
+  });
+
+  test("rejects integers beyond the safe range", () => {
+    expect(() => parseRanges(["9007199254740993"])).toThrow(/Invalid range/);
+    expect(() => parseRanges(["10-9007199254740993"])).toThrow(/Invalid range/);
+  });
+
+  test("a 400-digit end is an error, not an open-ended range", () => {
+    expect(() => parseRanges([`10-${"9".repeat(400)}`])).toThrow(/Invalid range/);
+  });
+
+  test("a 400-digit start is an error", () => {
+    expect(() => parseRanges(["9".repeat(400)])).toThrow(/Invalid range/);
+  });
+
+  test("valid forms still parse", () => {
+    expect(parseRanges(["10"])).toEqual([{ start: 10, end: 10 }]);
+    expect(parseRanges(["10-20"])).toEqual([{ start: 10, end: 20 }]);
+    expect(parseRanges(["10-"])).toEqual([{ start: 10, end: Infinity }]);
+    expect(parseRanges(["-20"])).toEqual([{ start: 1, end: 20 }]);
+    expect(parseRanges(["007"])).toEqual([{ start: 7, end: 7 }]);
+    expect(parseRanges([`1-${Number.MAX_SAFE_INTEGER}`])).toEqual([{ start: 1, end: Number.MAX_SAFE_INTEGER }]);
+  });
+
+  test("whitespace around the dash is still tolerated", () => {
+    expect(parseRanges(["10 - 20"])).toEqual([{ start: 10, end: 20 }]);
+  });
+});
+
+describe("line numbers beyond the safe integer range", () => {
+  const huge = "9".repeat(30);
+
+  test.each([huge, `ab${huge}`, `ab10-cd${huge}`, `${huge}-ab5`, `+ab${huge}`, "9007199254740993"])(
+    "parseRange rejects %p with a clear error",
+    (range) => {
+      expect(() => parseRange(range)).toThrow(/too large/);
+    },
+  );
+
+  test.each([`ab1-cd${huge}/abcdef`, `1-${huge}/abcdef`, `ab${huge}/abcdef`, `${huge}/abcdef`])(
+    "parseChecksum rejects %p with a clear error",
+    (checksum) => {
+      expect(() => parseChecksum(checksum)).toThrow(/too large/);
+    },
+  );
+
+  test("the largest safe line number still parses", () => {
+    const max = Number.MAX_SAFE_INTEGER;
+    expect(parseRange(`ab${max}`).start.line).toBe(max);
+    expect(parseChecksum(`ab1-cd${max}/abcdef`).endLine).toBe(max);
+  });
+});

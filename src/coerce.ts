@@ -46,14 +46,19 @@ const PARAM_ALIASES: Record<string, string> = {
 };
 
 // Known integer-valued parameters that agents sometimes stringify.
-const NUMERIC_KEYS = ["depth", "context_lines", "max_matches"];
+const NUMERIC_KEYS = ["depth", "context_lines", "max_matches", "max_match_lines"];
+
+// Only keys whose zod schema expects these types get string/number coercion;
+// free-text keys like `pattern` must keep "true" or "[0]" verbatim.
+const BOOLEAN_KEYS = ["dry_run", "case_insensitive", "regex", "multiline"];
+const JSON_KEYS = ["file_paths", "ranges", "refs", "edits"];
 
 /**
  * Preprocess MCP tool parameters to be more permissive about what agents send:
  *
  * 1. **Alias mapping** — `paths` → `file_paths`, `path` → `file_path`, etc.
- * 2. **Stringified JSON** — `"[1,2]"` → `[1,2]` (arrays and objects)
- * 3. **Stringified booleans** — `"true"` → `true`, `"false"` → `false`
+ * 2. **Stringified JSON** — `"[1,2]"` → `[1,2]` (array/object keys only)
+ * 3. **Stringified booleans** — `"true"` → `true`, `"false"` → `false` (boolean keys only)
  *
  * Runs as a `z.preprocess` step before Zod validation.
  */
@@ -83,7 +88,11 @@ export function coerceParams(val: unknown): unknown {
     if (canonicalKey !== key && canonicalKey in raw) continue;
 
     // Coerce stringified JSON arrays/objects
-    if (typeof value === "string" && (value.startsWith("[") || value.startsWith("{"))) {
+    if (
+      JSON_KEYS.includes(canonicalKey) &&
+      typeof value === "string" &&
+      (value.startsWith("[") || value.startsWith("{"))
+    ) {
       try {
         result[canonicalKey] = JSON.parse(value);
         continue;
@@ -93,14 +102,12 @@ export function coerceParams(val: unknown): unknown {
     }
 
     // Coerce stringified booleans (including yes/no and 1/0).
-    // Skip 1/0 coercion for known numeric keys so context_lines: 1
-    // doesn't become true.
-    const isNumericKey = NUMERIC_KEYS.includes(canonicalKey);
-    if (value === "true" || value === "yes" || (!isNumericKey && value === 1)) {
+    const isBooleanKey = BOOLEAN_KEYS.includes(canonicalKey);
+    if (isBooleanKey && (value === "true" || value === "yes" || value === 1)) {
       result[canonicalKey] = true;
       continue;
     }
-    if (value === "false" || value === "no" || (!isNumericKey && value === 0)) {
+    if (isBooleanKey && (value === "false" || value === "no" || value === 0)) {
       result[canonicalKey] = false;
       continue;
     }

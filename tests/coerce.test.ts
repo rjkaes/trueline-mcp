@@ -597,3 +597,67 @@ describe("coerceParams", () => {
     });
   });
 });
+
+// Coercion is limited to keys whose schema expects a boolean/array/object;
+// free-text keys (pattern) and numeric keys must not be rewritten.
+describe("coerceParams key-scoped coercion", () => {
+  test.each(["true", "false", "yes", "no", "[0]", "[]", "{}", '{"a":1}', '["x"]'])(
+    "pattern %p stays a string",
+    (pattern) => {
+      expect(coerceParams({ pattern, file_paths: ["src/billing.ts"] })).toEqual({
+        pattern,
+        file_paths: ["src/billing.ts"],
+      });
+    },
+  );
+
+  test("pattern aliases are left alone too", () => {
+    expect(coerceParams({ query: "no" })).toEqual({ pattern: "no" });
+    expect(coerceParams({ search: "[0]" })).toEqual({ pattern: "[0]" });
+  });
+
+  test("compare_against and encoding are left alone", () => {
+    expect(coerceParams({ base: "true", encoding: "no" })).toEqual({ compare_against: "true", encoding: "no" });
+  });
+
+  test.each(["dry_run", "case_insensitive", "regex", "multiline"])("boolean key %s still coerces", (key) => {
+    expect(coerceParams({ [key]: "true" })).toEqual({ [key]: true });
+    expect(coerceParams({ [key]: "no" })).toEqual({ [key]: false });
+    expect(coerceParams({ [key]: 1 })).toEqual({ [key]: true });
+    expect(coerceParams({ [key]: 0 })).toEqual({ [key]: false });
+  });
+
+  test("array and object keys still parse stringified JSON", () => {
+    expect(coerceParams({ refs: '["ab1-cd2/abcdef"]' })).toEqual({ refs: ["ab1-cd2/abcdef"] });
+    expect(coerceParams({ edits: '[{"range":"ab1","ref":"r","content":"x"}]' })).toEqual({
+      edits: [{ range: "ab1", ref: "r", content: "x" }],
+    });
+    expect(coerceParams({ edits: '{"range":"ab1","ref":"r","content":"x"}' })).toEqual({
+      edits: [{ range: "ab1", ref: "r", content: "x" }],
+    });
+  });
+
+  test('ranges: 1 becomes ["1"], not true', () => {
+    expect(coerceParams({ file_paths: ["a.ts"], ranges: 1 })).toEqual({ file_paths: ["a.ts"], ranges: ["1"] });
+  });
+
+  test('ranges: 0 becomes ["0"], not false', () => {
+    expect(coerceParams({ file_paths: ["a.ts"], ranges: 0 })).toEqual({ file_paths: ["a.ts"], ranges: ["0"] });
+  });
+
+  test('range alias with a number becomes ["1"]', () => {
+    expect(coerceParams({ file_path: "a.ts", range: 1 })).toEqual({ file_paths: ["a.ts"], ranges: ["1"] });
+  });
+
+  test("max_match_lines: 1 stays the number 1", () => {
+    expect(coerceParams({ pattern: "x", max_match_lines: 1 })).toEqual({ pattern: "x", max_match_lines: 1 });
+  });
+
+  test("max_match_lines: 0 stays the number 0", () => {
+    expect(coerceParams({ pattern: "x", max_match_lines: 0 })).toEqual({ pattern: "x", max_match_lines: 0 });
+  });
+
+  test('max_match_lines: "50" becomes 50', () => {
+    expect(coerceParams({ pattern: "x", max_match_lines: "50" })).toEqual({ pattern: "x", max_match_lines: 50 });
+  });
+});

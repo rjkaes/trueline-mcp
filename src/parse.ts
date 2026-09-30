@@ -4,6 +4,23 @@
 
 const DECIMAL_INT = /^\d+$/;
 
+/** NaN unless `text` is a plain decimal integer Number() holds exactly; Number() alone takes "0x10", "1e1", "10.0" and overflows to Infinity. */
+function toSafeInteger(text: string): number {
+  const digits = text.trim();
+  if (!DECIMAL_INT.test(digits)) return NaN;
+  const value = Number(digits);
+  return Number.isSafeInteger(value) ? value : NaN;
+}
+
+/** Line number from an already-validated digit string; throws instead of rounding or going Infinity. */
+function lineFromDigits(digits: string): number {
+  const line = toSafeInteger(digits);
+  if (Number.isNaN(line)) {
+    throw new Error(`Invalid line number "${digits}" — too large (maximum ${Number.MAX_SAFE_INTEGER})`);
+  }
+  return line;
+}
+
 /** Sentinel hash for bare line numbers (e.g. "78" instead of "rn78"). */
 export const BARE_LINE_HASH = "??";
 interface LineRef {
@@ -25,7 +42,7 @@ interface LineRef {
 function parseHashLine(ref: string): LineRef {
   if (DECIMAL_INT.test(ref)) {
     // Bare number
-    const line = Number(ref);
+    const line = lineFromDigits(ref);
     if (line !== 0) {
       return { line, hash: BARE_LINE_HASH };
     }
@@ -39,7 +56,7 @@ function parseHashLine(ref: string): LineRef {
     throw new Error(`Invalid line number in "${ref}" — must be a non-negative integer`);
   }
 
-  const line = Number(lineStr);
+  const line = lineFromDigits(lineStr);
 
   if (line === 0) {
     throw new Error(`Invalid hashLine reference "${ref}" — line 0 must use bare "0" with no hash`);
@@ -199,11 +216,11 @@ function extractLineNumber(ref: string, originalInput: string, which: "start" | 
         `Invalid checksum "${originalInput}" — ${which} line must be a decimal integer, got "${lineStr}"`,
       );
     }
-    return Number(lineStr);
+    return lineFromDigits(lineStr);
   }
 
   // Decimal format: "9"
-  return Number(ref);
+  return lineFromDigits(ref);
 }
 
 export interface ReadRange {
@@ -245,20 +262,20 @@ export function parseRanges(ranges: string[] | undefined): ReadRange[] {
 
     if (dashIdx === -1) {
       // "10" — single line
-      start = Number(r);
+      start = toSafeInteger(r);
       end = start;
     } else if (dashIdx === 0) {
       // "-20" — from start to line 20
       start = 1;
-      end = Number(r.slice(1));
+      end = toSafeInteger(r.slice(1));
     } else if (dashIdx === r.length - 1) {
       // "10-" — from line 10 to EOF
-      start = Number(r.slice(0, -1));
+      start = toSafeInteger(r.slice(0, -1));
       end = Infinity;
     } else {
       // "10-20" — explicit range
-      start = Number(r.slice(0, dashIdx));
-      end = Number(r.slice(dashIdx + 1));
+      start = toSafeInteger(r.slice(0, dashIdx));
+      end = toSafeInteger(r.slice(dashIdx + 1));
     }
 
     if (!Number.isInteger(start) || start < 1) {
@@ -296,12 +313,16 @@ interface FilePathWithRanges {
  *   "src/foo.ts:10"          → { path: "src/foo.ts", rangeSpecs: ["10"] }
  *   "src/foo.ts:10-"         → { path: "src/foo.ts", rangeSpecs: ["10-"] }
  *
- * The split point is the last ':' followed by a digit. This avoids
+ * The split point is the last ':' followed by a digit, and only when the
+ * tail is a range list (digits, optional dash, comma-separated). This avoids
  * ambiguity with Windows drive letters (C:\...) or other colons in paths.
  */
 export function parseFilePathWithRanges(entry: string): FilePathWithRanges {
   // Path needs 2+ chars so a drive letter ("C:1") is never split off.
   const match = /^(.{2,}):(\d.*)$/s.exec(entry);
   if (!match) return { path: entry, rangeSpecs: undefined };
-  return { path: match[1], rangeSpecs: match[2].split(",").map((r) => r.trim()) };
+  // Colons in real names ("notes 12:30.md", "T10:30:00.log") are not ranges.
+  const rangeSpecs = match[2].split(",").map((r) => r.trim());
+  if (!rangeSpecs.every((r) => /^\d+(\s*-\s*\d*)?$/.test(r))) return { path: entry, rangeSpecs: undefined };
+  return { path: match[1], rangeSpecs };
 }

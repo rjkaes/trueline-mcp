@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { splitLines, LF_BUF, EMPTY_BUF } from "../src/line-splitter.ts";
+import { splitLines, readTextNoFollow, LF_BUF, EMPTY_BUF } from "../src/line-splitter.ts";
 
 const CRLF_BUF = Buffer.from("\r\n");
 const CR_BUF = Buffer.from("\r");
@@ -182,5 +182,55 @@ describe("splitLines", () => {
     expect(lines[0].lineBytes.toString()).toBe("");
     expect(lines[0].eolBytes).toBe(LF_BUF);
     expect(lines[0].lineNumber).toBe(1);
+  });
+});
+
+const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+
+// splitLines (markdown/XML outlines) and readTextNoFollow (tree-sitter outline,
+// semantic diff) hand text to parsers that treat a leading U+FEFF as content.
+describe("leading UTF-8 BOM", () => {
+  test("splitLines drops the BOM from line 1", async () => {
+    const p = writeFile("bom.md", Buffer.concat([UTF8_BOM, Buffer.from("# Invoice Guide\nBody\n")]));
+    const lines = await collect(p);
+
+    expect(lines.map((l) => l.lineBytes.toString())).toEqual(["# Invoice Guide", "Body"]);
+  });
+
+  test("splitLines keeps a BOM that is not at the start of the file", async () => {
+    const p = writeFile("inner-bom.md", Buffer.concat([UTF8_BOM, Buffer.from("a\n\uFEFFb\n")]));
+    const lines = await collect(p);
+
+    expect(lines.map((l) => l.lineBytes.toString())).toEqual(["a", "\uFEFFb"]);
+  });
+
+  test("splitLines on a BOM-only file yields no lines", async () => {
+    const p = writeFile("only-bom.md", UTF8_BOM);
+
+    expect(await collect(p)).toHaveLength(0);
+  });
+
+  test("readTextNoFollow drops the BOM", async () => {
+    const p = writeFile("bom.ts", Buffer.concat([UTF8_BOM, Buffer.from("export const rate = 1;\n")]));
+
+    expect(await readTextNoFollow(p)).toBe("export const rate = 1;\n");
+  });
+
+  test("readTextNoFollow keeps a BOM that is not at the start of the file", async () => {
+    const p = writeFile("inner-bom.ts", Buffer.concat([UTF8_BOM, Buffer.from("a\n\uFEFFb\n")]));
+
+    expect(await readTextNoFollow(p)).toBe("a\n\uFEFFb\n");
+  });
+
+  test("readTextNoFollow without a BOM is unchanged", async () => {
+    const p = writeFile("plain.ts", "export const rate = 1;\n");
+
+    expect(await readTextNoFollow(p)).toBe("export const rate = 1;\n");
+  });
+
+  test("readTextNoFollow still returns null for a NUL byte after the BOM", async () => {
+    const p = writeFile("binary.bin", Buffer.concat([UTF8_BOM, Buffer.from([0x61, 0x00, 0x62])]));
+
+    expect(await readTextNoFollow(p)).toBeNull();
   });
 });

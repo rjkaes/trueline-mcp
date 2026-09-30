@@ -82,7 +82,8 @@ export async function transcodedLines(filePath: string, opts?: SplitChunksOpts):
     const optsWithoutBinary = { ...opts, detectBinary: false };
 
     async function* utf16Chunks(): AsyncGenerator<Buffer> {
-      const decoder = new TextDecoder(bomInfo.encoding);
+      // ignoreBOM: true keeps a content U+FEFF; the BOM bytes were already sliced off above.
+      const decoder = new TextDecoder(bomInfo.encoding, { ignoreBOM: true });
 
       for await (const chunk of readFdChunks(fd, readBuf, firstChunk.subarray(bomInfo.bom.length))) {
         const decoded = decoder.decode(chunk, { stream: true });

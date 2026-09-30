@@ -187,24 +187,35 @@ export function openNoFollow(filePath: string): Promise<FileHandle> {
   return open(filePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
 }
 
-/** Reads a file as UTF-8 via openNoFollow. Returns null if it contains a NUL byte (binary). */
+// Outline parsers treat a leading U+FEFF as content (a line-1 heading or
+// front matter stops matching; the first tree-sitter entry gains the character).
+function stripUtf8Bom(buf: Buffer): Buffer {
+  return buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf ? buf.subarray(3) : buf;
+}
+
+/** Reads a file as UTF-8 via openNoFollow, dropping a leading BOM. Returns null if it contains a NUL byte (binary). */
 export async function readTextNoFollow(filePath: string): Promise<string | null> {
   const fh = await openNoFollow(filePath);
   const buf = await fh.readFile().finally(() => fh.close());
-  return buf.includes(0) ? null : buf.toString("utf-8");
+  return buf.includes(0) ? null : stripUtf8Bom(buf).toString("utf-8");
 }
 
 /**
  * Stream lines from a file as raw Buffers without decoding to JS strings.
  *
- * Opens the file, reads it in 64KB chunks, and delegates to `splitChunks`.
+ * Opens the file, reads it in 64KB chunks (dropping a leading UTF-8 BOM), and
+ * delegates to `splitChunks`.
  * When `detectBinary` is true, throws if a null byte (0x00) is encountered.
  */
 export async function* splitLines(filePath: string, opts?: { detectBinary?: boolean }): AsyncGenerator<RawLine> {
   async function* fileChunks(): AsyncGenerator<Buffer> {
     const fd = await openNoFollow(filePath);
     const readBuf = Buffer.allocUnsafe(READ_BUF_SIZE);
-    yield* readFdChunks(fd, readBuf);
+    let first = true;
+    for await (const chunk of readFdChunks(fd, readBuf)) {
+      yield first ? stripUtf8Bom(chunk) : chunk;
+      first = false;
+    }
   }
 
   yield* splitChunks(fileChunks(), opts);

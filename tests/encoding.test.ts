@@ -504,3 +504,55 @@ describe("trueline_edit — UTF-16 BE round-trip", () => {
     expect(decoded).not.toContain("\ttwo\n");
   });
 });
+
+// The BOM bytes are stripped by transcodedLines itself, so the TextDecoder must
+// not strip a second, content U+FEFF (ZWNBSP) that follows them.
+describe("UTF-16 keeps a content U+FEFF after the BOM", () => {
+  async function decodedLines(p: string): Promise<string[]> {
+    const { lines } = await transcodedLines(p);
+    const out: string[] = [];
+    for await (const { lineBytes } of lines) out.push(lineBytes.toString("utf-8"));
+    return out;
+  }
+
+  test("UTF-16 LE", async () => {
+    const p = writeFile("zwnbsp-le.txt", utf16leFile("\uFEFFa", "b"));
+    expect(await decodedLines(p)).toEqual(["\uFEFFa", "b"]);
+  });
+
+  test("UTF-16 BE", async () => {
+    const p = writeFile("zwnbsp-be.txt", utf16beFile("\uFEFFa", "b"));
+    expect(await decodedLines(p)).toEqual(["\uFEFFa", "b"]);
+  });
+
+  test("the BOM itself is stripped exactly once", async () => {
+    const p = writeFile("plain-bom.txt", utf16leFile("a", "b"));
+    expect(await decodedLines(p)).toEqual(["a", "b"]);
+  });
+
+  test("two content U+FEFF after the BOM both survive", async () => {
+    const p = writeFile("double-zwnbsp.txt", utf16leFile("\uFEFF\uFEFFa"));
+    expect(await decodedLines(p)).toEqual(["\uFEFF\uFEFFa"]);
+  });
+
+  test("an edit rewrite does not delete the character", async () => {
+    const p = writeFile("zwnbsp-edit.txt", utf16leFile("\uFEFFa", "b"));
+    const readText = getText(await handleRead({ file_path: p, allowedDirs: [tmpDir] }));
+    const ref = readText.match(/ref: (\S+)/)![1];
+    const hashLine = readText
+      .split("\n")
+      .find((l) => l.endsWith("\tb"))!
+      .split("\t")[0];
+
+    const editResult = await handleEdit({
+      file_path: p,
+      edits: [{ range: hashLine, content: "B", ref }],
+      allowedDirs: [tmpDir],
+    });
+    expect(editResult.isError).toBeFalsy();
+
+    const raw = readFileSync(p);
+    expect([raw[0], raw[1]]).toEqual([0xff, 0xfe]);
+    expect(raw.subarray(2).toString("utf16le")).toBe("\uFEFFa\nB\n");
+  });
+});
