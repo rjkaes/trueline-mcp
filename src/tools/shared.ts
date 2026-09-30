@@ -202,7 +202,9 @@ export async function validatePath(
 
 /** Check whether an error from `transcodedLines` indicates a binary file. */
 export function isBinaryError(err: unknown): err is Error {
-  return err instanceof Error && err.message.includes("binary");
+  // Anchored to the splitter's and encoding's own messages: an fs error (EACCES) quotes the
+  // path, and a path can contain "binary".
+  return err instanceof Error && /^(File appears to be binary|UTF-32 is not supported)/.test(err.message);
 }
 
 /** Return a standard error result for binary file access. */
@@ -404,13 +406,15 @@ const FALLBACK_EXCLUDE_DIRS = new Set([
 ]);
 
 // A glob's leading literal directory and the pattern below it, split at the
-// first wildcard segment: "/repo/src/*.ts" -> "/repo/src" + "*.ts".
-function splitGlob(pattern: string): { prefix: string; remainder: string } {
-  const { root } = parse(pattern);
-  const segments = pattern.slice(root.length).split("/");
+// first wildcard segment: "/repo/src/*.ts" -> "/repo/src" + "*.ts". A project or
+// allowed directory the pattern starts with is `literalRoot`: its name is taken
+// whole, since "/work/client [staging]" is a directory, not a character class.
+function splitGlob(pattern: string, literalRoot?: string): { prefix: string; remainder: string } {
+  const head = literalRoot ?? parse(pattern).root;
+  const segments = pattern.slice(head.length).split("/");
   const firstWildcard = segments.findIndex((segment) => GLOB_CHARS.test(segment));
   return {
-    prefix: `${root}${segments.slice(0, firstWildcard).join("/")}` || ".",
+    prefix: `${head}${segments.slice(0, firstWildcard).join("/")}` || ".",
     remainder: segments.slice(firstWildcard).join("/"),
   };
 }
@@ -485,7 +489,10 @@ export async function expandGlobs(
     }
 
     const pattern = process.platform === "win32" ? entry.replaceAll("\\", "/") : entry;
-    const { prefix, remainder } = splitGlob(pattern);
+    const literalRoot = [baseDir, ...allowedDirs]
+      .map((dir) => (process.platform === "win32" ? dir.replaceAll("\\", "/") : dir))
+      .find((dir) => pattern.startsWith(`${dir}/`));
+    const { prefix, remainder } = splitGlob(pattern, literalRoot);
     // Pick the root by the canonical literal prefix, so aliases and 8.3 names still match it.
     const literalDir = await realpath(resolve(baseDir, prefix)).catch(() => null);
     const root = literalDir === null ? undefined : (await globRoots()).find((r) => isContained(literalDir, [r.real]));
@@ -496,6 +503,10 @@ export async function expandGlobs(
     // Relative patterns keep relative results; anything else is absolute for validatePath.
     const output = (match: string) =>
       isAbsolute(pattern) || root.label !== baseDir ? resolve(root.label, match) : match;
+
+    // Node glob also matches directories; the git branch lists files only, and so must this one.
+    const isAllowedFile = async (path: string): Promise<boolean> =>
+      (await isInAllowedDir(path)) && ((await stat(path).catch(() => null))?.isFile() ?? false);
 
     const listMatches = async (localGlob: string): Promise<string[]> => {
       const matches: string[] = [];
@@ -513,13 +524,13 @@ export async function expandGlobs(
             cwd: root.real,
             exclude: (name) => FALLBACK_EXCLUDE_DIRS.has(name),
           })) {
-            if (await isInAllowedDir(resolve(root.real, match))) matches.push(output(match));
+            if (await isAllowedFile(resolve(root.real, match))) matches.push(output(match));
           }
         }
       } else {
         // Non-recursive glob: Node glob is safe (won't descend into node_modules)
         for await (const match of glob(localGlob, { cwd: root.real })) {
-          if (await isInAllowedDir(resolve(root.real, match))) matches.push(output(match));
+          if (await isAllowedFile(resolve(root.real, match))) matches.push(output(match));
         }
       }
       return matches;
@@ -548,10 +559,30 @@ export async function gitExec(args: string[], cwd: string): Promise<string> {
   return stdout;
 }
 
+// Bytes, not a string: a UTF-16 blob does not survive UTF-8 decoding.
+export async function gitExecBytes(args: string[], cwd: string): Promise<Buffer> {
+  const { stdout } = await execFileAsync("git", args, {
+    cwd,
+    env: gitEnv,
+    maxBuffer: 10 * 1024 * 1024,
+    encoding: "buffer",
+  });
+  return stdout;
+}
+
 async function gitListFiles(cwd: string): Promise<string[] | null> {
   try {
-    const stdout = await gitExec(["ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd);
-    return stdout.split("\0").filter(Boolean);
+    // --cached lists a tracked file deleted from the working tree; git has no flag to omit it.
+    const [listed, deleted] = await Promise.all([
+      gitExec(["ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd),
+      gitExec(["ls-files", "--deleted", "-z"], cwd),
+    ]);
+    const gone = new Set(deleted.split("\0"));
+    const files = listed.split("\0").filter((file) => file && !gone.has(file));
+    // A parent repo that ignores the project directory lists nothing, which is no answer:
+    // null sends the caller to the filesystem glob. A project with any listed file keeps
+    // its .gitignore; one whose files are all ignored falls back too, a trade-off accepted.
+    return files.length > 0 ? files : null;
   } catch {
     return null;
   }
@@ -563,8 +594,10 @@ async function gitListFiles(cwd: string): Promise<string[] | null> {
  * relative paths even when absolute paths were provided as input.
  */
 export function displayPath(filePath: string, projectDir: string | undefined): string {
-  const normalized = filePath.replaceAll("\\", "/");
-  const normalizedProjectDir = projectDir?.replaceAll("\\", "/");
+  // A backslash is a filename character on POSIX.
+  const slashes = (path: string) => (process.platform === "win32" ? path.replaceAll("\\", "/") : path);
+  const normalized = slashes(filePath);
+  const normalizedProjectDir = projectDir === undefined ? undefined : slashes(projectDir);
   if (normalizedProjectDir && normalized.startsWith(`${normalizedProjectDir}/`)) {
     return normalized.slice(normalizedProjectDir.length + 1);
   }

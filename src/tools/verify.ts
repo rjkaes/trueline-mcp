@@ -73,7 +73,10 @@ export async function handleVerify(params: VerifyParams): Promise<ToolResult> {
     }
   } catch (err: unknown) {
     if (isBinaryError(err)) return binaryFileError(file_path);
-    throw err;
+    // Only the errno code is shown: the error message carries the resolved absolute path.
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (typeof code !== "string") throw err;
+    return errorResult(`"${file_path}" could not be read (${code})`);
   }
 
   for (const entry of accs) {

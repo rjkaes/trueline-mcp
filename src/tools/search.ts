@@ -78,7 +78,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   let searchFile: (resolvedPath: string, maxMatches: number) => Promise<FileSearchResult>;
 
   if (params.multiline) {
-    // Multiline mode: global + dotAll + multiline flags (^/$ anchor at each line), delegate to multiline engine
+    // Multiline mode: global + dotAll flags, ^/$ anchored at each line, delegate to multiline engine
     const maxMatchLines = params.max_match_lines ?? 50;
 
     if (pattern === "") {
@@ -87,7 +87,13 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 
     let regex: RegExp;
     try {
-      regex = new RegExp(pattern, `gsm${params.case_insensitive ? "i" : ""}`);
+      // No `m` flag: it would also anchor ^ and $ at U+2028/U+2029 inside a line, which line mode and
+      // the splitter do not treat as breaks. The engine joins lines with "\n", so the anchors become
+      // lookarounds on "\n" alone. Escapes and character classes are skipped: "\^" and "[^a]" stay.
+      const lineAnchored = pattern.replace(/\\.|\[(?:\\.|[^\]\\])*\]|[$^]/gs, (token) =>
+        token === "^" ? "(?<![^\\n])" : token === "$" ? "(?![^\\n])" : token,
+      );
+      regex = new RegExp(lineAnchored, `gs${params.case_insensitive ? "i" : ""}`);
     } catch {
       return errorResult(`Invalid regex pattern: "${pattern}"`);
     }
