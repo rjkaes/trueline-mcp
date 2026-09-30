@@ -47,26 +47,34 @@ functions, classes, declarations, and their line ranges. For a typical
 source file, that's 10-20 lines instead of hundreds.
 
 ```
-1-3: (3 imports)
-5-5: const PACKAGE_NAME = "trueline-mcp";
-6-6: const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-7-7: const CACHE_FILE = join(tmpdir(), "trueline-mcp-update-check.json");
-8-8: const REGISTRY_TIMEOUT_MS = 3000;
-10-13: interface CachedCheck {
-15-22: async function readCache(): Promise<CachedCheck | null> {
-24-26: async function writeCache(entry: CachedCheck): Promise<void> {
-28-42: async function fetchLatestVersion(): Promise<string | null> {
-51-76: export function scheduleUpdateCheck(currentVersion: string, onUpdate: (info: { current: string; latest: string }) => void,
-79-87: function compareVersions(a: string, b: string): number {
+7-14: (8 imports)
+20-23: export const jsonFlag = {
+26-30: export interface CliSubcommand {
+  28-28: usage: string;
+  29-29: run(argv: string[]): Promise<void>;
+36-36: export class UsageError extends Error {}
+39-39: export class HelpRequested extends Error {}
+45-47: type ParsedArgs<T extends ParseArgsOptionsConfig> = ReturnType< typeof parseArgs<{ options: T; allowPositionals: true }>
+50-50: const LONG_FLAG_LIKE = /^--[A-Za-z]/;
+57-84: export function parseCliArgs<T extends ParseArgsOptionsConfig>(argv: string[], options: T) {
+90-96: export function parseIntFlag(name: string, raw: string | undefined, min: 0 | 1): number | undefined {
+104-106: export function fromCwd(arg: string): string {
+115-126: async function assertNotDenied(filePath: string): Promise<void> {
+128-130: function stripBom(text: string): string {
+146-183: export async function loadAtOrDashOrLiteral(value: string, kind: "json" | "text"): Promise<unknown> {
+189-193: export interface FormatOptions {
+  190-190: json: boolean;
+  192-192: search?: boolean;
+206-225: export function emitResult(result: ToolResult, opts: FormatOptions): void {
 
-(11 symbols, 87 source lines)
+(19 symbols, 225 source lines)
 ```
 
 The agent sees the full structure, then uses `trueline_read` to fetch only
 the ranges it needs. Ranges are specified inline on each path:
 
 ```
-file_paths: ["src/update-check.ts:28-42", "src/tools/verify.ts:1-20,35-60"]
+file_paths: ["src/cli/io.ts:115-126", "src/tools/verify.ts:1-20,35-60"]
 ```
 
 A 500-line file where the agent needs one 20-line function? It reads 20

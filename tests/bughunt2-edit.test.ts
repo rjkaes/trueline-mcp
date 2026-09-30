@@ -1,15 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  utimesSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { handleEdit } from "../src/tools/edit.ts";
@@ -135,8 +126,8 @@ describe("edit engine bug hunt, round 2", () => {
 
   // The server dispatches every request without waiting for the previous one. Two edits on one
   // file both pass the mtime check before either renames, and the second rename discards the first
-  // edit's result while both calls answer success. Same root cause as the server-level test in
-  // bughunt2-server-cli.test.ts; this one hits the handler directly.
+  // edit's result while both calls answer success. The fix is the per-path queue in src/tools/edit.ts;
+  // the handler sits behind the stdio dispatch unchanged, so this covers the server path too.
   test("bug: concurrent handleEdit calls on one file never lose an edit they reported as applied", async () => {
     const lost: string[] = [];
 
@@ -183,21 +174,14 @@ describe("edit engine bug hunt, round 2", () => {
   // root), and requireAbsolutePath enforces it, yet the description's own example uses "foo.ts".
   test("bug: the trueline_edit description example uses a path the tool accepts", () => {
     const home = join(testDir, "home");
-    const cache = join(testDir, "cache");
     mkdirSync(home);
-    mkdirSync(cache);
-    // A fresh update-check entry keeps the child off the network.
-    writeFileSync(
-      join(cache, "trueline-mcp-update-check.json"),
-      JSON.stringify({ timestamp: Date.now(), latestVersion: "0.0.1" }),
-    );
 
     const request = `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })}\n`;
     const child = spawnSync("bun", [SERVER], {
       input: request,
       encoding: "utf-8",
       timeout: 15_000,
-      env: { ...process.env, HOME: home, TMPDIR: cache, CLAUDE_PROJECT_DIR: testDir },
+      env: { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: testDir },
     });
     const reply = JSON.parse(child.stdout.split("\n")[0]) as {
       result: { tools: { name: string; description: string }[] };

@@ -233,7 +233,3 @@ registry on each launch and always runs the newest version. If you prefer
 faster startup and offline resilience, drop the `@latest` suffix — npx will
 use whichever version it cached on first install. You can update manually at
 any time with `npm i -g trueline-mcp`.
-
-Regardless of configuration, the server prints a notice to stderr when a newer
-version is available (checked at most once every 24 hours). This notice is
-never sent to the agent — it only appears in MCP server logs.

@@ -8,7 +8,6 @@ import { handleReadMulti } from "./tools/read.ts";
 import { handleOutline } from "./tools/outline.ts";
 import { handleSearch } from "./tools/search.ts";
 import { handleVerify } from "./tools/verify.ts";
-import { scheduleUpdateCheck } from "./update-check.ts";
 import { coerceParams, ParamError } from "./coerce.ts";
 import { resolveProjectDirs } from "./allowed-dirs.js";
 
@@ -37,10 +36,6 @@ function respond(id: string | number, result: unknown): void {
 
 function respondError(id: string | number | null, code: number, message: string): void {
   send({ jsonrpc: "2.0", id, error: { code, message } });
-}
-
-function notify(method: string, params?: unknown): void {
-  send({ jsonrpc: "2.0", method, params });
 }
 
 // =============================================================================
@@ -505,16 +500,11 @@ async function dispatch(msg: JsonRpcMessage): Promise<void> {
     case "initialize":
       respond(msg.id, {
         protocolVersion: PROTOCOL_VERSION,
-        capabilities: { tools: { listChanged: false }, logging: {} },
+        capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "trueline-mcp", version: VERSION },
       });
       break;
     case "ping":
-      respond(msg.id, {});
-      break;
-    case "logging/setLevel":
-      // `logging` is declared because the update notice goes out as notifications/message. That is
-      // the only log message we send, once at startup, so the requested level is accepted, not tracked.
       respond(msg.id, {});
       break;
     case "tools/list":
@@ -538,10 +528,6 @@ async function dispatch(msg: JsonRpcMessage): Promise<void> {
 // =============================================================================
 // Stdio transport — read newline-delimited JSON from stdin
 // =============================================================================
-
-// Aborted at stdin EOF so the update check's pending registry request cannot hold the process open
-// for its 3 s timeout.
-const stdinClosed = new AbortController();
 
 // Frame on "\n" alone: readline would also split on U+2028/U+2029, which JSON allows raw inside
 // strings, turning one valid request into two parse errors.
@@ -582,7 +568,6 @@ process.stdin.on("end", () => {
   handleLine(pendingInput);
   // No process.exit(): under Bun it does not wait for queued stdout, so large replies are cut off.
   // Requests still running keep the event loop alive, and the process leaves once they drain.
-  stdinClosed.abort();
 });
 
 process.on("uncaughtException", (err) => {
@@ -592,13 +577,3 @@ process.on("unhandledRejection", (reason) => {
   const message = reason instanceof Error ? reason.message : String(reason);
   process.stderr.write(`[trueline-mcp] unhandled rejection: ${message}\n`);
 });
-
-scheduleUpdateCheck(
-  VERSION,
-  ({ current, latest }) => {
-    const message = `update available: ${current} → ${latest} (npm i -g trueline-mcp)`;
-    process.stderr.write(`[trueline-mcp] ${message}\n`);
-    notify("notifications/message", { level: "warning", logger: "trueline-mcp", data: message });
-  },
-  stdinClosed.signal,
-);

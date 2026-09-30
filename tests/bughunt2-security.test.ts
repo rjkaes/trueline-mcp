@@ -175,7 +175,7 @@ describe.skipIf(process.platform === "win32")("edit temp files", () => {
 
   // The PostToolUse hand-off file holds the old and new lines of every edit, sits at a name
   // derived only from cwd + file_path, and is written with the default mode. In a shared /tmp
-  // (Linux) any local user can read it; update-check.ts already assumes /tmp is hostile.
+  // (Linux) any local user can read it.
   test("bug: trueline_edit leaves its diff hand-off file readable by group and others", async () => {
     const previousUmask = process.umask(0o022);
     const project = makeDir("bh2-diffmode-");

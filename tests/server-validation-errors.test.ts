@@ -3,39 +3,23 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { issueTestRef } from "./helpers.ts";
-
-// server.ts starts listening on import, so drive it over stdio like an MCP client.
-const serverPath = join(import.meta.dir, "..", "src", "server.ts");
+import { type Reply, readReplies, spawnServer } from "./server-helpers.ts";
 
 async function callTool(
   name: string,
   args: Record<string, unknown>,
   env: Record<string, string> = {},
 ): Promise<{ text: string; isError: boolean }> {
-  const proc = Bun.spawn(["bun", serverPath], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "ignore",
-    env: { ...process.env, ...env },
-  });
+  const proc = spawnServer(env);
   try {
     const request = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } };
     proc.stdin.write(`${JSON.stringify(request)}\n`);
     proc.stdin.flush();
 
-    // Skip notifications (no id) until the response to our request arrives.
-    const decoder = new TextDecoder();
-    let buffered = "";
-    for await (const chunk of proc.stdout) {
-      buffered += decoder.decode(chunk, { stream: true });
-      const lines = buffered.split("\n");
-      buffered = lines.pop() ?? "";
-      for (const line of lines) {
-        const msg = JSON.parse(line);
-        if (msg.id === 1) return { text: msg.result.content[0].text, isError: msg.result.isError };
-      }
-    }
-    throw new Error("server exited without responding");
+    const replies = await readReplies(proc, (all) => all.some((reply) => reply.id === 1));
+    const result = replies.find((reply) => reply.id === 1)?.result;
+    if (!result?.content) throw new Error("server exited without responding");
+    return { text: result.content[0].text, isError: result.isError === true };
   } finally {
     proc.kill();
   }
@@ -106,20 +90,8 @@ describe("JSON-RPC framing and protocol errors", () => {
   const sentinel = `${JSON.stringify({ jsonrpc: "2.0", id: sentinelId, method: "ping" })}\n`;
   let sandbox: string;
 
-  interface Reply {
-    jsonrpc?: string;
-    id: unknown;
-    result?: Record<string, unknown>;
-    error?: { code: number; message: string };
-  }
-
   beforeAll(() => {
     sandbox = realpathSync(mkdtempSync(join(tmpdir(), "trueline-rpc-")));
-    // A fresh cache entry keeps the child off the network and its stdout free of update notices.
-    writeFileSync(
-      join(sandbox, "trueline-mcp-update-check.json"),
-      JSON.stringify({ timestamp: Date.now(), latestVersion: "0.0.1" }),
-    );
   });
 
   afterAll(() => {
@@ -129,12 +101,7 @@ describe("JSON-RPC framing and protocol errors", () => {
   // Writes each chunk in order, then a ping sentinel, and returns every reply that came before the
   // sentinel's. With closeStdin the sentinel is skipped and replies are read until the server exits.
   async function exchange(chunks: (string | Uint8Array)[], closeStdin = false): Promise<Reply[]> {
-    const proc = Bun.spawn(["bun", serverPath], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "ignore",
-      env: { ...process.env, TMPDIR: sandbox, CLAUDE_PROJECT_DIR: sandbox },
-    });
+    const proc = spawnServer({ CLAUDE_PROJECT_DIR: sandbox });
     const timer = setTimeout(() => proc.kill(), 10_000);
     try {
       for (const chunk of chunks) {
@@ -149,20 +116,8 @@ describe("JSON-RPC framing and protocol errors", () => {
         proc.stdin.flush();
       }
 
-      const replies: Reply[] = [];
-      const decoder = new TextDecoder();
-      let buffered = "";
-      for await (const chunk of proc.stdout) {
-        buffered += decoder.decode(chunk, { stream: true });
-        const lines = buffered.split("\n");
-        buffered = lines.pop() ?? "";
-        for (const line of lines) {
-          const reply = JSON.parse(line) as Reply;
-          if (!closeStdin && reply.id === sentinelId) return replies;
-          replies.push(reply);
-        }
-      }
-      return replies;
+      const replies = await readReplies(proc, (all) => !closeStdin && all.some((reply) => reply.id === sentinelId));
+      return replies.filter((reply) => reply.id !== sentinelId);
     } finally {
       clearTimeout(timer);
       proc.kill();
@@ -236,18 +191,6 @@ describe("JSON-RPC framing and protocol errors", () => {
     expect(replies[0].id).toBe(9);
     expect(replies[0].error?.code).toBe(-32602);
     expect(replies[0].error?.message).toContain("trueline_nope");
-  });
-
-  // MCP spec, Logging: a server that emits notifications/message must declare `logging`.
-  test("logging is advertised, so logging/setLevel is answered", async () => {
-    const replies = await exchange([
-      line({ jsonrpc: "2.0", id: 10, method: "initialize", params: {} }),
-      line({ jsonrpc: "2.0", id: 11, method: "logging/setLevel", params: { level: "info" } }),
-    ]);
-
-    expect(replies).toHaveLength(2);
-    expect(replies[0].result).toHaveProperty("capabilities.logging");
-    expect(replies[1]).toEqual({ jsonrpc: "2.0", id: 11, result: {} });
   });
 
   test("an unsupported method is still -32601", async () => {
