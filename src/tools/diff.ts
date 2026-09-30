@@ -93,7 +93,8 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     }
 
     const ext = extname(resolvedPath).toLowerCase();
-    const relPath = isAbsolute(filePath) ? relative(await realProject, resolvedPath) : filePath;
+    // relative() yields backslashes on Windows; headers use forward slashes on every platform.
+    const relPath = isAbsolute(filePath) ? relative(await realProject, resolvedPath).replace(/\\/g, "/") : filePath;
 
     // Unsupported file type: extension has no language config. Checked before
     // any I/O so lockfiles, JSON, and images skip the disk read and git spawns.

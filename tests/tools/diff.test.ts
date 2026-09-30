@@ -566,18 +566,22 @@ describe("trueline_changes git and path edge cases", () => {
     expect(text).not.toContain("-:");
   });
 
-  test("a committed file whose name starts with a colon is still diffed against its commit", async () => {
-    const { dir, git } = makeRepo();
-    const file = writeTestFile(dir, ":odd.ts", "function odd() { return 1; }\nfunction even() { return 2; }\n");
-    git("add .");
-    git("commit -m init");
-    writeFileSync(file, "function odd() { return 1; }\nfunction even() { return 3; }\n");
+  // NTFS forbids ":" in file names.
+  test.skipIf(process.platform === "win32")(
+    "a committed file whose name starts with a colon is still diffed against its commit",
+    async () => {
+      const { dir, git } = makeRepo();
+      const file = writeTestFile(dir, ":odd.ts", "function odd() { return 1; }\nfunction even() { return 2; }\n");
+      git("add .");
+      git("commit -m init");
+      writeFileSync(file, "function odd() { return 1; }\nfunction even() { return 3; }\n");
 
-    const text = await changesText({ file_paths: [file], projectDir: dir, allowedDirs: [dir] });
+      const text = await changesText({ file_paths: [file], projectDir: dir, allowedDirs: [dir] });
 
-    expect(text).toContain("even");
-    expect(text).not.toContain("+:");
-  });
+      expect(text).toContain("even");
+      expect(text).not.toContain("+:");
+    },
+  );
 
   test("a committed file over the git output limit is an error, not an empty baseline", async () => {
     const { dir, git } = makeRepo();

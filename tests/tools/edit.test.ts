@@ -14,6 +14,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
+import { realpath } from "node:fs/promises";
 import { handleEdit } from "../../src/tools/edit.ts";
 import { handleRead } from "../../src/tools/read.ts";
 import type { EditInput } from "../../src/tools/shared.ts";
@@ -1171,7 +1172,8 @@ describe("checksum-mismatch hint only claims what was verified", () => {
     expect(result.isError).toBe(true);
     const text = getText(result);
     expect(text).not.toContain("appear unchanged");
-    expect(text).toContain(`trueline_read(file_paths=["${file}:2-6"])`);
+    // The hint names the canonical path; Windows tmpdir is the 8.3 alias (RUNNER~1).
+    expect(text).toContain(`trueline_read(file_paths=["${await realpath(file)}:2-6"])`);
   });
 
   test("line between two separate edits changed", async () => {
@@ -1187,7 +1189,7 @@ describe("checksum-mismatch hint only claims what was verified", () => {
     expect(result.isError).toBe(true);
     const text = getText(result);
     expect(text).not.toContain("appear unchanged");
-    expect(text).toContain(`trueline_read(file_paths=["${file}:2-6"])`);
+    expect(text).toContain(`trueline_read(file_paths=["${await realpath(file)}:2-6"])`);
   });
 
   test("still reports the lines as unchanged when every line in the span was verified", async () => {
