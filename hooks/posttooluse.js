@@ -7,19 +7,17 @@ import { createHash } from "node:crypto";
 
 const TRUELINE_EDIT_TOOL = "mcp__plugin_trueline-mcp_mcp__trueline_edit";
 
-// Light-theme defaults of Claude Code's native diff renderer (2.1.283). Its theme
-// table has diffAdded* colors too, but the native view doesn't use them.
-// TODO: dark and daltonized themes; a hook can't see which theme is active.
-const DEL_LINE = "\x1b[48;2;255;220;220m";
-const ADD_LINE = "\x1b[48;2;220;255;220m";
-const DEL_MARK = "\x1b[38;2;207;34;46m";
-const ADD_MARK = "\x1b[38;2;36;138;61m";
+// The terminal palette's red and green, not Claude Code's tinted backgrounds:
+// a hook can't see the theme ("auto" follows the terminal), and a fixed
+// background is unreadable under one of light/dark default text. Terminal
+// palettes tune these two for their own background.
+const DEL_MARK = "\x1b[31m";
+const ADD_MARK = "\x1b[32m";
 const BOLD = "\x1b[1m";
 const DIM = "\x1b[2m";
 const NORMAL = "\x1b[22m";
 // Reset only what we set, so styling Claude Code wraps around the message survives.
 const FG_RESET = "\x1b[39m";
-const BG_RESET = "\x1b[49m";
 
 const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
@@ -58,10 +56,6 @@ function formatDiff(diff) {
 
   const numbered = rows.filter((row) => row !== null);
   const gutterWidth = Math.max(...numbered.map((row) => String(row.num).length));
-  // Pad tinted rows to the widest row so their backgrounds form one block; the
-  // hook can't see the terminal width to fill the line like the native view.
-  // TODO: .length miscounts tabs and wide characters.
-  const textWidth = Math.max(...numbered.map((row) => row.text.length));
   const added = numbered.filter((row) => row.mark === "+").length;
   const removed = numbered.filter((row) => row.mark === "-").length;
 
@@ -69,8 +63,8 @@ function formatDiff(diff) {
     if (row === null) return `${DIM}...${NORMAL}`;
     const num = String(row.num).padStart(gutterWidth);
     if (row.mark === " ") return `${DIM}${num}${NORMAL}   ${row.text}`;
-    const [bg, fg] = row.mark === "+" ? [ADD_LINE, ADD_MARK] : [DEL_LINE, DEL_MARK];
-    return `${bg}${fg}${num} ${row.mark}${FG_RESET} ${row.text.padEnd(textWidth)}${BG_RESET}`;
+    const fg = row.mark === "+" ? ADD_MARK : DEL_MARK;
+    return `${fg}${num} ${row.mark} ${row.text}${FG_RESET}`;
   });
   const path = newHeader.slice("+++ b/".length);
   const kept = [`Updated ${BOLD}${path}${NORMAL} ${DIM}(+${added} -${removed})${NORMAL}`];

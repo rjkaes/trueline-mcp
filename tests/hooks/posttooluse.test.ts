@@ -12,15 +12,12 @@ const FAKE_CWD = "/tmp/test-project";
 const FAKE_FILE = "/tmp/test-project/src/example.ts";
 const cwdHash = createHash("sha256").update(`${FAKE_CWD}\0${FAKE_FILE}`).digest("hex").slice(0, 12);
 const diffPath = join(tmpdir(), `trueline-edit-${cwdHash}.diff`);
-const DEL_LINE = "\x1b[48;2;255;220;220m";
-const ADD_LINE = "\x1b[48;2;220;255;220m";
-const DEL_MARK = "\x1b[38;2;207;34;46m";
-const ADD_MARK = "\x1b[38;2;36;138;61m";
+const RED = "\x1b[31m";
+const GREEN = "\x1b[32m";
 const BOLD = "\x1b[1m";
 const DIM = "\x1b[2m";
 const NORMAL = "\x1b[22m";
 const FG_RESET = "\x1b[39m";
-const BG_RESET = "\x1b[49m";
 
 function cleanup() {
   try {
@@ -55,23 +52,22 @@ describe("PostToolUse hook", () => {
     });
 
     expect(result).not.toBeNull();
-    // Tinted rows pad to the widest row so their backgrounds form one block.
     expect(stripVTControlCharacters(result!.systemMessage).split("\n")).toEqual([
       "Updated src/foo.ts (+2 -1)",
       " 8   keep",
-      " 9 - old line".padEnd(20),
+      " 9 - old line",
       " 9 + new longer line",
       "10   tail",
       "...",
       "20   before",
-      "21 + inserted".padEnd(20),
+      "21 + inserted",
       "22   after",
     ]);
     expect(result!.suppressOutput).toBe(true);
     expect(existsSync(diffPath)).toBe(false);
   });
 
-  test("tints changed rows with Claude Code's light-theme diff colors", async () => {
+  test("colors changed rows with the terminal palette's red and green", async () => {
     writeFileSync(diffPath, "--- a/src/foo.ts\n+++ b/src/foo.ts\n@@ -1,2 +1,2 @@\n-old\n+new\n ctx\n");
 
     const result = await processPostToolUseEvent({
@@ -82,8 +78,8 @@ describe("PostToolUse hook", () => {
 
     expect(result!.systemMessage.split("\n")).toEqual([
       `Updated ${BOLD}src/foo.ts${NORMAL} ${DIM}(+1 -1)${NORMAL}`,
-      `${DEL_LINE}${DEL_MARK}1 -${FG_RESET} old${BG_RESET}`,
-      `${ADD_LINE}${ADD_MARK}1 +${FG_RESET} new${BG_RESET}`,
+      `${RED}1 - old${FG_RESET}`,
+      `${GREEN}1 + new${FG_RESET}`,
       `${DIM}2${NORMAL}   ctx`,
     ]);
   });
@@ -101,7 +97,7 @@ describe("PostToolUse hook", () => {
     expect(stripVTControlCharacters(result!.systemMessage).split("\n")).toEqual([
       "Updated q.sql (+1 -1)",
       "1 - -- drop me",
-      "1 + ++ add me".padEnd(14),
+      "1 + ++ add me",
     ]);
   });
 
